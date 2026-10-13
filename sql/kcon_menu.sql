@@ -1,0 +1,102 @@
+-- =============================================================
+-- KCon 签到抽奖系统 · 菜单与权限初始化
+-- 依赖：RuoYi 基础表（sys_menu）已存在，默认角色（role_id=2 普通角色）
+-- 执行顺序：必须先执行 ry_20260320.sql（RuoYi 基础表）再执行本脚本
+-- =============================================================
+
+USE `kcon_lucky`;
+
+-- 清理旧数据（可重复执行）
+DELETE FROM `sys_role_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
+DELETE FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
+
+-- -------------------------------------------------------------
+-- 隐藏 RuoYi 原生菜单（现场无需展示：首页/系统管理/系统监控/系统工具/官网/源码/文档）
+-- visible='1' 表示隐藏，仅隐藏不删除，便于排障时临时放开
+-- 注意：隐藏只是 UI 层面，真正收回权限靠下面的 sys_role_menu 清理
+-- -------------------------------------------------------------
+UPDATE `sys_menu` SET `visible` = '1'
+ WHERE `menu_id` IN ('1', '2', '3', '4', '5');
+
+UPDATE `sys_menu` SET `visible` = '1'
+ WHERE `parent_id` IN ('1', '2', '3', '4', '5', '108');
+
+-- -------------------------------------------------------------
+-- 收回普通角色（RuoYi 默认 role_id=2）对原生菜单的授权
+-- 若只隐藏菜单而不做这一步，隐藏只是心理安慰：
+-- 任何持有普通角色的账号仍可直接调接口提权（改角色 / 跑建表 SQL / 删定时任务）
+--
+-- 本系统只有 KCon 现场功能（菜单 ID 3000-3999），其余原生菜单一律收回。
+-- 注意不能只按 perms 前缀删——目录型菜单（系统管理/系统监控/系统工具/若依官网/日志管理）
+-- 的 perms 为空，必须按 menu_id 区间一起清掉，否则它们仍会留在该角色的菜单树里。
+-- -------------------------------------------------------------
+DELETE FROM `sys_role_menu`
+ WHERE `role_id` = 2
+   AND (`menu_id` < 3000 OR `menu_id` > 3999);
+
+-- RuoYi 自带的测试账号，现场不需要，停用（保留行便于追溯）
+UPDATE `sys_user` SET `status` = '1', `update_by` = 'admin'
+ WHERE `user_name` = 'ry';
+
+-- -------------------------------------------------------------
+-- 一级目录：KCon 现场（菜单ID 3000）
+-- -------------------------------------------------------------
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
+VALUES (3000, 'KCon 现场', 0, 1, 'kcon', NULL, '', '', 1, 0, 'M', '0', '0', NULL, 'peoples', 'admin', NOW(), 'KCon 现场签到抽奖');
+
+-- -------------------------------------------------------------
+-- 二级菜单（按现场使用频率 / 工作流时序排序）
+--   进行中高频：现场看板 → 兑奖核验
+--   开场前准备：参会名单 → 奖品设置
+--   结束后复盘：中奖记录
+--   一次性操作：数据清场（置底）
+-- -------------------------------------------------------------
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
+VALUES
+  (3001, '现场看板',   3000, 1, 'dashboard', 'kcon/dashboard/index', '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list',    'dashboard', 'admin', NOW(), '签到率与统计'),
+  (3005, '兑奖核验',   3000, 2, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',     'search',    'admin', NOW(), '端口号+手机号核验发放'),
+  (3007, '抽奖控制台', 3000, 3, 'draw',      'kcon/draw/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:draw:query',       'guide',     'admin', NOW(), '场次切换与抽奖操作（FR-16/19/20）'),
+  (3002, '参会名单',   3000, 4, 'attendee',  'kcon/attendee/index',  '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list',    'user',      'admin', NOW(), '名单管理与导入'),
+  (3003, '奖品设置',   3000, 5, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',       'star',      'admin', NOW(), '场次奖项档位'),
+  (3004, '中奖记录',   3000, 6, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',      'money',     'admin', NOW(), '中奖名单与状态'),
+  (3008, '兑奖日志',   3000, 7, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',     'list',      'admin', NOW(), '核验操作追溯'),
+  (3006, '数据清场',   3000, 9, 'reset',     'kcon/reset/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',       'trash',     'admin', NOW(), '开场前清空数据'),
+  (3009, '数据迁移',   3000, 10, 'migrate',   'kcon/migrate/index',   '', '', 1, 0, 'C', '0', '0', 'kcon:data:migrate',     'upload',    'admin', NOW(), '全量备份导出与恢复（AC-11）');
+
+-- -------------------------------------------------------------
+-- 按钮权限
+-- -------------------------------------------------------------
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
+VALUES
+  -- 名单
+  (3010, '名单查询', 3002, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:query',  '#', 'admin', NOW(), ''),
+  (3011, '名单新增', 3002, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:add',    '#', 'admin', NOW(), ''),
+  (3012, '名单修改', 3002, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:edit',   '#', 'admin', NOW(), ''),
+  (3013, '名单删除', 3002, 4, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:remove', '#', 'admin', NOW(), ''),
+  (3014, '名单导入', 3002, 5, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:import', '#', 'admin', NOW(), ''),
+  (3015, '名单导出', 3002, 6, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:attendee:export', '#', 'admin', NOW(), ''),
+  -- 奖品
+  (3020, '奖品新增', 3003, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:prize:add',    '#', 'admin', NOW(), ''),
+  (3021, '奖品修改', 3003, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:prize:edit',   '#', 'admin', NOW(), ''),
+  (3022, '奖品删除', 3003, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:prize:remove', '#', 'admin', NOW(), ''),
+  -- 核验
+  (3030, '确认发放', 3005, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:verify:receive', '#', 'admin', NOW(), ''),
+  -- 中奖
+  (3040, '中奖作废', 3004, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:winner:void', '#', 'admin', NOW(), ''),
+  -- 抽奖控制台（FR-16/19/20）
+  (3050, '场次查询', 3007, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:session:list', '#', 'admin', NOW(), ''),
+  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次'),
+  -- 数据迁移（AC-11）
+  (3060, '数据迁移', 3009, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:data:migrate', '#', 'admin', NOW(), '导出与恢复，均限超管');
+
+-- -------------------------------------------------------------
+-- 授权给超级管理员（role_id=1）与普通角色（role_id=2）
+-- -------------------------------------------------------------
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 1, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 2, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
+
+SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
+FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;

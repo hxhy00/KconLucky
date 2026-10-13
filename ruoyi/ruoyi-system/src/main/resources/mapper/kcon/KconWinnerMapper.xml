@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconWinnerMapper">
+
+    <resultMap type="KconWinner" id="KconWinnerResult">
+        <id     property="id"           column="id"            />
+        <result property="portNo"       column="port_no"       />
+        <result property="attendeeId"   column="attendee_id"   />
+        <result property="name"         column="name"          />
+        <result property="company"      column="company"       />
+        <result property="position"     column="position"      />
+        <result property="phone"        column="phone"         />
+        <result property="email"        column="email"         />
+        <result property="sessionCode"  column="session_code"  />
+        <result property="prizeId"      column="prize_id"      />
+        <result property="tierName"     column="tier_name"     />
+        <result property="status"       column="status"        />
+        <result property="winTime"      column="win_time"      />
+        <result property="receiveTime"  column="receive_time"  />
+        <result property="voidTime"     column="void_time"     />
+        <result property="operator"     column="operator"      />
+    </resultMap>
+
+    <sql id="selectWinnerVo">
+        select id, port_no, attendee_id, name, company, position, phone, email, session_code,
+               prize_id, tier_name, status, win_time, receive_time, void_time, operator
+        from kcon_winner
+    </sql>
+
+    <select id="selectWinnerList" parameterType="KconWinner" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        <where>
+            <if test="sessionCode != null and sessionCode != ''">
+                and session_code = #{sessionCode}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="portNo != null">
+                and port_no = #{portNo}
+            </if>
+            <if test="name != null and name != ''">
+                and name like concat('%', #{name}, '%')
+            </if>
+        </where>
+        order by win_time desc, id desc
+    </select>
+
+    <select id="selectWinnerById" parameterType="Long" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where id = #{id}
+    </select>
+
+    <!-- 某端口号当前有效的中奖记录（未作废） -->
+    <select id="selectActiveByPortNo" parameterType="java.lang.Integer" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where port_no = #{portNo} and status != 2
+        order by id desc
+        limit 1
+    </select>
+
+    <insert id="insertWinner" parameterType="KconWinner" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_winner
+        (port_no, attendee_id, name, company, position, phone, email, session_code,
+         prize_id, tier_name, status, win_time, operator)
+        values
+        (#{portNo}, #{attendeeId}, #{name}, #{company}, #{position}, #{phone}, #{email}, #{sessionCode},
+         #{prizeId}, #{tierName}, 0, now(), #{operator})
+    </insert>
+
+    <!-- 状态流转：带上原状态条件，避免重复点击导致重复发放 -->
+    <update id="updateStatus" parameterType="KconWinner">
+        update kcon_winner
+        set status = #{status},
+            receive_time = case when #{status} = 1 then now() else receive_time end,
+            void_time    = case when #{status} = 2 then now() else void_time end,
+            operator     = #{operator}
+        where id = #{id}
+        <if test="status == 1">and status = 0</if>
+        <if test="status == 2">and status = 0</if>
+    </update>
+
+    <select id="countWinners" resultType="int">
+        select count(*) from kcon_winner
+        <where>
+            status != 2
+            <if test="sessionCode != null and sessionCode != ''">
+                and session_code = #{sessionCode}
+            </if>
+        </where>
+    </select>
+
+    <select id="selectAllWonPorts" resultType="java.lang.Integer">
+        select distinct port_no from kcon_winner where status != 2
+    </select>
+
+    <select id="selectWonPortsBySession" parameterType="String" resultType="java.lang.Integer">
+        select distinct port_no from kcon_winner
+        where status != 2 and session_code = #{sessionCode}
+    </select>
+
+    <select id="statBySession" resultType="java.util.LinkedHashMap">
+        select session_code as sessionCode,
+               count(*) as total,
+               sum(case when status = 1 then 1 else 0 end) as received,
+               sum(case when status = 2 then 1 else 0 end) as voided
+        from kcon_winner
+        group by session_code
+    </select>
+
+    <update id="truncateWinner">
+        truncate table kcon_winner
+    </update>
+
+</mapper>

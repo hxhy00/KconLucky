@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconAttendeeMapper">
+
+    <resultMap type="KconAttendee" id="KconAttendeeResult">
+        <id     property="id"           column="id"            />
+        <result property="name"         column="name"          />
+        <result property="phone"        column="phone"         />
+        <result property="channel"      column="channel"       />
+        <result property="ticketType"   column="ticket_type"   />
+        <result property="company"      column="company"       />
+        <result property="email"        column="email"         />
+        <result property="attendCount"  column="attend_count"  />
+        <result property="position"     column="position"      />
+        <result property="phoneTail4"   column="phone_tail4"   />
+        <result property="importBatch"  column="import_batch"  />
+        <result property="createBy"     column="create_by"     />
+        <result property="createTime"   column="create_time"   />
+        <result property="updateBy"     column="update_by"     />
+        <result property="updateTime"   column="update_time"   />
+        <result property="remark"       column="remark"        />
+        <result property="portNo"       column="port_no"       />
+        <result property="signed"       column="signed"        />
+        <result property="checkinTime"  column="checkin_time"  />
+    </resultMap>
+
+    <!-- 基础列 -->
+    <sql id="selectAttendeeVo">
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+               a.attend_count, a.position, a.phone_tail4, a.import_batch,
+               a.create_by, a.create_time, a.update_by, a.update_time, a.remark
+        from kcon_attendee a
+    </sql>
+
+    <!-- 含签到状态的列（管理端列表 / 详情用） -->
+    <sql id="selectAttendeeWithSignVo">
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+               a.attend_count, a.position, a.phone_tail4, a.import_batch,
+               a.create_by, a.create_time, a.update_by, a.update_time, a.remark,
+               c.port_no as port_no,
+               case when c.id is null then 0 else 1 end as signed,
+               date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as checkin_time
+        from kcon_attendee a
+        left join kcon_checkin c on c.attendee_id = a.id
+    </sql>
+
+    <select id="selectAttendeeById" parameterType="Long" resultMap="KconAttendeeResult">
+        <include refid="selectAttendeeWithSignVo"/>
+        where a.id = #{id}
+    </select>
+
+    <select id="selectAttendeeByPhone" parameterType="String" resultMap="KconAttendeeResult">
+        <include refid="selectAttendeeWithSignVo"/>
+        where a.phone = #{phone}
+        limit 1
+    </select>
+
+    <select id="selectByTail4" parameterType="String" resultMap="KconAttendeeResult">
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+               a.attend_count, a.position, a.phone_tail4,
+               c.port_no as port_no,
+               case when c.id is null then 0 else 1 end as signed
+        from kcon_attendee a
+        left join kcon_checkin c on c.attendee_id = a.id
+        where a.phone_tail4 = #{tail4}
+        order by a.id
+    </select>
+
+    <select id="selectAttendeeList" parameterType="KconAttendee" resultMap="KconAttendeeResult">
+        <include refid="selectAttendeeWithSignVo"/>
+        <where>
+            <if test="name != null and name != ''">
+                and a.name like concat('%', #{name}, '%')
+            </if>
+            <if test="phone != null and phone != ''">
+                and a.phone like concat('%', #{phone}, '%')
+            </if>
+            <if test="company != null and company != ''">
+                and a.company like concat('%', #{company}, '%')
+            </if>
+            <if test="channel != null and channel != ''">
+                and a.channel = #{channel}
+            </if>
+            <if test="ticketType != null and ticketType != ''">
+                and a.ticket_type = #{ticketType}
+            </if>
+            <if test="position != null and position != ''">
+                and a.position like concat('%', #{position}, '%')
+            </if>
+            <if test="signed != null">
+                <choose>
+                    <when test="signed == 1">and c.id is not null</when>
+                    <otherwise>and c.id is null</otherwise>
+                </choose>
+            </if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and a.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and a.create_time &lt;= #{params.endTime}
+            </if>
+        </where>
+        order by a.id desc
+    </select>
+
+    <insert id="insertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_attendee
+        (name, phone, channel, ticket_type, company, email, attend_count, position,
+         phone_tail4, import_batch, create_by, create_time, remark)
+        values
+        (#{name}, #{phone}, #{channel}, #{ticketType}, #{company}, #{email},
+         #{attendCount}, #{position}, #{phoneTail4}, #{importBatch},
+         #{createBy}, now(), #{remark})
+    </insert>
+
+    <!-- 追加导入：按手机号去重，存在则更新（选填字段为空时不覆盖已有值） -->
+    <insert id="upsertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_attendee
+        (name, phone, channel, ticket_type, company, email, attend_count, position,
+         phone_tail4, import_batch, create_by, create_time)
+        values
+        (#{name}, #{phone}, #{channel}, #{ticketType}, #{company}, #{email},
+         #{attendCount}, #{position}, #{phoneTail4}, #{importBatch}, #{createBy}, now())
+        on duplicate key update
+            name         = values(name),
+            channel      = values(channel),
+            ticket_type  = values(ticket_type),
+            company      = coalesce(values(company), company),
+            email        = coalesce(values(email), email),
+            attend_count = coalesce(values(attend_count), attend_count),
+            position     = coalesce(values(position), position),
+            phone_tail4  = values(phone_tail4),
+            import_batch = values(import_batch),
+            update_time  = now()
+    </insert>
+
+    <update id="updateAttendee" parameterType="KconAttendee">
+        update kcon_attendee
+        <set>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="channel != null">channel = #{channel},</if>
+            <if test="ticketType != null">ticket_type = #{ticketType},</if>
+            <if test="company != null">company = #{company},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="attendCount != null">attend_count = #{attendCount},</if>
+            <if test="position != null">position = #{position},</if>
+            <if test="phoneTail4 != null">phone_tail4 = #{phoneTail4},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = now()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteAttendeeByIds" parameterType="Long">
+        delete from kcon_attendee where id in
+        <foreach collection="array" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <update id="truncateAttendee">
+        truncate table kcon_attendee
+    </update>
+
+    <select id="countAll" resultType="int">
+        select count(*) from kcon_attendee
+    </select>
+
+    <!-- 看板「已签到」：按当天口径（需求 FR-39），与抽奖池、大屏「今日已签到」保持一致 -->
+    <select id="countSigned" resultType="int">
+        select count(*) from kcon_checkin where checkin_date = curdate()
+    </select>
+
+    <select id="statTopCompanies" parameterType="int" resultType="java.util.Map">
+        select a.company as company,
+               count(*) as total,
+               -- 「已签到」按当天口径，与 countSigned / 抽奖池一致（需求 FR-39）
+               sum(case when c.id is null then 0 else 1 end) as signed
+        from kcon_attendee a
+        left join kcon_checkin c
+               on c.attendee_id = a.id and c.checkin_date = curdate()
+        where a.company is not null and a.company != ''
+        group by a.company
+        order by total desc
+        limit #{limit}
+    </select>
+
+    <select id="statAttendCount" resultType="java.util.Map">
+        select
+            sum(case when attend_count = 1 then 1 else 0 end) as firstTime,
+            sum(case when attend_count is not null and attend_count > 1 then 1 else 0 end) as returning,
+            sum(case when attend_count is null then 1 else 0 end) as unknown
+        from kcon_attendee
+    </select>
+
+    <select id="selectSignSheet" resultMap="KconAttendeeResult">
+        <include refid="selectAttendeeWithSignVo"/>
+        order by a.name asc, a.id asc
+    </select>
+
+</mapper>

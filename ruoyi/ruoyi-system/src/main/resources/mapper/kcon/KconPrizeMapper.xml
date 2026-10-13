@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconPrizeMapper">
+
+    <resultMap type="KconPrize" id="KconPrizeResult">
+        <id     property="id"           column="id"           />
+        <result property="sessionCode"  column="session_code"  />
+        <result property="tierName"     column="tier_name"     />
+        <result property="quantity"     column="quantity"      />
+        <result property="drawnCount"   column="drawn_count"   />
+        <result property="drawOrder"    column="draw_order"    />
+        <result property="remark"       column="remark"        />
+        <result property="createBy"     column="create_by"     />
+        <result property="createTime"   column="create_time"   />
+        <result property="updateBy"     column="update_by"     />
+        <result property="updateTime"   column="update_time"   />
+    </resultMap>
+
+    <sql id="selectPrizeVo">
+        select id, session_code, tier_name, quantity, drawn_count, draw_order,
+               remark, create_by, create_time, update_by, update_time
+        from kcon_prize
+    </sql>
+
+    <select id="selectPrizeList" parameterType="KconPrize" resultMap="KconPrizeResult">
+        <include refid="selectPrizeVo"/>
+        <where>
+            <if test="sessionCode != null and sessionCode != ''">
+                and session_code = #{sessionCode}
+            </if>
+            <if test="tierName != null and tierName != ''">
+                and tier_name like concat('%', #{tierName}, '%')
+            </if>
+        </where>
+        order by session_code asc, draw_order asc, id asc
+    </select>
+
+    <select id="selectPrizeById" parameterType="Long" resultMap="KconPrizeResult">
+        <include refid="selectPrizeVo"/>
+        where id = #{id}
+    </select>
+
+    <!-- 当前应抽档位：该场次中未抽满、draw_order 最小的一个 -->
+    <select id="selectCurrentTier" parameterType="String" resultMap="KconPrizeResult">
+        <include refid="selectPrizeVo"/>
+        where session_code = #{sessionCode}
+          and drawn_count &lt; quantity
+        order by draw_order asc, id asc
+        limit 1
+    </select>
+
+    <insert id="insertPrize" parameterType="KconPrize" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_prize
+        (session_code, tier_name, quantity, drawn_count, draw_order, remark, create_by, create_time)
+        values
+        (#{sessionCode}, #{tierName}, #{quantity}, 0, #{drawOrder}, #{remark}, #{createBy}, now())
+    </insert>
+
+    <update id="updatePrize" parameterType="KconPrize">
+        update kcon_prize
+        <set>
+            <if test="sessionCode != null and sessionCode != ''">session_code = #{sessionCode},</if>
+            <if test="tierName != null and tierName != ''">tier_name = #{tierName},</if>
+            <if test="quantity != null">quantity = #{quantity},</if>
+            <if test="drawOrder != null">draw_order = #{drawOrder},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = now()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deletePrizeById" parameterType="Long">
+        delete from kcon_prize where id = #{id}
+    </delete>
+
+    <!-- 已抽数 +1，且不允许超过 quantity（返回 0 表示已抽满，用于并发退让） -->
+    <update id="incrementDrawnCount" parameterType="Long">
+        update kcon_prize
+        set drawn_count = drawn_count + 1
+        where id = #{id} and drawn_count &lt; quantity
+    </update>
+
+    <update id="decrementDrawnCount" parameterType="Long">
+        update kcon_prize
+        set drawn_count = case when drawn_count &gt; 0 then drawn_count - 1 else 0 end
+        where id = #{id}
+    </update>
+
+    <update id="resetDrawnCount">
+        update kcon_prize set drawn_count = 0
+    </update>
+
+</mapper>

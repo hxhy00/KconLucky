@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* KCon 品牌黑底 + 顶部一抹红晕，呼应 logo 的红黑配色 */
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(226, 59, 46, .18) 0%, transparent 60%),
+    #0A0A0C;
+  color: #EDEDF0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 端口号大字：保证 375px 宽度下 ≥64px */
+.port-no {
+  font-size: clamp(64px, 22vw, 120px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-weight: 800;
+  color: #E23B2E;
+  text-shadow: 0 0 28px rgba(226, 59, 46, .45);
+}

@@ -1,0 +1,21 @@
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+.DS_Store
+
+# 数据与备份（不参与构建，避免镜像膨胀）
+data/
+logs/
+参考文件/
+
+# 已构建产物
+*/target/
+*/dist/
+*/node_modules/
+ruoyi/**/target/
+
+# 文档
+docs/
+*.md

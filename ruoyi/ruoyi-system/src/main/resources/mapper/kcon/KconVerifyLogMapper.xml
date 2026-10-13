@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconVerifyLogMapper">
+
+    <resultMap type="KconVerifyLog" id="KconVerifyLogResult">
+        <id     property="id"          column="id"          />
+        <result property="portNo"      column="port_no"     />
+        <result property="inputPhone"  column="input_phone" />
+        <result property="result"      column="result"      />
+        <result property="operator"    column="operator"    />
+        <result property="createTime"  column="create_time" />
+    </resultMap>
+
+    <insert id="insertLog" parameterType="KconVerifyLog" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_verify_log (port_no, input_phone, result, operator, create_time)
+        values (#{portNo}, #{inputPhone}, #{result}, #{operator}, now())
+    </insert>
+
+    <update id="truncateLog">
+        truncate table kcon_verify_log
+    </update>
+
+    <!-- 核验日志条件查询：端口号/结果走 idx_port，时间范围走 idx_create_time -->
+    <select id="selectVerifyLogList" parameterType="KconVerifyLog" resultMap="KconVerifyLogResult">
+        select id, port_no, input_phone, result, operator, create_time
+        from kcon_verify_log
+        <where>
+            <if test="portNo != null">
+                and port_no = #{portNo}
+            </if>
+            <if test="result != null and result != ''">
+                and result = #{result}
+            </if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and create_time &lt;= #{params.endTime}
+            </if>
+        </where>
+        order by create_time desc, id desc
+    </select>
+
+</mapper>

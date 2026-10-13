@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #app {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  /* KCon 红黑：顶部红晕 → 中部品牌黑 → 底部纯黑 */
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(226, 59, 46, .28) 0%, transparent 62%),
+    radial-gradient(ellipse at 50% 100%, #1A0A0A 0%, transparent 60%),
+    linear-gradient(180deg, #0F0A0A 0%, #0A0A0C 55%, #050506 100%);
+  color: #EDEDF0;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 待机背景的品牌暗纹：网格 + 斜线，低透明度只做氛围不干扰数字可读性 */
+.pattern-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .028) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 100%);
+}
+
+/* 中奖端口号：按屏宽自适应，保证远距离可读 */
+.rand-num {
+  font-size: clamp(90px, 17vw, 340px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 抽奖中：品牌红发光 */
+.glow {
+  text-shadow:
+    0 0 20px rgba(226, 59, 46, .6),
+    0 0 60px rgba(226, 59, 46, .4),
+    0 0 130px rgba(140, 26, 20, .45);
+}
+
+/* 中奖定格：金色发光（金=中奖，保留金色以维持全场高潮的视觉冲击） */
+.glow-gold {
+  text-shadow:
+    0 0 24px rgba(255, 209, 102, .75),
+    0 0 70px rgba(255, 209, 102, .45),
+    0 0 140px rgba(226, 59, 46, .35);
+}

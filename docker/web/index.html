@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KCon 2026 签到抽奖系统</title>
+  <style>
+    /* KCon 品牌色：红 + 黑，取自 logo */
+    :root {
+      --kcon-red: #d4342a;
+      --kcon-red-light: #ff6a5a;
+      --kcon-black: #0a0a0c;
+      --kcon-ink: #141418;
+      --kcon-line: #26262e;
+      --kcon-text: #ededf0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(ellipse 120% 55% at 50% -10%, rgba(212, 52, 42, .22) 0%, transparent 62%),
+        var(--kcon-black);
+      color: #ededf0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+    .logo {
+      display: block;
+      width: 230px;
+      margin: 0 auto 14px auto;
+    }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 28px; }
+    a.entry {
+      display: block;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      border-radius: 14px;
+      background: var(--kcon-ink);
+      border: 1px solid var(--kcon-line);
+      color: inherit;
+      text-decoration: none;
+      text-align: left;
+      transition: border-color .15s, background .15s;
+    }
+    a.entry:hover { border-color: var(--kcon-red); background: #1c1c21; }
+    a.entry .t { font-size: 16px; font-weight: 600; }
+    a.entry .d { font-size: 12px; color: #9a9aa4; margin-top: 4px; }
+    .tip { font-size: 12px; color: #6b6b75; margin-top: 20px; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="/kcon-logo.png" alt="KCon 2026" />
+    <h1>签到抽奖系统</h1>
+
+    <a class="entry" href="/admin/">
+      <div class="t">管理端</div>
+      <div class="d">现场看板 · 兑奖核验 · 名单 · 奖品 · 中奖记录</div>
+    </a>
+    <a class="entry" href="/screen/">
+      <div class="t">抽奖大屏</div>
+      <div class="d">投屏使用，按 F11 全屏；Space 抽奖</div>
+    </a>
+    <a class="entry" href="/sign">
+      <div class="t">观众签到</div>
+      <div class="d">手机扫码入口（本机打开即模拟观众）</div>
+    </a>
+
+    <div class="tip">
+      二维码与正式入口以「管理端 → 现场看板」显示的地址为准。
+    </div>
+  </div>
+</body>
+</html>

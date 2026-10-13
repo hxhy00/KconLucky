@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconCheckinMapper">
+
+    <resultMap type="KconCheckin" id="KconCheckinResult">
+        <id     property="id"          column="id"           />
+        <result property="attendeeId"  column="attendee_id"  />
+        <result property="phone"       column="phone"        />
+        <result property="portNo"      column="port_no"      />
+        <result property="checkinDate" column="checkin_date" />
+        <result property="checkinTime" column="checkin_time" />
+        <result property="createTime"  column="create_time"  />
+    </resultMap>
+
+    <sql id="selectCheckinVo">
+        select id, attendee_id, phone, port_no, checkin_date, checkin_time, create_time
+        from kcon_checkin
+    </sql>
+
+    <select id="selectByPhone" parameterType="String" resultMap="KconCheckinResult">
+        <include refid="selectCheckinVo"/>
+        where phone = #{phone}
+        limit 1
+    </select>
+
+    <select id="selectByPortNo" parameterType="java.lang.Integer" resultMap="KconCheckinResult">
+        <include refid="selectCheckinVo"/>
+        where port_no = #{portNo}
+        limit 1
+    </select>
+
+    <insert id="insertCheckin" parameterType="KconCheckin" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_checkin (attendee_id, phone, port_no, checkin_date, checkin_time, create_time)
+        values (#{attendeeId}, #{phone}, #{portNo}, #{checkinDate}, #{checkinTime}, now())
+    </insert>
+
+    <select id="countToday" resultType="int">
+        select count(*) from kcon_checkin where checkin_date = curdate()
+    </select>
+
+    <!-- 签到总条数（不限日期）：名单替换模式前的拦截依据 -->
+    <select id="countAll" resultType="int">
+        select count(*) from kcon_checkin
+    </select>
+
+    <!-- 批量删除前的拦截：这些人里有多少已签到（FR-13.3） -->
+    <select id="countSignedByAttendeeIds" resultType="int">
+        select count(*)
+        from kcon_checkin
+        where attendee_id in
+        <foreach collection="attendeeIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="selectSignedNamesByAttendeeIds" resultType="java.lang.String">
+        select a.name
+        from kcon_checkin c
+        join kcon_attendee a on a.id = c.attendee_id
+        where c.attendee_id in
+        <foreach collection="attendeeIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        order by a.name
+        limit 10
+    </select>
+
+    <!--
+      抽奖池：只取「今天」的签到记录。
+      需求 FR-37 池 = 此刻已签到 ∩ 未中奖，FR-39 要求按当日判断。
+      若不限日期，联调后未清场直接开场、或第二天再开一场时，
+      上一场的端口号会混进池子里。
+      排序规则不变：按签到时间先后。
+    -->
+    <select id="selectAllPorts" resultMap="KconCheckinResult">
+        select id, attendee_id, phone, port_no, checkin_date, checkin_time, create_time
+        from kcon_checkin
+        where checkin_date = curdate()
+        order by checkin_time asc, id asc
+    </select>
+
+    <!-- 导出：名单 + 端口号 + 签到 + 中奖情况 -->
+    <select id="selectExportList" resultType="java.util.LinkedHashMap">
+        select
+            a.name                                       as `姓名`,
+            a.phone                                      as `手机号`,
+            a.channel                                    as `渠道标识`,
+            a.ticket_type                                as `票种`,
+            a.company                                    as `公司`,
+            a.email                                      as `邮箱`,
+            a.attend_count                               as `第几次参加KCon`,
+            a.position                                   as `职务/年级`,
+            c.port_no                                    as `端口号`,
+            date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as `签到时间`,
+            case when w.id is null then '否' else '是' end as `是否中奖`,
+            w.tier_name                                  as `奖项`,
+            case
+                when w.id is null then ''
+                when w.status = 0 then '未领取'
+                when w.status = 1 then '已领取'
+                when w.status = 2 then '已作废'
+                else ''
+            end                                          as `是否已领取`
+        from kcon_attendee a
+        left join kcon_checkin c on c.attendee_id = a.id
+        left join kcon_winner  w on w.port_no = c.port_no and w.status != 2
+        order by a.id
+    </select>
+
+    <update id="truncateCheckin">
+        truncate table kcon_checkin
+    </update>
+
+</mapper>

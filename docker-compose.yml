@@ -1,0 +1,112 @@
+# =============================================================
+# KCon 2026 签到 + 抽奖系统 · 一键启动
+# 用法：docker compose up -d --build
+# 访问：http://<LAN_IP>/           入口分流页（管理端 / 大屏 / 签到）
+#       http://<LAN_IP>/admin/     管理端（默认 admin/admin123）
+#       http://<LAN_IP>/screen/    抽奖大屏
+#       http://<LAN_IP>/sign/      观众签到（二维码指向此地址）
+# =============================================================
+
+services:
+
+  # ---------- MySQL ----------
+  mysql:
+    image: mysql:8.0
+    container_name: kcon-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kcon_lucky}
+      TZ: ${TZ:-Asia/Shanghai}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+      - --max-connections=300
+      - --max-allowed-packet=64M
+      - --skip-log-bin
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/kcon.cnf:ro
+      # 首次启动自动建表 + 初始化数据（容器内按文件名顺序执行）
+      - ./sql/00-ry-base.sql:/docker-entrypoint-initdb.d/00-ry-base.sql:ro
+      - ./sql/kcon_lucky.sql:/docker-entrypoint-initdb.d/01-kcon_lucky.sql:ro
+      - ./sql/kcon_menu.sql:/docker-entrypoint-initdb.d/02-kcon-menu.sql:ro
+    ports:
+      # 仅绑定本机回环，不对局域网暴露；现场若不需要本机调试可整段注释掉
+      - "127.0.0.1:${MYSQL_DEBUG_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [kcon]
+
+  # ---------- Redis（RuoYi 登录 token / 缓存） ----------
+  redis:
+    image: redis:7-alpine
+    container_name: kcon-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [kcon]
+
+  # ---------- 后端 SpringBoot ----------
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    image: kcon/backend:1.0
+    container_name: kcon-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      BACKEND_PORT: 8080
+      JAVA_OPTS: "-Xms256m -Xmx768m"
+      SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-kcon_lucky}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+      REDIS_PASSWORD: ""
+      LAN_IP: ${LAN_IP:-127.0.0.1}
+      # JWT 签名密钥（必填，无默认值）。强度由 TokenService 启动时校验，不达标拒绝启动
+      TOKEN_SECRET: ${TOKEN_SECRET:?必须在 .env 中配置 TOKEN_SECRET，生成方式：openssl rand -base64 48}
+    volumes:
+      - ./data/upload:/app/uploadPath
+      - ./data/backup:/app/backup
+      - ./logs/backend:/app/logs
+    networks: [kcon]
+
+  # ---------- Web 统一入口（三端静态 + 反代） ----------
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    image: kcon/web:1.0
+    container_name: kcon-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-80}:80"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    networks: [kcon]
+
+networks:
+  kcon:
+    driver: bridge

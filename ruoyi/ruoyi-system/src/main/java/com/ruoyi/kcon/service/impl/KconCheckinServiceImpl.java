@@ -1,0 +1,229 @@
+package com.ruoyi.kcon.service.impl;
+
+import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.kcon.domain.KconAttendee;
+import com.ruoyi.kcon.domain.KconCheckin;
+import com.ruoyi.kcon.domain.KconPortPool;
+import com.ruoyi.kcon.mapper.KconAttendeeMapper;
+import com.ruoyi.kcon.mapper.KconCheckinMapper;
+import com.ruoyi.kcon.mapper.KconPortPoolMapper;
+import com.ruoyi.kcon.service.IKconCheckinService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 签到业务实现
+ *
+ * 端口号分配策略（不放回）：
+ *   1. 从 kcon_port_pool 随机取一个 status=0 的号
+ *   2. 用条件 UPDATE（where status=0）尝试占用，返回 1 才算成功
+ *   3. 失败说明被别人抢先，重试（最多 N 次）
+ *   4. 成功后写 kcon_checkin（phone 唯一索引兜底，防同号并发）
+ *
+ * @author kcon
+ */
+@Service
+public class KconCheckinServiceImpl implements IKconCheckinService
+{
+    private static final Logger log = LoggerFactory.getLogger(KconCheckinServiceImpl.class);
+
+    /** 端口号占用最大重试次数 */
+    private static final int MAX_OCCUPY_RETRY = 20;
+
+    @Autowired
+    private KconAttendeeMapper attendeeMapper;
+
+    @Autowired
+    private KconCheckinMapper checkinMapper;
+
+    @Autowired
+    private KconPortPoolMapper portPoolMapper;
+
+    @Override
+    public Map<String, Object> queryAttendee(String keyword)
+    {
+        if (keyword == null || keyword.trim().isEmpty())
+        {
+            throw new ServiceException("请输入手机号或后四位");
+        }
+        String kw = keyword.trim();
+        if (!kw.matches("\\d{4}|\\d{11}"))
+        {
+            throw new ServiceException("请输入 11 位手机号或 4 位尾号");
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        if (kw.length() == 11)
+        {
+            KconAttendee a = attendeeMapper.selectAttendeeByPhone(kw);
+            if (a == null)
+            {
+                throw new ServiceException("查无此人，请联系现场工作人员");
+            }
+            result.put("matchType", "single");
+            result.put("signed", a.getSigned() != null && a.getSigned() == 1);
+            result.put("attendee", toPublicView(a));
+            return result;
+        }
+
+        // 后四位：可能命中多人
+        List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
+        if (list == null || list.isEmpty())
+        {
+            throw new ServiceException("查无此人，请联系现场工作人员");
+        }
+        if (list.size() == 1)
+        {
+            KconAttendee a = list.get(0);
+            result.put("matchType", "single");
+            result.put("signed", a.getSigned() != null && a.getSigned() == 1);
+            result.put("attendee", toPublicView(a));
+            return result;
+        }
+
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        for (KconAttendee a : list)
+        {
+            candidates.add(toPublicView(a));
+        }
+        result.put("matchType", "multiple");
+        result.put("candidates", candidates);
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> submitCheckin(Long attendeeId)
+    {
+        KconAttendee attendee = attendeeMapper.selectAttendeeById(attendeeId);
+        if (attendee == null)
+        {
+            throw new ServiceException("查无此人，请联系现场工作人员");
+        }
+
+        // 已签到 → 返回原端口号，不变号
+        KconCheckin exist = checkinMapper.selectByPhone(attendee.getPhone());
+        if (exist != null)
+        {
+            return buildSuccess(attendee, exist.getPortNo(), exist.getCheckinTime(), true);
+        }
+
+        // 分配端口号
+        int portNo = allocatePort(attendee.getPhone());
+
+        Date now = new Date();
+        KconCheckin checkin = new KconCheckin();
+        checkin.setAttendeeId(attendee.getId());
+        checkin.setPhone(attendee.getPhone());
+        checkin.setPortNo(portNo);
+        checkin.setCheckinDate(now);
+        checkin.setCheckinTime(now);
+        try
+        {
+            checkinMapper.insertCheckin(checkin);
+        }
+        catch (Exception e)
+        {
+            // 极少数并发场景：同一手机号同时提交，唯一索引拦截。
+            // 此时回滚（端口号归还由事务保证），重新读一次已有记录返回。
+            log.warn("并发签到冲突，phone={}，尝试返回已有记录", attendee.getPhone());
+            throw new ServiceException("签到处理中，请稍后重试");
+        }
+
+        log.info("签到成功 name={} portNo={}", attendee.getName(), portNo);
+        return buildSuccess(attendee, portNo, now, false);
+    }
+
+    /**
+     * 分配一个未被占用的端口号（不放回）
+     */
+    private int allocatePort(String phone)
+    {
+        for (int i = 0; i < MAX_OCCUPY_RETRY; i++)
+        {
+            Integer candidate = portPoolMapper.selectRandomFreePort();
+            if (candidate == null)
+            {
+                throw new ServiceException("端口号已耗尽，请联系技术人员");
+            }
+            KconPortPool param = new KconPortPool();
+            param.setPortNo(candidate);
+            param.setPhone(phone);
+            int rows = portPoolMapper.occupyPort(param);
+            if (rows == 1)
+            {
+                return candidate;
+            }
+            // 被抢先，重试
+        }
+        throw new ServiceException("现场签到繁忙，请重试");
+    }
+
+    private Map<String, Object> buildSuccess(KconAttendee attendee, Integer portNo, Date checkinTime, boolean repeat)
+    {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("signed", true);
+        data.put("portNo", portNo);
+        data.put("checkinTime", format(checkinTime));
+        data.put("repeat", repeat);
+        data.put("name", attendee.getName());
+        data.put("tip", "您的抽奖端口号为 " + portNo + "，请您截屏保存，用于兑换抽奖礼品；请向工作人员出示此截图领取胸牌");
+        return data;
+    }
+
+    private String format(Date d)
+    {
+        if (d == null)
+        {
+            return null;
+        }
+        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(d);
+    }
+
+    @Override
+    public Map<String, Object> lookup(String keyword)
+    {
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (keyword == null || keyword.trim().isEmpty())
+        {
+            data.put("signed", false);
+            return data;
+        }
+        String kw = keyword.trim();
+        KconAttendee attendee;
+        if (kw.length() == 11)
+        {
+            attendee = attendeeMapper.selectAttendeeByPhone(kw);
+        }
+        else
+        {
+            List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
+            attendee = (list != null && list.size() == 1) ? list.get(0) : null;
+        }
+        if (attendee == null)
+        {
+            data.put("signed", false);
+            data.put("msg", "查无此人");
+            return data;
+        }
+        KconCheckin checkin = checkinMapper.selectByPhone(attendee.getPhone());
+        data.put("signed", checkin != null);
+        if (checkin != null)
+        {
+            data.put("portNo", checkin.getPortNo());
+            data.put("checkinTime", format(checkin.getCheckinTime()));
+            data.put("name", attendee.getName());
+        }
+        return data;
+    }
+}

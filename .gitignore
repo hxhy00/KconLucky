@@ -1,0 +1,48 @@
+# =============================================================
+# KConLucky .gitignore
+# =============================================================
+
+# ---- 依赖与构建产物 ----
+node_modules/
+dist/
+target/
+*.class
+*.jar
+*.war
+
+# ---- Maven 本地缓存 ----
+# 容器构建时挂载进来加速依赖下载，体积 100MB+，不需要进版本库
+.m2cache/
+.mvn/
+
+# ---- 运行时数据（绝对不能进版本库）----
+# data/ 里有 MySQL 数据文件、Redis dump、上传文件，体积 200MB+，
+# 且属于现场数据。迁移时随项目目录整体拷贝即可，不进代码仓库。
+data/
+logs/
+*.log
+
+# ---- 密钥与本地配置 ----
+# .env 里有 MYSQL_ROOT_PASSWORD / TOKEN_SECRET 等真实密钥，不入库。
+# 新机器部署按 docs/04-部署运行.md 说明，从 .env.example 复制并生成密钥。
+.env
+.env.local
+.env.*.local
+
+# 证书与私钥（MySQL 自签证书等）
+*.pem
+*.key
+*.p12
+*.jks
+
+# ---- 编辑器与系统 ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---- 临时文件 ----
+*.tmp
+*.bak
+*.orig
