@@ -39,29 +39,22 @@ UPDATE `sys_user` SET `status` = '1', `update_by` = 'admin'
  WHERE `user_name` = 'ry';
 
 -- -------------------------------------------------------------
--- 一级目录：KCon 现场（菜单ID 3000）
--- -------------------------------------------------------------
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
-VALUES (3000, 'KCon 现场', 0, 1, 'kcon', NULL, '', '', 1, 0, 'M', '0', '0', NULL, 'peoples', 'admin', NOW(), 'KCon 现场签到抽奖');
-
--- -------------------------------------------------------------
--- 二级菜单（按现场使用频率 / 工作流时序排序）
---   进行中高频：现场看板 → 兑奖核验
---   开场前准备：参会名单 → 奖品设置
---   结束后复盘：中奖记录
---   一次性操作：数据清场（置底）
+-- 一级菜单：平铺，不再套「KCon 现场」目录
+--   现场高频：现场看板 → 兑奖核验 → 抽奖控制台
+--   开场前：  参会名单 → 奖品设置
+--   结束后：  中奖记录 → 兑奖日志
+--   一次性：  数据管理（数据清场 + 数据迁移合并为一页两 tab）
 -- -------------------------------------------------------------
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
 VALUES
-  (3001, '现场看板',   3000, 1, 'dashboard', 'kcon/dashboard/index', '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list',    'dashboard', 'admin', NOW(), '签到率与统计'),
-  (3005, '兑奖核验',   3000, 2, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',     'search',    'admin', NOW(), '端口号+手机号核验发放'),
-  (3007, '抽奖控制台', 3000, 3, 'draw',      'kcon/draw/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:draw:query',       'guide',     'admin', NOW(), '场次切换与抽奖操作（FR-16/19/20）'),
-  (3002, '参会名单',   3000, 4, 'attendee',  'kcon/attendee/index',  '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list',    'user',      'admin', NOW(), '名单管理与导入'),
-  (3003, '奖品设置',   3000, 5, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',       'star',      'admin', NOW(), '场次奖项档位'),
-  (3004, '中奖记录',   3000, 6, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',      'money',     'admin', NOW(), '中奖名单与状态'),
-  (3008, '兑奖日志',   3000, 7, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',     'list',      'admin', NOW(), '核验操作追溯'),
-  (3006, '数据清场',   3000, 9, 'reset',     'kcon/reset/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',       'trash',     'admin', NOW(), '开场前清空数据'),
-  (3009, '数据迁移',   3000, 10, 'migrate',   'kcon/migrate/index',   '', '', 1, 0, 'C', '0', '0', 'kcon:data:migrate',     'upload',    'admin', NOW(), '全量备份导出与恢复（AC-11）');
+  (3001, '现场看板',   0, 1, 'dashboard', 'kcon/dashboard/index', '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'dashboard', 'admin', NOW(), '签到率与统计'),
+  (3005, '兑奖核验',   0, 2, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'search',    'admin', NOW(), '端口号+手机号核验发放'),
+  (3007, '抽奖控制台', 0, 3, 'draw',      'kcon/draw/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:draw:query',    'guide',     'admin', NOW(), '场次切换与抽奖操作（FR-16/19/20）'),
+  (3002, '参会名单',   0, 4, 'attendee',  'kcon/attendee/index',  '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'user',      'admin', NOW(), '名单管理与导入'),
+  (3003, '奖品设置',   0, 5, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',    'star',      'admin', NOW(), '场次奖项档位'),
+  (3004, '中奖记录',   0, 6, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',   'money',     'admin', NOW(), '中奖名单与状态'),
+  (3008, '兑奖日志',   0, 7, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'list',      'admin', NOW(), '核验操作追溯'),
+  (3006, '数据管理',   0, 8, 'data',      'kcon/data/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',    'trash',     'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
 
 -- -------------------------------------------------------------
 -- 按钮权限
@@ -85,9 +78,9 @@ VALUES
   (3040, '中奖作废', 3004, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:winner:void', '#', 'admin', NOW(), ''),
   -- 抽奖控制台（FR-16/19/20）
   (3050, '场次查询', 3007, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:session:list', '#', 'admin', NOW(), ''),
-  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次'),
-  -- 数据迁移（AC-11）
-  (3060, '数据迁移', 3009, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:data:migrate', '#', 'admin', NOW(), '导出与恢复，均限超管');
+  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次');
+  -- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
+  -- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
 
 -- -------------------------------------------------------------
 -- 授权给超级管理员（role_id=1）与普通角色（role_id=2）
@@ -100,14 +93,14 @@ SELECT 2, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 
 -- -------------------------------------------------------------
 -- 高危菜单只留给超管（role_id=1），从普通角色收回：
---   数据清场(3006)   会清空名单/签到/中奖/核验日志
---   数据迁移(3009/3060) 会用备份整体覆盖数据库
--- 后端分别以 @ss.hasPermi('kcon:data:reset') 与 @ss.hasRole('admin') 控制；
--- 若仍授权给普通角色，轻则「侧边栏有入口、点进去 403」，重则普通角色真能清场。
+--   数据管理(3006) 内含「数据清场」与「数据迁移」——前者清空名单/签到/中奖/核验日志，
+--   后者会用备份整体覆盖数据库。后端分别以 @ss.hasPermi('kcon:data:reset') 与
+--   @ss.hasRole('admin') 控制；若仍授权给普通角色，轻则「侧边栏有入口、点进去 403」，
+--   重则普通角色真能清场。
 -- -------------------------------------------------------------
 DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
-   AND `menu_id` IN (3006, 3009, 3060);
+   AND `menu_id` = 3006;
 
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;

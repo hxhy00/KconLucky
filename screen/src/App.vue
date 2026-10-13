@@ -65,6 +65,21 @@
             还剩 {{ remainingOfCurrent }} 份
           </span>
         </div>
+
+        <!-- 可见的抽奖按钮：大屏虽支持空格快捷键，但投屏机上鼠标点按钮更直观。
+             一次点击 = 一次抽奖，端口号滚动效果由 doDraw 内部的 startRolling 驱动 -->
+        <button
+          v-if="phase === 'idle'"
+          class="mt-12 px-16 py-4 rounded-2xl text-2xl font-black tracking-[0.3em] transition active:scale-95"
+          :class="poolEmpty
+            ? 'bg-white/5 text-slate-600 cursor-not-allowed'
+            : 'bg-brand text-white hover:brightness-110 glow'"
+          :disabled="poolEmpty"
+          @click="doDraw"
+        >开始抽奖</button>
+        <div v-else class="mt-12 text-sm text-slate-500 tracking-[0.3em]">
+          抽 奖 进 行 中 ， 请 稍 候
+        </div>
       </template>
     </main>
 
