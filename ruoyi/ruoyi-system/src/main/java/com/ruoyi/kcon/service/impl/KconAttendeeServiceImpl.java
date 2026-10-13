@@ -223,34 +223,68 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                         + "替换会清空名单但保留签到记录，导致已签到人员变成无法兑奖的孤儿记录。"
                         + "请改用「追加」模式，或先在「数据清场」里清空数据再重新导入。");
             }
-            attendeeMapper.truncateAttendee();
+            // 用 DELETE 而非 TRUNCATE：TRUNCATE 属 DDL，会隐式提交，
+            // 本方法上的 @Transactional 会因此失效——一旦后续解析/插入中途失败，
+            // 就会留下「旧名单已清空、新名单未导入」的空档且无法回滚。
+            // 名单规模有限（千级），DELETE 的开销可接受。
+            attendeeMapper.clearAllAttendees();
         }
 
         String batch = "B" + System.currentTimeMillis();
         int inserted = 0, updated = 0, skipped = 0;
         int phoneIdx = colIndex.get("phone");
+        // 记录被跳过行的行号与原因：只返回一个「跳过 N 条」，现场拿着 Excel 不知道要改哪几行
+        List<Map<String, Object>> skipDetails = new ArrayList<>();
 
         for (int r = 1; r < rows.size(); r++)
         {
             String[] row = rows.get(r);
+            int lineNo = r + 1; // 第 1 行是表头，数据从第 2 行起，与 Excel 行号一致
+
             String phone = cell(row, phoneIdx).trim();
             if (phone.isEmpty())
             {
                 skipped++;
+                addSkipDetail(skipDetails, lineNo, "手机号为空");
                 continue;
             }
             if (!phone.matches("1[3-9]\\d{9}"))
             {
-                log.warn("第 {} 行手机号格式异常，已跳过：{}", r + 1, phone);
                 skipped++;
+                addSkipDetail(skipDetails, lineNo, "手机号格式不正确：" + phone);
+                continue;
+            }
+
+            // 「必填列存在」不等于「值必填」：列缺失已在上面统一拦截，
+            // 这里必须逐行校验取值，否则空姓名/空渠道/空票种照样入库，
+            // 之后按渠道、按票种统计时就会出现无标签的脏数据
+            String name = cell(row, colIndex.get("name")).trim();
+            if (name.isEmpty())
+            {
+                skipped++;
+                addSkipDetail(skipDetails, lineNo, "姓名为空");
+                continue;
+            }
+            String channel = cell(row, colIndex.get("channel")).trim();
+            if (channel.isEmpty())
+            {
+                skipped++;
+                addSkipDetail(skipDetails, lineNo, "渠道标识为空");
+                continue;
+            }
+            String ticketType = cell(row, colIndex.get("ticketType")).trim();
+            if (ticketType.isEmpty())
+            {
+                skipped++;
+                addSkipDetail(skipDetails, lineNo, "票种为空");
                 continue;
             }
 
             KconAttendee a = new KconAttendee();
-            a.setName(cell(row, colIndex.get("name")).trim());
+            a.setName(name);
             a.setPhone(phone);
-            a.setChannel(cell(row, colIndex.get("channel")).trim());
-            a.setTicketType(cell(row, colIndex.get("ticketType")).trim());
+            a.setChannel(channel);
+            a.setTicketType(ticketType);
             a.setPhoneTail4(tail4(phone));
             a.setImportBatch(batch);
             a.setCreateBy(operator);
@@ -272,12 +306,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 a.setAttendCount(parseInt(cell(row, colIndex.get("attendCount"))));
             }
 
-            if (a.getName().isEmpty())
-            {
-                skipped++;
-                continue;
-            }
-
             int rows1 = attendeeMapper.upsertAttendee(a);
             // MySQL: 1=insert, 2=update（ON DUPLICATE KEY UPDATE）
             if (rows1 == 1)
@@ -294,15 +322,32 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             }
         }
 
-        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={}", mode, inserted, updated, skipped);
+        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 明细条数={}",
+                mode, inserted, updated, skipped, skipDetails.size());
 
         Map<String, Object> stat = new LinkedHashMap<>();
         stat.put("total", attendeeMapper.countAll());
         stat.put("inserted", inserted);
         stat.put("updated", updated);
         stat.put("skipped", skipped);
+        stat.put("skipDetails", skipDetails);
         stat.put("batch", batch);
         return stat;
+    }
+
+    /** 失败行明细上限：够现场定位问题即可，避免响应体过大 */
+    private static final int SKIP_DETAIL_LIMIT = 20;
+
+    private void addSkipDetail(List<Map<String, Object>> details, int lineNo, String reason)
+    {
+        if (details.size() >= SKIP_DETAIL_LIMIT)
+        {
+            return;
+        }
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("row", lineNo);
+        d.put("reason", reason);
+        details.add(d);
     }
 
     @Override

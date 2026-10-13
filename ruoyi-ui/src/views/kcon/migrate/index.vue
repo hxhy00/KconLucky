@@ -79,23 +79,18 @@ export default {
         "全量导出",
         { type: "warning", confirmButtonText: "开始导出", cancelButtonText: "取消" }
       ).then(() => {
+        // 必须走项目统一的 download()（utils/request：POST + blob + Authorization 请求头）。
+        // 旧实现用原生 <form method="get"> 把 Token 放进隐藏域：
+        //   1) 后端只从请求头读取 Token → 必然 401，导出根本下不来；
+        //   2) Token 会出现在 URL 里，被浏览器历史记录与 nginx access log 留存。
         this.exporting = true
-        // 走原生 location 下载，避免 axios 对大 blob 的内存占用；
-        // 但接口需登录态，所以用带 token 的表单提交方式触发浏览器下载
-        const token = this.$store.getters.token
-        const form = document.createElement("form")
-        form.method = "get"
-        form.action = process.env.VUE_APP_BASE_API + "/admin/migrate/export"
-        const hidden = document.createElement("input")
-        hidden.type = "hidden"
-        hidden.name = "Authorization"
-        hidden.value = "Bearer " + token
-        form.appendChild(hidden)
-        document.body.appendChild(form)
-        form.submit()
-        document.body.removeChild(form)
-        this.exporting = false
-        this.$modal.msgSuccess("已开始下载，请查看浏览器下载列表")
+        this.download(
+          "/admin/migrate/export",
+          {},
+          `kcon_lucky_${new Date().getTime()}.sql`
+        ).finally(() => {
+          this.exporting = false
+        })
       }).catch(() => {})
     },
     onFileChange(file) {

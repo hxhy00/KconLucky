@@ -98,5 +98,16 @@ SELECT 1, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
 SELECT 2, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 
+-- -------------------------------------------------------------
+-- 高危菜单只留给超管（role_id=1），从普通角色收回：
+--   数据清场(3006)   会清空名单/签到/中奖/核验日志
+--   数据迁移(3009/3060) 会用备份整体覆盖数据库
+-- 后端分别以 @ss.hasPermi('kcon:data:reset') 与 @ss.hasRole('admin') 控制；
+-- 若仍授权给普通角色，轻则「侧边栏有入口、点进去 403」，重则普通角色真能清场。
+-- -------------------------------------------------------------
+DELETE FROM `sys_role_menu`
+ WHERE `role_id` = 2
+   AND `menu_id` IN (3006, 3009, 3060);
+
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;

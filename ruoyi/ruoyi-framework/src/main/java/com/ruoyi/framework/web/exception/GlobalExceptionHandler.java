@@ -98,7 +98,9 @@ public class GlobalExceptionHandler
     {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生未知异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        // 不回传 e.getMessage()：其中可能带 SQL 片段、表名、内部类名等实现细节，
+        // 等于给探测者免费提供情报。细节只保留在上面的服务端日志（含堆栈）。
+        return AjaxResult.error("系统繁忙，请稍后重试");
     }
 
     /**
@@ -109,7 +111,7 @@ public class GlobalExceptionHandler
     {
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',发生系统异常.", requestURI, e);
-        return AjaxResult.error(e.getMessage());
+        return AjaxResult.error("系统繁忙，请稍后重试");
     }
 
     /**

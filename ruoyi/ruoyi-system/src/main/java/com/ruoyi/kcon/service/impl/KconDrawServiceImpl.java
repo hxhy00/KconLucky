@@ -19,7 +19,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,6 +48,17 @@ public class KconDrawServiceImpl implements IKconDrawService
 
     /** 全局抽奖锁（单机部署，方法级锁足够） */
     private final Object drawLock = new Object();
+
+    /**
+     * 事务模板。抽奖必须严格按「加锁 → 开事务 → 提交 → 解锁」执行，
+     * 因此不能用方法级 @Transactional（那样提交发生在方法返回、锁释放之后）。
+     */
+    private final TransactionTemplate transactionTemplate;
+
+    public KconDrawServiceImpl(PlatformTransactionManager transactionManager)
+    {
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
 
     @Autowired
     private KconSessionMapper sessionMapper;
@@ -206,105 +219,119 @@ public class KconDrawServiceImpl implements IKconDrawService
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> draw(String sessionCode, Long prizeId, String operator)
     {
+        // 锁必须在事务提交之后才释放。
+        // 原实现是「方法级 @Transactional + 方法体内 synchronized」：
+        // synchronized 在方法返回时释放，而事务由 Spring 代理在方法返回之后才提交，
+        // 两者之间存在窗口期——另一线程随即进入临界区，在 REPEATABLE READ 下会读到
+        // 不含前一次未提交中奖行的快照，第 4 步「二次校验」同样看不到，
+        // 于是可能抽到同一端口号（kcon_winner.port_no 并无唯一约束兜底）。
+        // 这里改为在锁内用事务模板显式开启/提交，使锁的持有期完全覆盖事务生命周期。
         synchronized (drawLock)
         {
-            if (sessionCode == null || sessionCode.trim().isEmpty())
-            {
-                KconSession cur = sessionMapper.selectByCode("AM");
-                sessionCode = cur != null ? cur.getCode() : "AM";
-            }
+            return transactionTemplate.execute(status -> doDraw(sessionCode, prizeId, operator));
+        }
+    }
 
-            // 1. 取奖品档位
-            KconPrize prize;
-            if (prizeId != null)
-            {
-                prize = prizeMapper.selectPrizeById(prizeId);
-                if (prize == null)
-                {
-                    throw new ServiceException("奖品档位不存在");
-                }
-            }
-            else
-            {
-                prize = prizeMapper.selectCurrentTier(sessionCode);
-            }
+    /**
+     * 抽奖主体。由 {@link #draw} 在抽奖锁内通过事务模板调用，不要直接暴露。
+     */
+    private Map<String, Object> doDraw(String sessionCode, Long prizeId, String operator)
+    {
+        if (sessionCode == null || sessionCode.trim().isEmpty())
+        {
+            KconSession cur = sessionMapper.selectByCode("AM");
+            sessionCode = cur != null ? cur.getCode() : "AM";
+        }
+
+        // 1. 取奖品档位
+        KconPrize prize;
+        if (prizeId != null)
+        {
+            prize = prizeMapper.selectPrizeById(prizeId);
             if (prize == null)
             {
-                throw new ServiceException("该场次奖项已抽完", 4002);
+                throw new ServiceException("奖品档位不存在");
             }
-            if (prize.getDrawnCount() != null && prize.getDrawnCount() >= prize.getQuantity())
-            {
-                throw new ServiceException("该奖项已抽满", 4002);
-            }
-
-            // 2. 计算抽奖池（此刻）
-            List<Integer> pool = calcPool(sessionCode);
-            if (pool.isEmpty())
-            {
-                throw new ServiceException("当前无可抽奖号，请先让观众签到", 4001);
-            }
-
-            // 3. 随机取一个（不放回由「已中奖排除」保证）
-            int idx = java.util.concurrent.ThreadLocalRandom.current().nextInt(pool.size());
-            Integer portNo = pool.get(idx);
-
-            // 4. 二次校验：该号是否已有有效中奖记录（防并发/防重复）
-            KconWinner exist = winnerMapper.selectActiveByPortNo(portNo);
-            if (exist != null)
-            {
-                throw new ServiceException("抽号冲突，请再抽一次", 409);
-            }
-
-            // 5. 取该端口号持有人
-            KconCheckin checkin = checkinMapper.selectByPortNo(portNo);
-            if (checkin == null)
-            {
-                throw new ServiceException("数据异常：端口号无签到记录，请重试", 409);
-            }
-            KconAttendee attendee = attendeeMapper.selectAttendeeById(checkin.getAttendeeId());
-
-            // 6. 占用该档位一个名额（条件更新，防超额）
-            int ok = prizeMapper.incrementDrawnCount(prize.getId());
-            if (ok != 1)
-            {
-                throw new ServiceException("该奖项已抽满", 4002);
-            }
-
-            // 7. 写中奖记录
-            KconWinner winner = new KconWinner();
-            winner.setPortNo(portNo);
-            winner.setAttendeeId(checkin.getAttendeeId());
-            winner.setName(attendee != null ? attendee.getName() : "");
-            winner.setCompany(attendee != null ? attendee.getCompany() : null);
-            winner.setPosition(attendee != null ? attendee.getPosition() : null);
-            winner.setPhone(checkin.getPhone());
-            // 需求 FR-23：邮箱随中奖记录一起冗余，兑奖时用于二次核对身份
-            winner.setEmail(attendee != null ? attendee.getEmail() : null);
-            winner.setSessionCode(sessionCode);
-            winner.setPrizeId(prize.getId());
-            winner.setTierName(prize.getTierName());
-            winner.setStatus(KconWinner.STATUS_WON);
-            winner.setOperator(operator);
-            winnerMapper.insertWinner(winner);
-
-            log.info("抽奖中奖 session={} portNo={} name={} tier={}",
-                    sessionCode, portNo, winner.getName(), prize.getTierName());
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("winnerId", winner.getId());
-            data.put("portNo", portNo);
-            data.put("name", winner.getName());
-            data.put("company", winner.getCompany());
-            data.put("position", winner.getPosition());
-            data.put("tierName", prize.getTierName());
-            data.put("winTime", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-                    .format(winner.getWinTime() != null ? winner.getWinTime() : new java.util.Date()));
-            data.put("poolCountAfter", pool.size() - 1);
-            return data;
         }
+        else
+        {
+            prize = prizeMapper.selectCurrentTier(sessionCode);
+        }
+        if (prize == null)
+        {
+            throw new ServiceException("该场次奖项已抽完", 4002);
+        }
+        if (prize.getDrawnCount() != null && prize.getDrawnCount() >= prize.getQuantity())
+        {
+            throw new ServiceException("该奖项已抽满", 4002);
+        }
+
+        // 2. 计算抽奖池（此刻）
+        List<Integer> pool = calcPool(sessionCode);
+        if (pool.isEmpty())
+        {
+            throw new ServiceException("当前无可抽奖号，请先让观众签到", 4001);
+        }
+
+        // 3. 随机取一个（不放回由「已中奖排除」保证）
+        int idx = java.util.concurrent.ThreadLocalRandom.current().nextInt(pool.size());
+        Integer portNo = pool.get(idx);
+
+        // 4. 二次校验：该号是否已有有效中奖记录（防并发/防重复）
+        KconWinner exist = winnerMapper.selectActiveByPortNo(portNo);
+        if (exist != null)
+        {
+            throw new ServiceException("抽号冲突，请再抽一次", 409);
+        }
+
+        // 5. 取该端口号持有人
+        KconCheckin checkin = checkinMapper.selectByPortNo(portNo);
+        if (checkin == null)
+        {
+            throw new ServiceException("数据异常：端口号无签到记录，请重试", 409);
+        }
+        KconAttendee attendee = attendeeMapper.selectAttendeeById(checkin.getAttendeeId());
+
+        // 6. 占用该档位一个名额（条件更新，防超额）
+        int ok = prizeMapper.incrementDrawnCount(prize.getId());
+        if (ok != 1)
+        {
+            throw new ServiceException("该奖项已抽满", 4002);
+        }
+
+        // 7. 写中奖记录
+        KconWinner winner = new KconWinner();
+        winner.setPortNo(portNo);
+        winner.setAttendeeId(checkin.getAttendeeId());
+        winner.setName(attendee != null ? attendee.getName() : "");
+        winner.setCompany(attendee != null ? attendee.getCompany() : null);
+        winner.setPosition(attendee != null ? attendee.getPosition() : null);
+        winner.setPhone(checkin.getPhone());
+        // 需求 FR-23：邮箱随中奖记录一起冗余，兑奖时用于二次核对身份
+        winner.setEmail(attendee != null ? attendee.getEmail() : null);
+        winner.setSessionCode(sessionCode);
+        winner.setPrizeId(prize.getId());
+        winner.setTierName(prize.getTierName());
+        winner.setStatus(KconWinner.STATUS_WON);
+        winner.setOperator(operator);
+        winnerMapper.insertWinner(winner);
+
+        log.info("抽奖中奖 session={} portNo={} name={} tier={}",
+                sessionCode, portNo, winner.getName(), prize.getTierName());
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("winnerId", winner.getId());
+        data.put("portNo", portNo);
+        data.put("name", winner.getName());
+        data.put("company", winner.getCompany());
+        data.put("position", winner.getPosition());
+        data.put("tierName", prize.getTierName());
+        data.put("winTime", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                .format(winner.getWinTime() != null ? winner.getWinTime() : new java.util.Date()));
+        data.put("poolCountAfter", pool.size() - 1);
+        return data;
     }
 
     @Override

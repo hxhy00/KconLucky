@@ -18,6 +18,7 @@ import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
+import com.ruoyi.common.exception.ServiceException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +72,9 @@ public class MigrateController extends BaseController
      */
     @PreAuthorize("@ss.hasRole('admin')")
     @Log(title = "全量数据导出", businessType = BusinessType.EXPORT)
-    @GetMapping("/export")
+    // 与项目其余导出接口保持一致的 POST：前端统一走 utils/request 的 download()，
+    // 它是 POST + blob + Authorization 请求头。原先写成 @GetMapping 会与之不匹配。
+    @PostMapping("/export")
     public void export(HttpServletResponse response) throws Exception
     {
         String dbName = parseDatabaseName(jdbcUrl);
@@ -88,7 +91,10 @@ public class MigrateController extends BaseController
         {
             // 导出失败不留半截文件
             try { Files.deleteIfExists(tmp); } catch (Exception ignored) { }
-            throw new RuntimeException("导出失败：" + dumpError
+            // 用 ServiceException 而非 RuntimeException：全局异常处理器对
+            // RuntimeException 只返回通用提示（避免外泄内部细节），
+            // 这条带排查指引的提示会被吞掉，必须走业务异常通道
+            throw new ServiceException("导出失败：" + dumpError
                     + "。若容器内缺少 mysql-client，可到宿主机执行 scripts/backup.sh");
         }
 
@@ -368,7 +374,8 @@ public class MigrateController extends BaseController
         if (!process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES))
         {
             process.destroyForcibly();
-            throw new RuntimeException("执行超时（超过 " + TIMEOUT_MINUTES + " 分钟）已终止");
+            // 同上：走业务异常通道，否则用户只会看到「系统繁忙」
+            throw new ServiceException("执行超时（超过 " + TIMEOUT_MINUTES + " 分钟）已终止");
         }
         return process.exitValue();
     }

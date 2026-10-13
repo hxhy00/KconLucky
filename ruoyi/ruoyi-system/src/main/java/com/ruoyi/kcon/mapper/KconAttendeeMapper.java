@@ -54,9 +54,16 @@ public interface KconAttendeeMapper
     int deleteAttendeeByIds(Long[] ids);
 
     /**
-     * 清空名单
+     * 清空名单（TRUNCATE 版，不可回滚，仅用于「数据清场」）
      */
     int truncateAttendee();
+
+    /**
+     * 清空名单（DELETE 版，可回滚）——用于「替换」模式的导入。
+     * TRUNCATE 是 DDL，会隐式提交，无法纳入事务：一旦后续批量插入中途失败，
+     * 会留下「旧名单已清空、新名单未导入」的空档且无法回滚。
+     */
+    int clearAllAttendees();
 
     /**
      * 名单总数

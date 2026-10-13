@@ -22,6 +22,12 @@ public interface KconWinnerMapper
      */
     KconWinner selectActiveByPortNo(Integer portNo);
 
+    /**
+     * 最近一条有效（未作废）中奖记录。
+     * 大屏作废接口免登录，以此为基准把可作废范围限制为最新一条。
+     */
+    KconWinner selectLatestValidWinner();
+
     int insertWinner(KconWinner winner);
 
     /**

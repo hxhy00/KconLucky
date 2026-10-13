@@ -39,8 +39,6 @@
     <el-card shadow="never" style="margin-top: 20px;">
       <div slot="header">
         <span>当前场次：<b>{{ sessionName || '未设置' }}</b></span>
-        <el-button style="float: right; padding: 3px 0" type="text" icon="el-icon-refresh"
-                   @click="reload">刷新</el-button>
       </div>
 
       <!-- FR-20：无人可抽时醒目提示 -->
@@ -79,7 +77,7 @@
 
       <!-- 操作按钮 -->
       <div class="action-row">
-        <el-button type="primary" size="medium" icon="el-icon-refresh"
+        <el-button type="primary" size="medium" icon="el-icon-present"
                    :loading="drawing" :disabled="drawDisabled" v-hasPermi="['kcon:draw:operate']"
                    @click="handleDraw">抽一个</el-button>
         <el-button type="danger" size="medium" icon="el-icon-close"

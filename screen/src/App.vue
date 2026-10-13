@@ -150,10 +150,18 @@ const remainingOfCurrent = computed(() => {
   return Math.max(0, (c.quantity ?? 0) - (c.drawnCount ?? 0))
 })
 
+// 轮询在途标记：单次请求超过 3s 时不再叠加新请求，弱网下避免请求雪崩
+let statusInflight = false
+// 是否成功取到过一次状态：用于区分「真的没号可抽」与「后端连不上」
+let statusLoaded = false
+
 async function loadStatus() {
+  if (statusInflight) return
+  statusInflight = true
   try {
     const res = await fetchStatus()
     if (res.code === 200) {
+      statusLoaded = true
       status.value = res.data
       if (phase.value === 'idle' && poolEmpty.value && status.value.checkedInToday >= 0) {
         // 仅在有明确池数据且池空时提示
@@ -162,7 +170,11 @@ async function loadStatus() {
         phase.value = 'idle'
       }
     }
-  } catch (e) { /* 静默重试 */ }
+  } catch (e) {
+    // 静默重试；连接是否正常由 statusLoaded 体现，不在这里改 phase
+  } finally {
+    statusInflight = false
+  }
 }
 
 function randomNo() {
@@ -180,7 +192,16 @@ function stopRolling() {
 
 async function doDraw() {
   if (phase.value === 'rolling') return
-  if (poolEmpty.value) { phase.value = 'empty'; return }
+  if (poolEmpty.value) {
+    // 区分「确实没号可抽」与「后端连不上导致 status 为空」：
+    // 后者若显示成「请先让观众签到」，等于把故障误报成业务提示
+    if (!statusLoaded) {
+      alert('无法连接服务，请检查大屏与后端之间的网络后重试')
+      return
+    }
+    phase.value = 'empty'
+    return
+  }
 
   phase.value = 'rolling'
   startRolling()
@@ -210,6 +231,10 @@ async function doDraw() {
   } catch (e) {
     stopRolling()
     phase.value = 'idle'
+    // 超时/断网时后端可能已经落库并写入中奖记录，绝不能静默回到待抽状态：
+    // 否则操作员以为没抽到，再按一次空格就会再抽一个，静默产生两条中奖记录。
+    alert('抽奖请求未收到响应，结果未知。请先刷新页面确认是否已产生中奖，再决定是否重抽。')
+    await loadStatus()
   }
 }
 

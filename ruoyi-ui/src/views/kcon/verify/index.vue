@@ -20,6 +20,7 @@
         <el-form-item>
           <el-button type="primary" icon="el-icon-search" :loading="verifying" @click="handleVerify">核 验</el-button>
           <el-button type="success" icon="el-icon-check" :loading="receiving" @click="handleReceive"
+                     v-hasPermi="['kcon:verify:receive']"
                      :disabled="verifyResult !== 'VALID'">确认发放</el-button>
         </el-form-item>
       </el-form>
@@ -75,6 +76,8 @@ export default {
       verifyResult: null,
       sessions: [],
       form: { portNo: null, phone: null },
+      // 核验通过时的输入快照：发放一律以快照为准，避免与输入框当前值不一致
+      verifiedBody: null,
       rules: {
         portNo: [{ required: true, message: "请输入端口号", trigger: "blur" }],
         phone: [{ required: true, message: "请输入手机号", trigger: "blur" }]
@@ -84,7 +87,20 @@ export default {
   created() {
     this.getSessions()
   },
+  watch: {
+    // 输入一变就作废上一次核验结果。
+    // 否则：核验端口 1001 通过后把端口号改成 1002，按钮仍是可点的绿色，
+    // 而确认弹窗显示的是 1001 的人名、提交的却是 1002 —— 现场会发错人。
+    "form.portNo": "resetVerify",
+    "form.phone": "resetVerify"
+  },
   methods: {
+    // 作废上一次核验结果（输入改动、核验失败时调用）
+    resetVerify() {
+      this.verifyData = null
+      this.verifyResult = null
+      this.verifiedBody = null
+    },
     // 场次列表从后端取（需求 FR-16），取不到时回退到 AM/PM 兜底文案
     getSessions() {
       listSessions().then(res => {
@@ -106,29 +122,35 @@ export default {
       this.$refs["verifyForm"].validate(valid => {
         if (!valid) return
         this.verifying = true
-        verify(this.buildBody()).then(res => {
+        const body = this.buildBody()
+        verify(body).then(res => {
           this.verifyData = res.data
           this.verifyResult = res.data.result
+          // 记录本次核验对应的输入，发放时只认这份快照
+          this.verifiedBody = body
         }).catch(() => {
-          this.verifyData = null
-          this.verifyResult = null
+          this.resetVerify()
         }).finally(() => { this.verifying = false })
       })
     },
     handleReceive() {
       if (this.verifyResult !== "VALID") return
-      this.$modal.confirm(`确认向「${this.verifyData.name}」（端口号 ${this.form.portNo}）发放「${this.verifyData.tierName}」？发放后不可撤销。`)
-        .then(() => receivePrize(this.buildBody()))
+      // 用核验时的快照提交，而不是输入框当前值，避免「弹窗显示 A、实际发放 B」
+      const body = this.verifiedBody || this.buildBody()
+      this.receiving = true
+      this.$modal.confirm(`确认向「${this.verifyData.name}」（端口号 ${body.portNo}）发放「${this.verifyData.tierName}」？发放后不可撤销。`)
+        .then(() => receivePrize(body))
         .then(() => {
           this.$modal.msgSuccess("发放成功")
           // 发放后重新核验，刷新状态为已领取
-          return verify(this.buildBody())
+          return verify(body)
         })
         .then(res => {
           this.verifyData = res.data
           this.verifyResult = res.data.result
         })
         .catch(() => {})
+        .finally(() => { this.receiving = false })
     }
   }
 }

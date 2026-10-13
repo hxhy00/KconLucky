@@ -38,7 +38,7 @@
           <img :src="codeUrl" @click="getCode" class="login-code-img"/>
         </div>
       </el-form-item>
-      <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住密码</el-checkbox>
+      <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住账号</el-checkbox>
       <el-form-item style="width:100%;">
         <el-button
           :loading="loading"
@@ -65,7 +65,6 @@
 <script>
 import { getCodeImg } from "@/api/login"
 import Cookies from "js-cookie"
-import { encrypt, decrypt } from '@/utils/jsencrypt'
 import defaultSettings from '@/settings'
 import logoImg from "@/assets/logo/kcon-wide.png"
 
@@ -77,8 +76,11 @@ export default {
       footerContent: defaultSettings.footerContent,
       codeUrl: "",
       loginForm: {
-        username: "admin",
-        password: "admin123",
+        // 不在源码里预填超管口令：打包产物任何人都能看到，
+        // 预填等于把 admin/admin123 印在每个能打开 /admin/ 的人眼前。
+        // 「记住账号」会把用户名回填，密码每次手输。
+        username: "",
+        password: "",
         rememberMe: false,
         code: "",
         uuid: ""
@@ -124,13 +126,17 @@ export default {
     },
     getCookie() {
       const username = Cookies.get("username")
-      const password = Cookies.get("password")
       const rememberMe = Cookies.get('rememberMe')
+      // 不再回填密码：旧实现把密码加密后写进 Cookie，而解密用的私钥就打包在前端
+      // （utils/jsencrypt.js 里的 privateKey），任何人打开开发者工具即可还原明文，
+      // 等于明文存储。且 Cookie 里一旦残留旧数据，登录框会被自动填入错密码，
+      // 让人误以为「账号密码错误」。现场共用 admin，记住账号即可。
       this.loginForm = {
         username: username === undefined ? this.loginForm.username : username,
-        password: password === undefined ? this.loginForm.password : decrypt(password),
+        password: "",
         rememberMe: rememberMe === undefined ? false : Boolean(rememberMe)
       }
+      Cookies.remove("password")
     },
     handleLogin() {
       this.$refs.loginForm.validate(valid => {
@@ -138,13 +144,13 @@ export default {
           this.loading = true
           if (this.loginForm.rememberMe) {
             Cookies.set("username", this.loginForm.username, { expires: 30 })
-            Cookies.set("password", encrypt(this.loginForm.password), { expires: 30 })
             Cookies.set('rememberMe', this.loginForm.rememberMe, { expires: 30 })
           } else {
             Cookies.remove("username")
-            Cookies.remove("password")
             Cookies.remove('rememberMe')
           }
+          // 任何情况下都不保存密码，并顺手清掉历史残留
+          Cookies.remove("password")
           this.$store.dispatch("Login", this.loginForm).then(() => {
             this.$router.push({ path: this.redirect || "/" }).catch(()=>{})
           }).catch(() => {

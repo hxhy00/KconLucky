@@ -15,7 +15,9 @@ services:
     container_name: kcon-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      # 不设默认口令：兜底默认值等于把弱口令固化进仓库。未在 .env 中配置时
+      # compose 会直接报错退出，避免带着 root123 上线
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-kcon_lucky}
       TZ: ${TZ:-Asia/Shanghai}
     command:
@@ -32,11 +34,15 @@ services:
       - ./sql/00-ry-base.sql:/docker-entrypoint-initdb.d/00-ry-base.sql:ro
       - ./sql/kcon_lucky.sql:/docker-entrypoint-initdb.d/01-kcon_lucky.sql:ro
       - ./sql/kcon_menu.sql:/docker-entrypoint-initdb.d/02-kcon-menu.sql:ro
+      # 增量迁移脚本（幂等，已存在的列/索引会跳过）。
+      # 基线建表脚本现已包含这些对象，但对「已存在但缺列」的库仍是必需的；
+      # 漏挂会导致库缺 kcon_winner.email 等对象，中奖查询直接 Unknown column。
+      - ./sql/kcon_migrate_v2.sql:/docker-entrypoint-initdb.d/03-kcon-migrate_v2.sql:ro
     ports:
       # 仅绑定本机回环，不对局域网暴露；现场若不需要本机调试可整段注释掉
       - "127.0.0.1:${MYSQL_DEBUG_PORT:-3307}:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:?}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -77,7 +83,7 @@ services:
       JAVA_OPTS: "-Xms256m -Xmx768m"
       SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-kcon_lucky}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
-      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DATABASE: 0

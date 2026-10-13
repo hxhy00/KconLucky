@@ -166,6 +166,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         truncate table kcon_attendee
     </update>
 
+    <!-- 替换导入专用：DELETE 可回滚，能纳入 @Transactional，避免半途失败后名单为空 -->
+    <delete id="clearAllAttendees">
+        delete from kcon_attendee
+    </delete>
+
     <select id="countAll" resultType="int">
         select count(*) from kcon_attendee
     </select>

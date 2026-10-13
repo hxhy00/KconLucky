@@ -15,6 +15,7 @@
       <el-input v-model="confirmText" placeholder="清场" maxlength="4" style="width: 200px;" />
       <div style="margin-top: 20px;">
         <el-button type="danger" icon="el-icon-delete" :loading="resetting" :disabled="confirmText !== '清场'"
+                   v-hasPermi="['kcon:data:reset']"
                    @click="handleReset">执 行 清 场</el-button>
         <el-button v-hasPermi="['kcon:attendee:export']" icon="el-icon-download" @click="handleExport">
           先导出签到明细

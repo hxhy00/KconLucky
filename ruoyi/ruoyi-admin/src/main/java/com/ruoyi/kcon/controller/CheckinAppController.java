@@ -1,8 +1,10 @@
 package com.ruoyi.kcon.controller;
 
 import com.ruoyi.common.annotation.Anonymous;
+import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.service.IKconCheckinService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,12 @@ import java.util.Map;
  *
  * 对应接口文档 §2
  *
+ * 限流说明：这两个接口只接受「11 位手机号」或「4 位尾号」，本身已限制了枚举面
+ * （尾号全量 10^4 次），但仍需挡住脚本批量拉取参会人姓名。
+ * 阈值刻意放宽到 200 次/分钟：现场观众手机共用同一个 WiFi 出口 IP，
+ * 限得太紧会误伤排队签到的人；200/分钟 下把 10^4 个尾号扫一遍需 50 分钟以上，
+ * 已足以让批量枚举失去性价比。
+ *
  * @author kcon
  */
 @Anonymous
@@ -33,6 +41,7 @@ public class CheckinAppController extends BaseController
      * 2.1 查询参会人
      * POST /app/checkin/query  { "keyword": "13800138000" }
      */
+    @RateLimiter(time = 60, count = 200, limitType = LimitType.IP)
     @PostMapping("/query")
     public AjaxResult query(@RequestBody Map<String, String> body)
     {
@@ -67,6 +76,7 @@ public class CheckinAppController extends BaseController
      * 2.3 回查签到状态与端口号
      * GET /app/checkin/lookup?keyword=13800138000
      */
+    @RateLimiter(time = 60, count = 200, limitType = LimitType.IP)
     @GetMapping("/lookup")
     public AjaxResult lookup(@RequestParam(required = false) String keyword)
     {

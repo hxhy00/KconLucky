@@ -60,6 +60,7 @@ CREATE TABLE `kcon_checkin` (
   UNIQUE KEY `uk_phone` (`phone`),
   UNIQUE KEY `uk_port` (`port_no`),
   KEY `idx_date` (`checkin_date`),
+  KEY `idx_date_time` (`checkin_date`, `checkin_time`),
   KEY `idx_attendee` (`attendee_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='签到记录';
 
@@ -135,6 +136,7 @@ CREATE TABLE `kcon_winner` (
   `company`      VARCHAR(128) DEFAULT NULL            COMMENT '公司（冗余）',
   `position`     VARCHAR(64)  DEFAULT NULL            COMMENT '职务/年级（冗余，大屏展示）',
   `phone`        VARCHAR(20)  DEFAULT NULL            COMMENT '手机号',
+  `email`        VARCHAR(128) DEFAULT NULL            COMMENT '邮箱（冗余，来自名单）',
   `session_code` VARCHAR(16)  NOT NULL                COMMENT '场次 AM/PM',
   `prize_id`     BIGINT       DEFAULT NULL            COMMENT '奖品档位ID',
   `tier_name`    VARCHAR(32)  DEFAULT NULL            COMMENT '奖项名（冗余）',
@@ -161,7 +163,8 @@ CREATE TABLE `kcon_verify_log` (
   `operator`    VARCHAR(64) DEFAULT NULL            COMMENT '操作人',
   `create_time` DATETIME    DEFAULT NULL            COMMENT '操作时间',
   PRIMARY KEY (`id`),
-  KEY `idx_port` (`port_no`)
+  KEY `idx_port` (`port_no`),
+  KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='兑奖核验日志';
 
 -- -------------------------------------------------------------

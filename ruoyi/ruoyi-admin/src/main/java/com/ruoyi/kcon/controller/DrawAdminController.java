@@ -59,12 +59,22 @@ public class DrawAdminController extends BaseController
     @PostMapping("/draw")
     public AjaxResult draw(@RequestBody Map<String, Object> body)
     {
-        String sessionCode = body == null ? null : (String) body.get("sessionCode");
+        // 用 String.valueOf 而非 (String) 强转：前端若传 {"sessionCode":123}，
+        // 强转会抛 ClassCastException，变成看不懂的 500
+        String sessionCode = body == null || body.get("sessionCode") == null
+                ? null : String.valueOf(body.get("sessionCode"));
         Long prizeId = null;
         if (body != null && body.get("prizeId") != null
                 && !"".equals(String.valueOf(body.get("prizeId"))))
         {
-            prizeId = Long.valueOf(String.valueOf(body.get("prizeId")));
+            try
+            {
+                prizeId = Long.valueOf(String.valueOf(body.get("prizeId")));
+            }
+            catch (NumberFormatException e)
+            {
+                return error("prizeId 格式错误");
+            }
         }
         Map<String, Object> result = drawService.draw(sessionCode, prizeId, getUsername());
         // 抽奖结果里顺带回一份刷新后的状态，控制台一次请求即可完成「出结果 + 更新计数」
@@ -83,7 +93,15 @@ public class DrawAdminController extends BaseController
         {
             return error("参数缺失：winnerId");
         }
-        Long winnerId = Long.valueOf(String.valueOf(body.get("winnerId")));
+        Long winnerId;
+        try
+        {
+            winnerId = Long.valueOf(String.valueOf(body.get("winnerId")));
+        }
+        catch (NumberFormatException e)
+        {
+            return error("winnerId 格式错误");
+        }
         drawService.voidWinner(winnerId, getUsername());
         return success(buildStatus());
     }

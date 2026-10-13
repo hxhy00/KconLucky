@@ -46,7 +46,15 @@ public class VerifyController extends BaseController
         {
             return error("请输入端口号");
         }
-        Integer portNo = Integer.valueOf(String.valueOf(body.get("portNo")));
+        Integer portNo;
+        try
+        {
+            portNo = Integer.valueOf(String.valueOf(body.get("portNo")));
+        }
+        catch (NumberFormatException e)
+        {
+            return error("端口号格式错误");
+        }
         String phone = body.get("phone") == null ? null : String.valueOf(body.get("phone"));
         return success(verifyService.verify(portNo, phone, getUsername()));
     }
@@ -63,7 +71,15 @@ public class VerifyController extends BaseController
         {
             return error("请输入端口号");
         }
-        Integer portNo = Integer.valueOf(String.valueOf(body.get("portNo")));
+        Integer portNo;
+        try
+        {
+            portNo = Integer.valueOf(String.valueOf(body.get("portNo")));
+        }
+        catch (NumberFormatException e)
+        {
+            return error("端口号格式错误");
+        }
         String phone = body.get("phone") == null ? null : String.valueOf(body.get("phone"));
         verifyService.receive(portNo, phone, getUsername());
         return success("发放成功");

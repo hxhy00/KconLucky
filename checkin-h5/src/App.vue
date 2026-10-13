@@ -216,7 +216,12 @@ async function doLookup() {
   try {
     const res = await lookup(kw)
     if (res.code !== 200 || !res.data || !res.data.signed || !res.data.portNo) {
-      lookupError.value = res.msg || '未查到签到记录，请联系现场工作人员'
+      // 后端在「查无此人」时仍返回 code=200，msg 是 RuoYi 固定的「操作成功」，
+      // 真正的提示放在 data.msg 里。直接读 res.msg 会显示成「操作成功」，
+      // 观众会以为查到了、却没看到端口号。
+      lookupError.value = (res.data && res.data.msg)
+        || (res.code !== 200 ? res.msg : '')
+        || '未查到签到记录，请联系现场工作人员'
       return
     }
     lookupResult.value = res.data

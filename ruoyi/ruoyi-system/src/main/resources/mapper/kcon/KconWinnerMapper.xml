@@ -53,6 +53,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </select>
 
+    <!-- 最近一条有效中奖记录（大屏免登录作废接口的校验基准） -->
+    <select id="selectLatestValidWinner" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where status != 2
+        order by id desc
+        limit 1
+    </select>
+
     <!-- 某端口号当前有效的中奖记录（未作废） -->
     <select id="selectActiveByPortNo" parameterType="java.lang.Integer" resultMap="KconWinnerResult">
         <include refid="selectWinnerVo"/>

@@ -42,13 +42,17 @@ spring:
             webStatFilter: 
                 enabled: true
             statViewServlet:
-                enabled: true
-                # 设置白名单，不填则允许所有访问
+                # 默认关闭。控制台会完整展示 SQL（含写入的手机号明文）、数据源 URL 与会话信息，
+                # 且历史默认口令是 RuoYi 公开值，经 nginx 反代后即为 /prod-api/druid/，属明确攻击面。
+                # 需要排查慢 SQL 时临时改为 true，并务必用环境变量注入强口令：
+                #   DRUID_USER / DRUID_PWD
+                enabled: false
+                # 白名单：反代场景下来源 IP 是 nginx 容器，保持空并靠 enabled 控制即可
                 allow:
                 url-pattern: /druid/*
-                # 控制台管理用户名和密码
-                login-username: ruoyi
-                login-password: 123456
+                # 控制台口令（仅在 enabled=true 时生效），不设默认值
+                login-username: ${DRUID_USER:}
+                login-password: ${DRUID_PWD:}
             filter:
                 stat:
                     enabled: true
@@ -58,4 +62,6 @@ spring:
                     merge-sql: true
                 wall:
                     config:
-                        multi-statement-allow: true
+                        # 关闭多语句：本项目没有依赖一次执行多条 SQL 的地方，
+                        # 开着会让「注入点 + 分号」有机会拼出第二条语句
+                        multi-statement-allow: false

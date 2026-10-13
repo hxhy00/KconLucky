@@ -16,7 +16,6 @@ import com.ruoyi.kcon.util.QrCodeUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -128,19 +127,26 @@ public class ExportController extends BaseController
     /**
      * 清场：清空名单/签到/中奖/核验日志，端口号池归零，奖品已抽数归零。
      * 正式开场前使用。
+     *
+     * 注意：这里刻意不加 @Transactional。TRUNCATE TABLE 属于 DDL，在 MySQL 中会触发
+     * 隐式提交且不可回滚，标注事务只会造成「有原子性」的错觉。若 TRUNCATE 之后的
+     * 语句失败，会出现「名单已清空但端口号池未归零」的半清场状态，导致签到报
+     * 「端口号已耗尽」、抽奖报「该场次奖项已抽完」。
+     * 因此把可回滚的 UPDATE 放在 TRUNCATE 之前：一旦失败，数据仍在。
      */
     @PreAuthorize("@ss.hasPermi('kcon:data:reset')")
     @Log(title = "数据清场", businessType = BusinessType.CLEAN)
     @PostMapping("/reset")
-    @Transactional(rollbackFor = Exception.class)
     public AjaxResult reset()
     {
+        // 可回滚的部分先做
+        portPoolMapper.releaseAll();
+        prizeMapper.resetDrawnCount();
+        // 不可回滚的部分后做
         checkinMapper.truncateCheckin();
         winnerMapper.truncateWinner();
         verifyLogMapper.truncateLog();
         attendeeMapper.truncateAttendee();
-        portPoolMapper.releaseAll();
-        prizeMapper.resetDrawnCount();
-        return success("清场完成：名单、签到、中奖、核验日志已清空，端口号池已归零");
+        return success("清场完成：名单、签到、中奖、核验日志已清空，端口号池与奖品已抽数已归零");
     }
 }

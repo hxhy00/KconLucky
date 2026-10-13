@@ -81,7 +81,6 @@
         <el-card shadow="never">
           <div slot="header">
             <span>公司参会 Top 10</span>
-            <el-button style="float: right; padding: 3px 0" type="text" @click="getStat">刷新</el-button>
           </div>
           <el-table :data="stat.topCompanies || []" size="mini" max-height="300">
             <el-table-column type="index" label="#" width="50" align="center" />
