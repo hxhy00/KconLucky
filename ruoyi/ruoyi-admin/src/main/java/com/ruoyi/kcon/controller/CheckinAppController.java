@@ -77,9 +77,10 @@ public class CheckinAppController extends BaseController
      * GET /app/checkin/lookup?keyword=13800138000
      *
      * 支持后四位是为了「截图丢了当场找回」——让人只需记住自己号码的尾号。
-     * 代价是存在枚举面：尾号 + 端口号足以通过兑奖核验（核验接受后四位），
+     * 代价是存在枚举面（尾号 + 端口号会暴露「谁在场、号码是多少」），
      * 所以这里把限流压到 30 次/分钟，撞号时在服务端留痕便于事后复盘。
-     * 若要彻底关掉这条路，需让兑奖核验只接受完整 11 位手机号（现场会多打几个字）。
+     * 冒领链路已在兑奖侧关闭：核验只接受完整 11 位手机号，
+     * 因此即使枚举到尾号与端口号，也无法在兑奖台领走奖品。
      */
     @RateLimiter(time = 60, count = 30, limitType = LimitType.IP)
     @GetMapping("/lookup")

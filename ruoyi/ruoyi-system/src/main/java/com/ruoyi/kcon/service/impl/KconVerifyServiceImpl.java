@@ -96,15 +96,23 @@ public class KconVerifyServiceImpl implements IKconVerifyService
             return data;
         }
 
-        // 校验手机号：支持全号或后四位
+        // 校验手机号：只接受完整 11 位。
+        // 以前允许后四位，但「找回端口号」接口支持按尾号查询（截图丢了当场找回），
+        // 两者叠加就是一条走得通的冒领链路：尾号 + 端口号即可通过核验。
+        // 让领奖人口头报完整号码只多打几个字，却把这条链路彻底关掉。
         KconCheckin checkin = checkinMapper.selectByPortNo(portNo);
         String holderPhone = checkin != null ? checkin.getPhone() : winner.getPhone();
-        String input = phone.trim();
-        boolean match = input.length() == 4
-                ? (holderPhone != null && holderPhone.endsWith(input))
-                : (holderPhone != null && holderPhone.equals(input));
+        String input = phone == null ? "" : phone.trim();
 
-        if (!match)
+        if (!input.matches("\\d{11}"))
+        {
+            writeLog(portNo, phone, KconVerifyLog.RESULT_PHONE_MISMATCH, operator);
+            data.put("result", KconVerifyLog.RESULT_PHONE_MISMATCH);
+            data.put("msg", "请输入完整 11 位手机号（为保证不被冒领，已不支持只报后四位）");
+            return data;
+        }
+
+        if (holderPhone == null || !holderPhone.equals(input))
         {
             writeLog(portNo, phone, KconVerifyLog.RESULT_PHONE_MISMATCH, operator);
             data.put("result", KconVerifyLog.RESULT_PHONE_MISMATCH);

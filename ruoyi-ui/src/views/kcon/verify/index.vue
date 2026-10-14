@@ -2,7 +2,7 @@
   <div class="app-container">
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
       <div slot="title">
-        双重校验防冒领：端口号必须中奖且未领取，手机号必须与持号人一致（支持全号或后四位）。
+        双重校验防冒领：端口号必须中奖且未领取，手机号必须与持号人完全一致（需完整 11 位）。
       </div>
     </el-alert>
 
@@ -14,7 +14,7 @@
                     @keyup.enter.native="handleVerify" />
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
-          <el-input v-model="form.phone" placeholder="全号或后四位" maxlength="11"
+          <el-input v-model="form.phone" placeholder="完整 11 位手机号" maxlength="11"
                     @keyup.enter.native="handleVerify" />
         </el-form-item>
         <el-form-item>
@@ -80,7 +80,11 @@ export default {
       verifiedBody: null,
       rules: {
         portNo: [{ required: true, message: "请输入端口号", trigger: "blur" }],
-        phone: [{ required: true, message: "请输入手机号", trigger: "blur" }]
+        // 必须是完整 11 位：只报后四位已不再作为凭证（详见后端 KconVerifyServiceImpl）
+        phone: [
+          { required: true, message: "请输入手机号", trigger: "blur" },
+          { pattern: /^\d{11}$/, message: "请输入完整 11 位手机号", trigger: "blur" }
+        ]
       }
     }
   },

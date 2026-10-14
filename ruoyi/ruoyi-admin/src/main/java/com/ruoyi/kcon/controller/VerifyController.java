@@ -37,7 +37,8 @@ public class VerifyController extends BaseController
     private IKconDrawService drawService;
 
     /**
-     * 核验 { "portNo": 12345, "phone": "13800138000" 或后四位 }
+     * 核验 { "portNo": 12345, "phone": "13800138000" }
+     * 手机号必须是完整 11 位（不接受后四位，原因见 VerifyController 下方注释）
      *
      * 这里刻意不加 @RepeatSubmit：核验是只读判定，同一组输入被重复提交是合法的——
      * 发放后要带着同一组输入再核一次刷新成「已领取」，核验失败也要能立刻重试。
