@@ -49,7 +49,26 @@
         <div class="mt-6 text-slate-500">当前抽奖池为空</div>
       </template>
 
-      <!-- S3 定格（中奖信息） -->
+      <!-- 揭晓中：一个人一个人的端口号滚出来 -->
+      <template v-else-if="phase === 'revealing'">
+        <div class="text-lg text-slate-400 mb-2 tracking-[0.3em]">
+          {{ revealList.length > 1 ? `第 ${revealIndex + 1} / ${revealList.length} 位` : '恭 喜 中 奖' }}
+        </div>
+        <div class="text-2xl text-slate-500 tracking-[0.3em] mb-6">{{ resultTier }}</div>
+
+        <!-- 未定格时只滚号码；定格后号码有入场缩放，姓名才出现，避免提前剧透 -->
+        <div class="rand-num" :class="revealSettled ? 'pop-in text-gold glow-gold' : 'text-brand'">
+          {{ displayNo }}
+        </div>
+
+        <div v-if="revealSettled" class="mt-10 text-center fade-up">
+          <div class="text-6xl font-black">{{ currentReveal.name }}</div>
+          <div class="mt-4 text-2xl text-slate-300">{{ currentReveal.company || '' }}</div>
+        </div>
+        <div v-else class="mt-10 text-2xl text-slate-700 tracking-[0.3em]">滚 动 中</div>
+      </template>
+
+      <!-- 汇总：这一档抽出的全部人，主持人照着一屏念完 -->
       <template v-else-if="phase === 'result'">
         <!-- 庆祝动效①：全屏金红纸屑（纯 CSS，无外部依赖） -->
         <div class="confetti-layer" aria-hidden="true">
@@ -61,21 +80,29 @@
           ></span>
         </div>
 
-        <div class="text-lg text-slate-400 mb-4 tracking-[0.3em]">恭 喜 中 奖</div>
-        <!-- 庆祝动效②：中奖号码入场缩放 0.6 → 1（带轻微过冲） -->
-        <div class="rand-num pop-in text-gold glow-gold">{{ winner.portNo }}</div>
-        <div class="mt-10 text-center fade-up">
-          <div class="text-6xl font-black">{{ winner.name }}</div>
-          <div class="mt-4 text-2xl text-slate-300">
-            <span v-if="winner.company">{{ winner.company }}</span>
-            <span v-if="winner.company && winner.position" class="mx-3 text-slate-600">·</span>
-            <span v-if="winner.position">{{ winner.position }}</span>
-          </div>
-          <div class="mt-7 inline-block px-8 py-3 rounded-2xl
-                      bg-gold/15 text-gold border border-gold/40 text-3xl font-bold">
-            {{ winner.tierName }}
+        <div class="text-lg text-slate-400 tracking-[0.3em]">恭 喜 中 奖</div>
+        <div class="text-4xl font-black text-gold mt-2 mb-8">{{ resultTier }}</div>
+
+        <div class="winner-grid">
+          <div v-for="w in resultList" :key="w.winnerId" class="winner-cell">
+            <div class="winner-port">{{ w.portNo }}</div>
+            <div class="winner-name">{{ w.name }}</div>
+            <div class="winner-company">{{ w.company || '' }}</div>
+            <!-- 有人不在现场时要能单独撤掉他：撤掉后该位从汇总页消失、名额退回本档，
+                 点「抽下一档」即可把缺的那位补上 -->
+            <button class="winner-void-btn" @click="doVoid(w)">撤 回</button>
           </div>
         </div>
+
+        <div v-if="shortfall > 0" class="mt-8 text-xl text-amber-300">
+          当前可抽号数不足，本次只抽出 {{ resultList.length }} 位，还差 {{ shortfall }} 位
+          （可让更多观众签到后继续抽）
+        </div>
+
+        <button class="mt-10 px-14 py-4 rounded-2xl text-2xl font-black tracking-[0.3em]
+                       bg-brand text-white hover:brightness-110 glow active:scale-95 transition"
+                @click="doDraw">抽 下 一 档</button>
+        <div class="mt-3 text-sm text-slate-500">空格键同样可以开始下一次抽奖</div>
       </template>
 
       <!-- S1/S2 待机 & 滚动 -->
@@ -179,9 +206,22 @@ import { fetchStatus, draw, voidWinner, switchSession } from './api'
 import logo from './assets/kcon-mark.png'
 
 const status = ref({})
-const phase = ref('idle')      // idle | rolling | result | empty
-const winner = ref(null)
+const phase = ref('idle')      // idle | rolling | revealing | result | empty
 const displayNo = ref('00000')
+
+// 一次点击抽出整档的人，所以「揭晓」是一段过程而不是一帧：
+//   revealList    本次要揭晓的整批
+//   revealIndex   揭晓到第几个（0 基）
+//   revealSettled 当前号码是否已定格——定格前不显示姓名，避免提前剧透
+const revealList = ref([])
+const revealIndex = ref(0)
+const revealSettled = ref(false)
+// 汇总页：整批中奖者 + 档位名 + 池子不够时少抽的人数
+const resultList = ref([])
+const resultTier = ref('')
+const shortfall = ref(0)
+// 揭晓动画进行中：轮询发现的「新中奖」其实正是本次抽出的同一批，不要来打断
+let revealing = false
 
 let timer = null
 let ticker = null
@@ -189,8 +229,9 @@ let lastWinnerId = null
 
 // 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
 let currentVersion = null
-// 已经「看到」过的最近中奖 id：用来识别管理端抽奖控制台抽出的新中奖
+// 已经「看到」过的最近中奖 id 与批次：用来识别管理端抽奖控制台代抽的新中奖
 let knownWinnerId = null
+let knownBatchKey = null
 let failStreak = 0        // 连续失败次数（单次抖动不闪遮罩）
 let firstLoadDone = false // 首次加载只记录不展示，避免刷新后凭空弹出上一轮结果
 const offline = ref(false)
@@ -279,8 +320,11 @@ let statusInflight = false
 // 是否成功取到过一次状态：用于区分「真的没号可抽」与「后端连不上」
 let statusLoaded = false
 
-async function loadStatus() {
-  if (statusInflight) return
+async function loadStatus(force = false) {
+  // force：切换场次等场景必须立即拿到新场次的快照。
+  // 此时若正好有一个 3 秒轮询在飞行中，普通调用会被早退掉，
+  // 而那次请求带回的还是旧场次的 version 与数据，会把它覆盖回 currentVersion。
+  if (statusInflight && !force) return
   statusInflight = true
   try {
     const res = await fetchStatus(currentVersion)
@@ -306,41 +350,50 @@ async function loadStatus() {
   }
 }
 
-/** 把服务端快照映射到本地 phase，并接管「管理端抽出的中奖」 */
+/** batchKey 前缀（档位id@中奖时间）相同 = 同一次抽奖，末段是人数 */
+function sameDraw(a, b) {
+  const head = k => String(k || '').split('@').slice(0, 2).join('@')
+  return head(a) === head(b)
+}
+
+/** 把服务端快照映射到本地 phase，并接管「管理端抽出的整批中奖」 */
 function syncFromServer(d) {
   const lw = d.lastWinner
+  const batch = d.lastBatch
 
   if (!firstLoadDone) {
-    // 刷新后不该凭空弹出上一轮的结果：只记住已有中奖，不展示
+    // 刷新后不该凭空弹出上一轮的结果：只记住，不展示
     firstLoadDone = true
     if (lw && lw.winnerId) knownWinnerId = lw.winnerId
+    if (batch && batch.batchKey) knownBatchKey = batch.batchKey
     if (phase.value === 'idle' && poolEmpty.value) phase.value = 'empty'
     return
   }
 
-  if (lw && lw.winnerId) {
-    if (lw.winnerId > knownWinnerId) {
-      // 出现新的中奖：可能是在管理端「抽奖控制台」抽出的。
-      // 以前大屏永远不会切到结果页，于是管理端抽了一个、大屏还停在上一轮，
-      // 而两边文案都写着「两边看到的是同一个抽奖池」。
-      knownWinnerId = lw.winnerId
-      if (phase.value !== 'rolling') {
-        showWinner(lw)
-        return
-      }
-    } else if (lw.winnerId < knownWinnerId) {
-      // 最新一条在别处被作废了：如果大屏正定格在这条上，回到待机
-      knownWinnerId = lw.winnerId
+  if (batch && batch.batchKey && batch.batchKey !== knownBatchKey) {
+    const prevKey = knownBatchKey
+    knownBatchKey = batch.batchKey
+    if (lw && lw.winnerId) knownWinnerId = lw.winnerId
+
+    if (prevKey && sameDraw(prevKey, batch.batchKey)) {
+      // 同一次抽奖、只有人数变了 = 批次里有人被作废（可能在管理端操作）：
+      // 汇总页就地同步，不重播揭晓动画
       if (phase.value === 'result') {
-        winner.value = null
-        lastWinnerId = null
-        phase.value = 'idle'
+        resultList.value = (batch.winners || []).map(w => ({ ...w }))
       }
+    } else if (!revealing && phase.value !== 'rolling') {
+      // 新的整批：可能是管理端「抽奖控制台」代抽的。
+      // 以前大屏永远不会切到结果页，于是管理端抽了、大屏还停在上一轮，
+      // 而两边文案都写着「两边看到的是同一个抽奖池」。
+      revealAll(batch.winners || [], batch.tierName, 0)
+      return
     }
-  } else if (knownWinnerId != null) {
+  } else if (!batch && knownBatchKey != null) {
+    // 整批都被作废了
+    knownBatchKey = null
     knownWinnerId = null
     if (phase.value === 'result') {
-      winner.value = null
+      resultList.value = []
       lastWinnerId = null
       phase.value = 'idle'
     }
@@ -350,15 +403,63 @@ function syncFromServer(d) {
   else if (phase.value === 'empty' && !poolEmpty.value) phase.value = 'idle'
 }
 
-/** 进入中奖定格页。大屏自己抽中与管理端代抽共用同一条路径 */
-function showWinner(w) {
-  winner.value = w
-  lastWinnerId = w.winnerId
-  displayNo.value = String(w.portNo).padStart(5, '0')
-  // 先备好纸屑再切到定格页，避免纸屑晚一拍出现
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/** 让端口号滚动一段时间后定格到目标值（舞台效果：一个人一个人的端口号在滚） */
+function rollTo(target, ms) {
+  const settledNo = String(target).padStart(5, '0')
+  return new Promise(resolve => {
+    stopRolling()
+    const t0 = Date.now()
+    ticker = setInterval(() => {
+      if (Date.now() - t0 >= ms) {
+        stopRolling()
+        displayNo.value = settledNo
+        resolve()
+      } else {
+        displayNo.value = randomNo()
+      }
+    }, 45)
+  })
+}
+
+/**
+ * 依次揭晓整批中奖者，全部揭晓完停在汇总页。
+ * 大屏自己抽中与管理端「抽奖控制台」代抽共用这条路径。
+ */
+async function revealAll(winners, tierName, gap) {
+  if (!winners || !winners.length) {
+    phase.value = 'idle'
+    return
+  }
+  revealing = true
+  revealList.value = winners
+  resultList.value = winners.map(w => ({ ...w }))
+  resultTier.value = tierName || ''
+  shortfall.value = gap || 0
+  lastWinnerId = winners[winners.length - 1].winnerId
+
+  for (let i = 0; i < winners.length; i++) {
+    revealIndex.value = i
+    revealSettled.value = false
+    phase.value = 'revealing'
+    await sleep(100)
+    // 多人时每个滚短一点，单人时滚久一点，整体节奏都在舞台上可控
+    await rollTo(winners[i].portNo, winners.length > 1 ? 1100 : 1600)
+    revealSettled.value = true
+    await sleep(winners.length > 1 ? 1900 : 2400)
+  }
+
+  // 先备好纸屑再切汇总页，避免纸屑晚一拍出现
   makeConfetti()
   phase.value = 'result'
+  revealing = false
 }
+
+/** 当前正在揭晓的那一位 */
+const currentReveal = computed(() => revealList.value[revealIndex.value] || {})
 
 function randomNo() {
   return String(Math.floor(Math.random() * 65535) + 1).padStart(5, '0')
@@ -374,7 +475,8 @@ function stopRolling() {
 }
 
 async function doDraw() {
-  if (phase.value === 'rolling') return
+  // 揭晓过程中不接受新的抽奖：整批还没播完就抽下一档，画面会乱
+  if (phase.value === 'rolling' || phase.value === 'revealing' || revealing) return
   if (poolEmpty.value) {
     // 区分「确实没号可抽」与「后端连不上导致 status 为空」：
     // 后者若显示成「请先让观众签到」，等于把故障误报成业务提示
@@ -388,7 +490,7 @@ async function doDraw() {
 
   phase.value = 'rolling'
   startRolling()
-  const MIN_MS = 1600
+  const MIN_MS = 1400
   const start = Date.now()
 
   try {
@@ -396,14 +498,21 @@ async function doDraw() {
     const res = await draw(status.value.sessionCode, tierId)
 
     const elapsed = Date.now() - start
-    if (elapsed < MIN_MS) await new Promise(r => setTimeout(r, MIN_MS - elapsed))
+    if (elapsed < MIN_MS) await sleep(MIN_MS - elapsed)
     stopRolling()
 
     if (res.code === 200) {
-      // 自己抽出的也要记为「已看到」，否则下一轮轮询会把它当成新中奖再播一次
-      knownWinnerId = res.data.winnerId
-      showWinner(res.data)
-      await loadStatus()
+      const d = res.data || {}
+      const ws = d.winners || []
+      // 整批都算「已看到」：否则紧接着的 3 秒轮询会把它当成新中奖，把揭晓重播一遍
+      if (ws.length) knownWinnerId = ws[ws.length - 1].winnerId
+      knownBatchKey = d.batchKey || null
+      // 抽奖接口现在会带回最新状态，直接用，省掉一次请求
+      if (d.status) {
+        status.value = d.status
+        currentVersion = d.status.version || null
+      }
+      await revealAll(ws, d.tierName, d.shortfall)
     } else if (res.code === 4001) {
       phase.value = 'empty'
     } else {
@@ -414,21 +523,34 @@ async function doDraw() {
     stopRolling()
     phase.value = 'idle'
     // 超时/断网时后端可能已经落库并写入中奖记录，绝不能静默回到待抽状态：
-    // 否则操作员以为没抽到，再按一次空格就会再抽一个，静默产生两条中奖记录。
+    // 否则操作员以为没抽到，再按一次空格就会再抽一整批，静默多出好几个人。
     await showTip('抽奖请求未收到响应，结果未知。请先刷新页面确认是否已产生中奖，再决定是否重抽。')
     await loadStatus()
   }
 }
 
-async function doVoid() {
-  if (!lastWinnerId) return
-  if (!(await showConfirm('确认作废该中奖记录？号码将回到池中。'))) return
+/**
+ * 作废某位中奖者。传 winner 表示从汇总页撤掉指定的那一位，
+ * 不传则撤掉最近一位（空格/退格快捷键走这条）。
+ */
+async function doVoid(target) {
+  const id = (target && target.winnerId) || lastWinnerId
+  if (!id) return
+  const who = target && target.name ? `「${target.name}」` : ''
+  if (!(await showConfirm(`确认作废${who}的中奖记录？号码将回到池中，可被再次抽中。`))) return
   try {
-    const res = await voidWinner(lastWinnerId)
+    const res = await voidWinner(id)
     if (res.code === 200) {
-      lastWinnerId = null
-      winner.value = null
-      phase.value = 'idle'
+      if (target) {
+        // 汇总页就地移除该位，不打断画面。
+        // 与服务端随后的批次同步结果保持一致（否则本地标「已作废」、同步后又整个消失，两种表现打架）。
+        // 空出的名额已退回本档，点「抽下一档」即可补抽。
+        resultList.value = resultList.value.filter(w => w.winnerId !== id)
+        if (lastWinnerId === id) lastWinnerId = null
+      } else {
+        lastWinnerId = null
+        phase.value = 'idle'
+      }
       await loadStatus()
     } else {
       await showTip(res.msg || '作废失败')
@@ -444,12 +566,15 @@ async function doVoid() {
 async function setSession(code) {
   try {
     await switchSession(code)
-    winner.value = null
+    // 换场次 = 大屏重新认识世界：旧场次的版本号、「已看到的中奖」等本地记忆全部失效。
+    // 尤其 knownBatchKey：不重置的话，新场次首个批次的 batchKey 若与旧值同前缀，
+    // 会被误判成「同一批里有人被作废」，只更新 resultList 而漏掉整批揭晓动画。
     lastWinnerId = null
-    phase.value = 'idle'
-    // 场次变了，强制下次拉全量状态
     currentVersion = null
-    await loadStatus()
+    knownWinnerId = null
+    knownBatchKey = null
+    phase.value = 'idle'
+    await loadStatus(true)
   } catch (e) {
     // 以前同样是空 catch：点了没反应、场次高亮也不变，操作员会反复点
     await showTip('切换场次失败，请检查网络后重试。当前场次未改变。')
