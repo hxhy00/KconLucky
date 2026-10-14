@@ -54,18 +54,21 @@
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="核验结果" width="130" align="center">
+      <!-- 端口号 / 手机号 / 操作时间内容定长，保留固定宽度保证对齐；
+           核验结果、操作人不设宽度，由 el-table 按剩余空间自动分配，
+           宽屏下表格会撑满整行，不再出现右侧大片空白 -->
+      <el-table-column label="核验结果" min-width="140" align="center">
         <template slot-scope="scope">
           <el-tag size="mini" :type="resultType(scope.row.result)">{{ resultLabel(scope.row.result) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作人" prop="operator" width="120" align="center">
+      <el-table-column label="操作人" prop="operator" min-width="140" align="center">
         <template slot-scope="scope">
           <span v-if="scope.row.operator">{{ scope.row.operator }}</span>
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作时间" prop="createTime" width="170" align="center" />
+      <el-table-column label="操作时间" prop="createTime" min-width="180" align="center" />
     </el-table>
 
     <pagination v-show="total>0" :total="total" :page.sync="queryParams.pageNum"
