@@ -132,11 +132,15 @@ export default {
       qrSrc: "",
       qrObjectUrl: "",
       timer: null,
+      // 路径必须与后端菜单（sql/kcon_menu.sql）注册出来的一致：
+      // 一级菜单（parent_id=0, type='C'）经 RuoYi getRouterPath 处理后
+      // 最终注册为 /{path}（如 /verify），没有 /kcon 前缀。
+      // 写成 /kcon/verify 会命中前端通配路由 '*' 直接落 404 页。
       quickEntries: [
-        { title: "兑奖核验", desc: "端口号 + 手机号核验发放", path: "/kcon/verify", icon: "el-icon-search" },
-        { title: "抽奖控制台", desc: "切场次 · 抽奖 · 看剩余号数", path: "/kcon/draw", icon: "el-icon-guide" },
-        { title: "参会名单", desc: "导入名单 · 打印签到表", path: "/kcon/attendee", icon: "el-icon-user" },
-        { title: "中奖记录", desc: "中奖名单与领取状态", path: "/kcon/winner", icon: "el-icon-medal" }
+        { title: "兑奖核验", desc: "端口号 + 手机号核验发放", path: "/verify", icon: "el-icon-search" },
+        { title: "抽奖控制台", desc: "切场次 · 抽奖 · 看剩余号数", path: "/draw", icon: "el-icon-guide" },
+        { title: "参会名单", desc: "导入名单 · 打印签到表", path: "/attendee", icon: "el-icon-user" },
+        { title: "中奖记录", desc: "中奖名单与领取状态", path: "/winner", icon: "el-icon-medal" }
       ]
     }
   },

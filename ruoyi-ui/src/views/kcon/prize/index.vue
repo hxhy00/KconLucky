@@ -59,6 +59,16 @@
       </el-table-column>
     </el-table>
 
+    <!-- 后端 list 走 startPage()，默认 pageSize=10；
+         此处缺分页组件会导致奖项超过 10 条时永远只看得到前 10 条且无法翻页。 -->
+    <pagination
+      v-show="total > 0"
+      :total="total"
+      :page.sync="queryParams.pageNum"
+      :limit.sync="queryParams.pageSize"
+      @pagination="getList"
+    />
+
     <el-dialog :title="title" :visible.sync="open" width="520px" append-to-body>
       <el-form ref="form" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="场次" prop="sessionCode">
@@ -98,12 +108,13 @@ export default {
     return {
       loading: true,
       prizeList: [],
+      total: 0,
       open: false,
       // 提交中标志：连点两次「确定」会造出两条一模一样的奖项档位，
       // 而后端 POST /admin/prize 没有唯一性校验，慢响应下拦不住
       submitting: false,
       title: "",
-      queryParams: { sessionCode: null },
+      queryParams: { pageNum: 1, pageSize: 10, sessionCode: null },
       sessions: [],
       form: {},
       rules: {
@@ -128,6 +139,7 @@ export default {
       this.loading = true
       listPrize(this.queryParams).then(res => {
         this.prizeList = res.rows
+        this.total = res.total
         this.loading = false
       }).catch(() => { this.loading = false })
     },
@@ -137,7 +149,8 @@ export default {
     },
     resetQuery() {
       this.resetForm("queryForm")
-      this.handleQuery()
+      this.queryParams.pageNum = 1
+      this.getList()
     },
     reset() {
       this.form = { id: null, sessionCode: "AM", tierName: null, quantity: 1, drawOrder: 1, remark: null }

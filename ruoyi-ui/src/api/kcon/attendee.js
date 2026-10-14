@@ -55,8 +55,3 @@ export function fetchQrcodeBlob() {
     responseType: 'blob'
   })
 }
-
-// 清场
-export function resetData() {
-  return request({ url: '/admin/data/reset', method: 'post' })
-}
