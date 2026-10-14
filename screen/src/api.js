@@ -33,14 +33,6 @@ export function fetchStatus(version) {
   return request('/app/screen/status' + q)
 }
 
-// 切换场次（展示控制，保留）
-export function switchSession(sessionCode) {
-  return request('/app/screen/session', {
-    method: 'POST',
-    body: JSON.stringify({ sessionCode })
-  })
-}
-
-// 注意：大屏只负责展示，不再提供抽奖 / 作废接口。
-// 抽奖全程由管理端「抽奖控制台」发起，大屏靠 fetchStatus 轮询被动感知新批次并揭晓。
-// 这里曾导出的 draw() / voidWinner() 已随对应后端端点一起删除。
+// 注意：大屏只负责展示，不提供抽奖 / 作废 / 切场次接口（全部只读）。
+// 抽奖与切场次由管理端「抽奖控制台」发起，大屏靠 fetchStatus 轮询被动感知新批次与场次变化。
+// 这里曾导出的 draw() / voidWinner() / switchSession() 已随对应后端端点一起删除。

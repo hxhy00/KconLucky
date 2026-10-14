@@ -1,16 +1,10 @@
 package com.ruoyi.kcon.controller;
 
 import com.ruoyi.common.annotation.Anonymous;
-import com.ruoyi.common.annotation.Log;
-import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.domain.AjaxResult;
-import com.ruoyi.common.enums.BusinessType;
-import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.service.IKconDrawService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,15 +15,14 @@ import java.util.Map;
 /**
  * 抽奖大屏接口（只读展示）
  *
- * 职责边界：大屏只负责展示，不负责抽奖。抽奖全程由管理端「抽奖控制台」
- * （{@link DrawAdminController}）发起并落库，大屏靠轮询 {@code /status} 被动感知
- * 新批次并播放揭晓动画。因此本控制器只暴露读取状态与切换场次两个能力，
- * 不再提供任何主动抽奖 / 作废入口——避免大屏成为绕过管理端的后门。
+ * 职责边界：大屏只负责展示，不负责抽奖、也不负责切场次。抽奖与切场次全程由管理端
+ * 「抽奖控制台」（{@link DrawAdminController}）发起并落库，大屏靠轮询 {@code /status}
+ * 被动感知新批次 / 场次变化并播放揭晓动画。因此本控制器是纯只读的，只暴露读取状态
+ * 一个能力，不再提供任何主动抽奖 / 作废 / 切场次入口——避免大屏成为绕过管理端的后门。
  *
  * 大屏部署在投屏机上，免登录开放（现场便利优先）。免登录不等于无防护：
- *   1. {@code @RateLimiter(limitType = IP)} 按来源 IP 限速，挡住脚本刷状态；
- *   2. {@code @Log} 记录每次切换场次，事后可追溯；
- *   3. {@code ResourcesConfig} 默认不开放 CORS，第三方网页无法跨站调用本机大屏接口。
+ *   1. 接口全部只读，改不了任何状态，最多被刷状态；
+ *   2. {@code ResourcesConfig} 默认不开放 CORS，第三方网页无法跨站调用本机大屏接口。
  *
  * 对应接口文档 §3
  *
@@ -62,19 +55,10 @@ public class DrawScreenController
         return AjaxResult.success(data);
     }
 
-    /** 3.2 切换场次 { "sessionCode": "PM" } */
-    @Log(title = "抽奖大屏-切换场次", businessType = BusinessType.OTHER)
-    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
-    @PostMapping("/session")
-    public AjaxResult session(@RequestBody Map<String, String> body)
-    {
-        String code = body == null ? null : body.get("sessionCode");
-        drawService.switchSession(code);
-        return AjaxResult.success(drawService.screenStatus());
-    }
-
-    // 注意：大屏只负责展示，不再提供任何主动抽奖 / 作废入口。
-    // 抽奖全程由管理端「抽奖控制台」（DrawAdminController）负责，大屏靠轮询 /status
-    // 被动感知新批次并播放揭晓动画。这里曾有的 /draw、/void 免登录端点已删除——
-    // 留着就是绕过管理端的后门，违背「控制权唯一」原则。
+    // 注意：大屏只负责展示，不再提供任何写入口。曾有的免登录端点及删除原因：
+    //   /session 切场次 → 现由管理端 DrawAdminController#session（带 kcon:draw:operate 权限）
+    //   /draw    抽一档 → 现由管理端 DrawAdminController 发起
+    //   /void    作废重抽 → 现由管理端 DrawAdminController 发起
+    // 大屏一律靠轮询 /status 被动感知，留着这些端点就是绕过权限控制的后门，
+    // 违背「控制权唯一」原则。
 }

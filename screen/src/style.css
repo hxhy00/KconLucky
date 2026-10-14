@@ -116,6 +116,32 @@ body {
   100% { transform: translate3d(var(--drift, 0px), 112vh, 0) rotate(720deg); opacity: 0; }
 }
 
+/* --- 纸屑形状/下落方式按奖项档位差异化（完整版），档位配置见 App.vue 的 CONFETTI_PRESETS --- */
+
+/* 长条彩带：细长条更接近真实彩带，翻飞时有方向感（宽高由 JS 按形状注入） */
+.confetti.strip { border-radius: 3px; }
+
+/* 星形：clip-path 裁剪后 box-shadow 会被一并裁掉，改用 drop-shadow 发光 */
+.confetti.star {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%,
+                     21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  filter: drop-shadow(0 0 6px rgba(255, 209, 102, .6));
+}
+
+/* 摇摆下落：--sway 由 JS 随机注入，左右交替横飘，与直落的 confetti-fall 区分层级 */
+.confetti.sway { animation-name: confetti-sway; }
+
+@keyframes confetti-sway {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  25%  { transform: translate3d(var(--sway, 60px), 28vh, 0) rotate(200deg); }
+  50%  { transform: translate3d(calc(var(--sway, 60px) * -1), 56vh, 0) rotate(430deg); }
+  75%  { transform: translate3d(var(--sway, 60px), 84vh, 0) rotate(620deg); }
+  85%  { opacity: 1; }
+  100% { transform: translate3d(0, 112vh, 0) rotate(760deg); opacity: 0; }
+}
+
 /* --- 断网遮罩：以前断网时大屏毫无提示，头部数字停在旧值，
        看起来像「还没人来签到」而不是「大屏连不上后端」 --- */
 .offline-mask {
@@ -197,18 +223,4 @@ body {
   font-weight: 900;
   color: #fff;
 }
-.winner-company {
-  margin-top: 2px;
-  font-size: 17px;
-  color: #94a3b8;
-  min-height: 22px;
-}
-/* 撤回按钮刻意做得很淡：现场主要给操作员用，不该抢中奖者的视觉焦点 */
-.winner-void-btn {
-  margin-top: 10px;
-  font-size: 14px;
-  letter-spacing: .1em;
-  color: rgba(148, 163, 184, .28);
-  transition: color .15s;
-}
-.winner-void-btn:hover { color: #fda4af; }
+

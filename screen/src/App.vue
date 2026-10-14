@@ -8,20 +8,8 @@
           <img :src="logo" class="h-10" alt="KCon" />
           <span class="text-xl font-black tracking-wide text-slate-200">KCon 2026</span>
         </div>
-        <!-- 场次切换：点击即刻切换，当前场次高亮。
-             原先只能按键盘 1/2，页面上毫无提示，操作员不易发现 -->
-        <div v-if="sessions.length" class="flex items-center gap-2">
-          <button
-            v-for="s in sessions"
-            :key="s.code"
-            class="px-4 py-1.5 rounded-full text-sm border transition active:scale-95"
-            :class="s.code === status.sessionCode
-              ? 'bg-brand/15 text-brand border-brand/40'
-              : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200'"
-            @click="setSession(s.code)"
-          >{{ s.name }}</button>
-        </div>
-        <span v-else class="px-4 py-1.5 rounded-full text-sm bg-brand/10 text-brand border border-brand/30">
+        <!-- 场次只读展示：大屏不提供切换入口，切场次由管理端操作 -->
+        <span class="px-4 py-1.5 rounded-full text-sm bg-brand/10 text-brand border border-brand/30">
           {{ status.sessionName || '—' }}
         </span>
       </div>
@@ -62,20 +50,21 @@
         </div>
 
         <div v-if="revealSettled" class="mt-10 text-center fade-up">
+          <!-- 只展示端口号与姓名：公司名不上大屏（获奖者个人信息不对外公开） -->
           <div class="text-6xl font-black">{{ currentReveal.name }}</div>
-          <div class="mt-4 text-2xl text-slate-300">{{ currentReveal.company || '' }}</div>
         </div>
         <div v-else class="mt-10 text-2xl text-slate-700 tracking-[0.3em]">滚 动 中</div>
       </template>
 
       <!-- 汇总：这一档抽出的全部人，主持人照着一屏念完 -->
       <template v-else-if="phase === 'result'">
-        <!-- 庆祝动效①：全屏金红纸屑（纯 CSS，无外部依赖） -->
+        <!-- 庆祝动效①：全屏纸屑（纯 CSS，无外部依赖），颜色/形状/下落方式按奖项档位差异化 -->
         <div class="confetti-layer" aria-hidden="true">
           <span
             v-for="c in confetti"
-            :key="c.id"
+            :key="confettiSeq + '-' + c.id"
             class="confetti"
+            :class="c.shape"
             :style="c.style"
           ></span>
         </div>
@@ -87,7 +76,6 @@
           <div v-for="w in resultList" :key="w.winnerId" class="winner-cell">
             <div class="winner-port">{{ w.portNo }}</div>
             <div class="winner-name">{{ w.name }}</div>
-            <div class="winner-company">{{ w.company || '' }}</div>
           </div>
         </div>
 
@@ -96,11 +84,6 @@
           （请在抽奖控制台让更多观众签到后继续抽）
         </div>
 
-        <!-- 大屏只展示，不再提供「抽下一档」按钮。下一档由管理端「抽奖控制台」发起，
-             大屏会在 1.5 秒内自动感知并开始揭晓 -->
-        <div class="mt-10 text-sm text-slate-500 tracking-[0.3em]">
-          下 一 档 请 在 抽 奖 控 制 台 操 作
-        </div>
       </template>
 
       <!-- 待机：大屏只展示，等待管理端「抽奖控制台」发起。
@@ -190,9 +173,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-// 大屏只展示：fetchStatus 轮询被动感知，switchSession 切场次。
-// 抽奖 / 作废已收归管理端「抽奖控制台」，这里不再导入 draw / voidWinner。
-import { fetchStatus, switchSession } from './api'
+// 大屏纯只读：fetchStatus 轮询被动感知场次 / 批次变化。
+// 抽奖、作废、切场次均已收归管理端，这里不再导入 draw / voidWinner / switchSession。
+import { fetchStatus } from './api'
 import logo from './assets/kcon-mark.png'
 
 const status = ref({})
@@ -224,6 +207,14 @@ let currentVersion = null
 // 已经「看到」过的最近中奖 id 与批次：用来识别管理端抽奖控制台代抽的新中奖
 let knownWinnerId = null
 let knownBatchKey = null
+// 揭晓动画进行中时轮询送来的新批次：先挂起，等当前批次播完由 revealAll 的
+// finally 补播。不挂起的话该批次会被 `!revealing` 静默丢弃，现场就是「少播一次特效」。
+// 用队列而非单槽：主持人手快连抽两档、或单档人数多导致揭晓耗时长时，
+// 单槽会被后一批覆盖，前一批动画直接丢失
+let pendingBatches = []
+// 队列上限：单批揭晓要数秒到数十秒，若主持人狂点抽奖、或后端异常重复下发不同 batchKey，
+// 无上限会让大屏连续播动画停不下来、主持人无法插话。超出时丢最旧的并留证据
+const MAX_PENDING_BATCHES = 5
 let failStreak = 0        // 连续失败次数（单次抖动不闪遮罩）
 let firstLoadDone = false // 首次加载只记录不展示，避免刷新后凭空弹出上一轮结果
 const offline = ref(false)
@@ -250,30 +241,70 @@ function showTip(text) {
 
 const poolEmpty = computed(() => (status.value.poolCount ?? 0) <= 0)
 
-/** 可选场次列表（后端 screenStatus 一并返回），用于顶部可见的场次切换 */
-const sessions = computed(() => status.value.sessions || [])
-
-/** 中奖庆祝纸屑：每次中奖重新生成，保证每次的落点与飘向都不一样 */
+/** 中奖庆祝纸屑：当前这一批要渲染的纸屑元素列表（makeConfetti 每次重填） */
 const confetti = ref([])
+/** 第几次生成纸屑：拼进 v-for 的 key，强制重建 DOM。
+ *  否则连续两档同为最高档（一等奖→特等奖，纸屑数都是 150、key 都是 0..149）时，
+ *  Vue 复用旧节点，CSS 动画不会重播，表现为「第二次抽最高档没有特效」——
+ *  纸屑动画 iteration-count:1 + fill-mode:forwards，播完即停在透明/屏外状态 */
+const confettiSeq = ref(0)
 
-function makeConfetti() {
-  const colors = ['#FFD166', '#E23B2E', '#F0B429', '#C4291F', '#FFE9A8']
-  const list = []
-  for (let i = 0; i < 90; i++) {
-    const size = 6 + Math.random() * 8
-    list.push({
-      id: i,
-      style: {
-        left: (Math.random() * 100).toFixed(2) + '%',
-        width: size.toFixed(1) + 'px',
-        height: (size * 1.7).toFixed(1) + 'px',
-        background: colors[i % colors.length],
-        animationDelay: (Math.random() * 0.7).toFixed(2) + 's',
-        animationDuration: (2.1 + Math.random() * 1.7).toFixed(2) + 's',
-        '--drift': ((Math.random() * 2 - 1) * 130).toFixed(0) + 'px'
-      }
-    })
+/** 中奖庆祝纸屑：每次中奖重新生成，保证每次的落点与飘向都不一样。
+ *  按奖项等级差异化（完整版）：档位越高，纸屑越密、配色越华丽、
+ *  形状越多（disc 圆片 / strip 长条彩带 / star 星形）、下落方式越花（直落翻飞 / sway 横向摇摆）。
+ *  奖项名可配置，按关键字匹配：含「特等/一等」最高、含「二等」次之、其余按最低档处理 */
+const CONFETTI_PRESETS = {
+  // 一等奖 / 特等奖：金红最密最久，长条 + 星形 + 摇摆全开
+  high: {
+    count: 150, durMin: 2.6, durMax: 4.4,
+    colors: ['#FFD166', '#E23B2E', '#F0B429', '#C4291F', '#FFE9A8', '#FF9F1C'],
+    shapes: ['strip sway', 'star', 'disc sway', 'strip']
+  },
+  // 二等奖：金白配色，中等密度
+  mid: {
+    count: 100, durMin: 2.2, durMax: 3.6,
+    colors: ['#FFD166', '#FFE9A8', '#FFFFFF', '#F0B429'],
+    shapes: ['strip sway', 'disc', 'star']
+  },
+  // 三等奖及未识别档位：单色少量，直落
+  low: {
+    count: 60, durMin: 2.1, durMax: 3.2,
+    colors: ['#FFD166', '#FFE9A8'],
+    shapes: ['disc']
   }
+}
+
+function makeConfetti(tierName) {
+  const n = String(tierName || '')
+  const p = n.includes('特等') || n.includes('一等') ? CONFETTI_PRESETS.high
+        : n.includes('二等') ? CONFETTI_PRESETS.mid
+        : CONFETTI_PRESETS.low
+  const list = []
+  for (let i = 0; i < p.count; i++) {
+    const shape = p.shapes[i % p.shapes.length]
+    const size = 6 + Math.random() * 8
+    const style = {
+      left: (Math.random() * 100).toFixed(2) + '%',
+      width: size.toFixed(1) + 'px',
+      height: (size * 1.7).toFixed(1) + 'px',
+      background: p.colors[i % p.colors.length],
+      animationDelay: (Math.random() * 0.7).toFixed(2) + 's',
+      animationDuration: (p.durMin + Math.random() * (p.durMax - p.durMin)).toFixed(2) + 's',
+      '--drift': ((Math.random() * 2 - 1) * 130).toFixed(0) + 'px'
+    }
+    if (shape.includes('sway')) {
+      style['--sway'] = ((Math.random() * 2 - 1) * 110).toFixed(0) + 'px'
+    }
+    if (shape.includes('star')) {
+      // 星形等宽等高，尺寸略大才看得清轮廓；颜色固定金色，与奖项色统一
+      style.width = (12 + Math.random() * 8).toFixed(1) + 'px'
+      style.height = style.width
+      style.background = '#FFD166'
+    }
+    list.push({ id: i, shape, style })
+  }
+  // 序号自增：作为 v-for 的 key 前缀，保证每次生成都是全新节点，动画必然重播
+  confettiSeq.value++
   confetti.value = list
 }
 
@@ -375,25 +406,58 @@ function syncFromServer(d) {
 
   if (batch && batch.batchKey && batch.batchKey !== knownBatchKey) {
     const prevKey = knownBatchKey
-    knownBatchKey = batch.batchKey
-    if (lw && lw.winnerId) knownWinnerId = lw.winnerId
 
     if (prevKey && sameDraw(prevKey, batch.batchKey)) {
       // 同一次抽奖、只有人数变了 = 批次里有人被作废（可能在管理端操作）：
       // 汇总页就地同步，不重播揭晓动画
+      knownBatchKey = batch.batchKey
+      if (lw && lw.winnerId) knownWinnerId = lw.winnerId
       if (phase.value === 'result') {
         resultList.value = (batch.winners || []).map(w => ({ ...w }))
       }
     } else if (!revealing) {
       // 新的整批：抽奖全程由管理端「抽奖控制台」发起，大屏检测到新 batchKey
       // 就播放揭晓动画。revealing 为真时说明正是本次揭晓触发的同步，不要重播。
+      // 记账在开播前：配合 revealAll 的 try/finally，即使本批动画中途异常，
+      // revealing 也会复位，下一批照常播放，不会出现「卡死后全批失效」
+      knownBatchKey = batch.batchKey
+      if (lw && lw.winnerId) knownWinnerId = lw.winnerId
       revealAll(batch.winners || [], batch.tierName, 0)
+      return
+    } else {
+      // 揭晓进行中收到新批次：入队待补播。不在此记账 knownBatchKey，
+      // 让这批在 finally 补播时仍走「新批次」分支，避免被当成已消费而漏播
+      const entry = {
+        batchKey: batch.batchKey,
+        lastWinnerId: lw && lw.winnerId ? lw.winnerId : null,
+        winners: batch.winners || [],
+        tierName: batch.tierName,
+        gap: 0
+      }
+      // 同一次抽奖（batchKey 同前缀）已在队列里时只替换、不追加：
+      // 揭晓期间同批有人被作废会带来同一批的新快照（人数变化），
+      // 若直接 push，补播时会把这一批连播两遍（后一遍人数少），
+      // 现场表现为同一档特效莫名重复。替换时保留原位置，维持先后顺序
+      const dupIdx = pendingBatches.findIndex(p => sameDraw(p.batchKey, entry.batchKey))
+      if (dupIdx >= 0) {
+        pendingBatches[dupIdx] = entry
+        return
+      }
+      if (pendingBatches.length >= MAX_PENDING_BATCHES) {
+        // 队列已满：丢最旧的。现场宁可漏播最早那一批，也不能让大屏无限连播
+        const dropped = pendingBatches.shift()
+        console.warn('[syncFromServer] 待播批次积压超上限，丢弃最旧一批', dropped && dropped.batchKey)
+      }
+      pendingBatches.push(entry)
       return
     }
   } else if (!batch && knownBatchKey != null) {
     // 整批都被作废了
     knownBatchKey = null
     knownWinnerId = null
+    // 队列里可能还压着这一批（或更早批次）的待播快照，源头已作废：
+    // 不清掉的话 finally 补播仍会把它们播出来，等于播了已被撤回的奖
+    if (pendingBatches.length) pendingBatches.length = 0
     if (phase.value === 'result') {
       resultList.value = []
       lastWinnerId = null
@@ -428,15 +492,26 @@ function rollTo(target, ms) {
 }
 
 /**
- * 依次揭晓整批中奖者，全部揭晓完停在汇总页。
- * 大屏自己抽中与管理端「抽奖控制台」代抽共用这条路径。
+ * 收尾校正汇总页名单：揭晓期间若当前批在管理端被作废（人数变化），
+ * syncFromServer 因 phase='revealing' 不会刷新 resultList，汇总页会停在旧名单。
+ * 这里按最新 status.lastBatch 校正一次，仅当它确实是当前批（batchKey 前缀一致）时生效。
  */
-async function revealAll(winners, tierName, gap) {
+function syncResultIfBatchChanged() {
+  const batch = status.value.lastBatch
+  if (!batch || !batch.batchKey || batch.batchKey !== knownBatchKey) return
+  resultList.value = (batch.winners || []).map(w => ({ ...w }))
+}
+
+/**
+ * 播放一整批的揭晓动画（纯播放，不碰待播队列）。
+ * 队列消费统一由 revealAll 的迭代 drain 负责，避免「补播里再调 revealAll」
+ * 形成递归调用栈。
+ */
+async function playReveal(winners, tierName, gap) {
   if (!winners || !winners.length) {
     phase.value = 'idle'
     return
   }
-  revealing = true
   revealList.value = winners
   resultList.value = winners.map(w => ({ ...w }))
   resultTier.value = tierName || ''
@@ -454,10 +529,62 @@ async function revealAll(winners, tierName, gap) {
     await sleep(winners.length > 1 ? 1900 : 2400)
   }
 
-  // 先备好纸屑再切汇总页，避免纸屑晚一拍出现
-  makeConfetti()
+  // 先备好纸屑再切汇总页，避免纸屑晚一拍出现；纸屑样式按本档奖项等级差异化
+  makeConfetti(tierName)
   phase.value = 'result'
-  revealing = false
+  // 收尾校正名单：揭晓耗时数秒，期间该批若有人在管理端被作废，
+  // syncFromServer 会因 phase 处于 revealing 而不刷新 resultList，
+  // 导致汇总页停在作废前的旧名单。这里按最新 status 再校一次
+  syncResultIfBatchChanged()
+}
+
+/**
+ * 依次揭晓整批中奖者，全部揭晓完停在汇总页。
+ * 大屏自己抽中与管理端「抽奖控制台」代抽共用这条路径。
+ *
+ * 队列消费是「迭代式 drain」而非递归：批次播完统一在同一层 while 里取下一批，
+ * 每次继续播放都重新套 try/catch/finally，单批异常不会中断后续批次。
+ */
+async function revealAll(winners, tierName, gap) {
+  if (!winners || !winners.length) {
+    phase.value = 'idle'
+    return
+  }
+  let next = { winners, tierName, gap }
+  while (next) {
+    // 揭晓主体必须裹在 try/finally 里：揭晓期间纸屑生成等任何异常如果让
+    // revealing 卡在 true，syncFromServer 的 `!revealing` 会恒为假，
+    // 之后所有新批次都不再播揭晓动画（现场表现就是「后面抽的奖全没特效」，
+    // 只能刷新大屏恢复）。finally 保证标志位一定复位，异常不扩散到后续批次
+    revealing = true
+    try {
+      await playReveal(next.winners, next.tierName, next.gap)
+    } catch (e) {
+      // 揭晓中途异常（如纸屑生成失败）：留下可观测证据，不要把现场问题变成「静默少一次特效」
+      console.error('[revealAll] 揭晓过程异常，本批动画可能未完整播放', e)
+    } finally {
+      // 兜底 phase：异常若发生在 makeConfetti 与 phase='result' 之间，
+      // 画面会永久卡在「滚动中」定格态，这里强制落到汇总页。
+      // 同时清空纸屑——本批没成功生成，不清的话会拿上一批的旧纸屑配新名单
+      if (phase.value === 'revealing') {
+        phase.value = 'result'
+        confetti.value = []
+      }
+      revealing = false
+    }
+    // 揭晓期间若轮询送来过新批次（被 revealing 挡下没播），这里依次补播，
+    // 否则那些动画会被永久静默丢弃。
+    // 补播前先记账 batchKey：否则补播进行中轮询又会把同一批重新入队，
+    // 造成同一批动画反复重播、大屏卡在该批次上出不去。
+    // 同一层 while 取下一批，不递归调用 revealAll，队列再长调用栈也不增长
+    next = null
+    if (pendingBatches.length) {
+      const p = pendingBatches.shift()
+      knownBatchKey = p.batchKey
+      if (p.lastWinnerId != null) knownWinnerId = p.lastWinnerId
+      next = { winners: p.winners, tierName: p.tierName, gap: p.gap }
+    }
+  }
 }
 
 /** 当前正在揭晓的那一位 */
@@ -480,43 +607,17 @@ function stopRolling() {
 // 在 syncFromServer 里检测到新 batchKey 时调用 revealAll 播放揭晓动画。
 // 这里曾有的 doDraw() / doVoid() 已随对应后端端点一起删除。
 
-async function setSession(code) {
-  try {
-    await switchSession(code)
-    // 换场次 = 大屏重新认识世界：旧场次的版本号、「已看到的中奖」等本地记忆全部失效。
-    // 尤其 knownBatchKey：不重置的话，新场次首个批次的 batchKey 若与旧值同前缀，
-    // 会被误判成「同一批里有人被作废」，只更新 resultList 而漏掉整批揭晓动画。
-    lastWinnerId = null
-    currentVersion = null
-    knownWinnerId = null
-    knownBatchKey = null
-    phase.value = 'idle'
-    await loadStatus(true)
-  } catch (e) {
-    // 以前同样是空 catch：点了没反应、场次高亮也不变，操作员会反复点
-    await showTip('切换场次失败，请检查网络后重试。当前场次未改变。')
-    await loadStatus()
-  }
-}
-
-function onKey(e) {
-  // 大屏只展示，键盘只剩切场次（1=上午场 / 2=下午场）。
-  // 空格抽奖、退格作废已随控制权收归管理端而移除。
-  if (e.key === '1') setSession('AM')
-  else if (e.key === '2') setSession('PM')
-}
+// 切场次已收归管理端：大屏不提供按钮也不响应键盘，切场次后由轮询被动同步。
 
 onMounted(() => {
   loadStatus()
   // 管理端「抽奖控制台」点抽奖后，大屏靠这条轮询感知新批次并开始滚动揭晓。
   // 间隔越短延迟越低、请求量越大；现场内网下 1.5s 完全扛得住，主持人手感更跟手。
   timer = setInterval(loadStatus, 1500)
-  window.addEventListener('keydown', onKey)
 })
 
 onUnmounted(() => {
   clearInterval(timer)
   stopRolling()
-  window.removeEventListener('keydown', onKey)
 })
 </script>
