@@ -4,7 +4,20 @@
     <header class="flex items-center justify-between px-10 py-6">
       <div class="flex items-center gap-4">
         <img :src="logo" class="h-9" alt="KCon 2026" />
-        <span class="px-4 py-1.5 rounded-full text-sm bg-brand/10 text-brand border border-brand/30">
+        <!-- 场次切换：点击即刻切换，当前场次高亮。
+             原先只能按键盘 1/2，页面上毫无提示，操作员不易发现 -->
+        <div v-if="sessions.length" class="flex items-center gap-2">
+          <button
+            v-for="s in sessions"
+            :key="s.code"
+            class="px-4 py-1.5 rounded-full text-sm border transition active:scale-95"
+            :class="s.code === status.sessionCode
+              ? 'bg-brand/15 text-brand border-brand/40'
+              : 'bg-white/5 text-slate-400 border-white/10 hover:text-slate-200'"
+            @click="setSession(s.code)"
+          >{{ s.name }}</button>
+        </div>
+        <span v-else class="px-4 py-1.5 rounded-full text-sm bg-brand/10 text-brand border border-brand/30">
           {{ status.sessionName || '—' }}
         </span>
       </div>
@@ -34,9 +47,20 @@
 
       <!-- S3 定格（中奖信息） -->
       <template v-else-if="phase === 'result'">
+        <!-- 庆祝动效①：全屏金红纸屑（纯 CSS，无外部依赖） -->
+        <div class="confetti-layer" aria-hidden="true">
+          <span
+            v-for="c in confetti"
+            :key="c.id"
+            class="confetti"
+            :style="c.style"
+          ></span>
+        </div>
+
         <div class="text-lg text-slate-400 mb-4 tracking-[0.3em]">恭 喜 中 奖</div>
-        <div class="rand-num text-gold glow-gold">{{ winner.portNo }}</div>
-        <div class="mt-10 text-center">
+        <!-- 庆祝动效②：中奖号码入场缩放 0.6 → 1（带轻微过冲） -->
+        <div class="rand-num pop-in text-gold glow-gold">{{ winner.portNo }}</div>
+        <div class="mt-10 text-center fade-up">
           <div class="text-6xl font-black">{{ winner.name }}</div>
           <div class="mt-4 text-2xl text-slate-300">
             <span v-if="winner.company">{{ winner.company }}</span>
@@ -139,6 +163,33 @@ let lastWinnerId = null
 
 const poolEmpty = computed(() => (status.value.poolCount ?? 0) <= 0)
 
+/** 可选场次列表（后端 screenStatus 一并返回），用于顶部可见的场次切换 */
+const sessions = computed(() => status.value.sessions || [])
+
+/** 中奖庆祝纸屑：每次中奖重新生成，保证每次的落点与飘向都不一样 */
+const confetti = ref([])
+
+function makeConfetti() {
+  const colors = ['#FFD166', '#E23B2E', '#F0B429', '#C4291F', '#FFE9A8']
+  const list = []
+  for (let i = 0; i < 90; i++) {
+    const size = 6 + Math.random() * 8
+    list.push({
+      id: i,
+      style: {
+        left: (Math.random() * 100).toFixed(2) + '%',
+        width: size.toFixed(1) + 'px',
+        height: (size * 1.7).toFixed(1) + 'px',
+        background: colors[i % colors.length],
+        animationDelay: (Math.random() * 0.7).toFixed(2) + 's',
+        animationDuration: (2.1 + Math.random() * 1.7).toFixed(2) + 's',
+        '--drift': ((Math.random() * 2 - 1) * 130).toFixed(0) + 'px'
+      }
+    })
+  }
+  confetti.value = list
+}
+
 /** 本场次全部档位（后端已按场次过滤，避免两场奖品混在一张进度条上） */
 const tiers = computed(() => status.value.tiers || [])
 /** 赞助商名称列表，为空则不渲染底部条 */
@@ -235,6 +286,8 @@ async function doDraw() {
       winner.value = res.data
       lastWinnerId = res.data.winnerId
       displayNo.value = String(res.data.portNo).padStart(5, '0')
+      // 先备好纸屑再切到定格页，避免纸屑晚一拍出现
+      makeConfetti()
       phase.value = 'result'
       await loadStatus()
     } else if (res.code === 4001) {

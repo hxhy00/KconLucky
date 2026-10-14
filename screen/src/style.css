@@ -57,3 +57,61 @@ body {
     0 0 70px rgba(255, 209, 102, .45),
     0 0 140px rgba(226, 59, 46, .35);
 }
+
+/* =============================================================
+   中奖庆祝动效
+   需求 7.2 S3：中奖定格页需有「庆祝动效」
+   两层：① 号码入场缩放 0.6 → 1  ② 全屏金红纸屑
+   全部纯 CSS 实现，不引入第三方库，离线现场也能跑
+   ============================================================= */
+
+/* ① 中奖号码入场：从 0.6 放大到 1，60% 处轻微过冲再回落 */
+.rand-num.pop-in {
+  animation: num-pop .52s cubic-bezier(.2, .9, .25, 1.18) both;
+}
+
+@keyframes num-pop {
+  0%   { transform: scale(.6); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 姓名 / 公司 / 奖项随后淡入上浮，避免整块同时蹦出显得生硬 */
+.fade-up {
+  animation: fade-up .5s .22s ease both;
+}
+
+@keyframes fade-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* ② 全屏纸屑层：覆盖整屏、不拦鼠标事件 */
+.confetti-layer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.confetti {
+  position: absolute;
+  top: -8vh;
+  border-radius: 2px;
+  opacity: .95;
+  will-change: transform, opacity;
+  box-shadow: 0 0 10px rgba(255, 209, 102, .3);
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+
+/* --drift 由 JS 随机注入，让每片纸屑横飘距离不同；旋转 720° 模拟翻飞 */
+@keyframes confetti-fall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  8%   { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 112vh, 0) rotate(720deg); opacity: 0; }
+}
