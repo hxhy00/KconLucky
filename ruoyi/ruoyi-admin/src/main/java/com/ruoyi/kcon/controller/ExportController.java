@@ -1,5 +1,6 @@
 package com.ruoyi.kcon.controller;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -136,6 +137,7 @@ public class ExportController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('kcon:data:reset')")
     @Log(title = "数据清场", businessType = BusinessType.CLEAN)
+    @RepeatSubmit
     @PostMapping("/reset")
     public AjaxResult reset()
     {

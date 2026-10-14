@@ -10,7 +10,7 @@
       <div slot="header"><b>兑奖核验</b></div>
       <el-form ref="verifyForm" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="端口号" prop="portNo">
-          <el-input v-model="form.portNo" placeholder="凭条上的端口号" maxlength="10"
+          <el-input ref="portNoInput" v-model="form.portNo" placeholder="凭条上的端口号" maxlength="10"
                     @keyup.enter.native="handleVerify" />
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
@@ -148,6 +148,15 @@ export default {
         .then(res => {
           this.verifyData = res.data
           this.verifyResult = res.data.result
+          // 下一位：清空两个输入框并把焦点落回端口号。
+          // 这是全场最高频的操作，以前要手动删两次才能输入下一个人，每人多花 2-3 秒。
+          // 清空会触发 watch 里的 resetVerify()，结果卡片随之收起，正好接上下一位的节奏。
+          this.form.portNo = ""
+          this.form.phone = ""
+          this.$nextTick(() => {
+            const el = this.$refs.portNoInput
+            if (el && el.focus) el.focus()
+          })
         })
         .catch(() => {})
         .finally(() => { this.receiving = false })

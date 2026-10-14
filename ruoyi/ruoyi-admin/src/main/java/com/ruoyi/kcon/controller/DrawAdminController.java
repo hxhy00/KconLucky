@@ -1,5 +1,6 @@
 package com.ruoyi.kcon.controller;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.controller.BaseController;
@@ -86,6 +87,7 @@ public class DrawAdminController extends BaseController
     @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
     @Log(title = "抽奖控制台-作废中奖", businessType = BusinessType.OTHER)
     @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
+    @RepeatSubmit
     @PostMapping("/void")
     public AjaxResult doVoid(@RequestBody Map<String, Object> body)
     {

@@ -62,7 +62,8 @@
         <template slot-scope="scope">
           <el-button size="mini" type="text" icon="el-icon-close" @click="handleVoid(scope.row)"
                      v-hasPermi="['kcon:winner:void']"
-                     :disabled="scope.row.status !== 0">作废</el-button>
+                     :loading="voidingId === scope.row.id"
+                     :disabled="scope.row.status !== 0 || voidingId != null">作废</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -83,6 +84,8 @@ export default {
       loading: true,
       winnerList: [],
       total: 0,
+      // 正在作废的行 id：请求在途期间该行按钮转圈，避免操作员以为没点上而反复点
+      voidingId: null,
       queryParams: {
         pageNum: 1,
         pageSize: 10,
@@ -131,13 +134,18 @@ export default {
       return { 0: "warning", 1: "success", 2: "info" }[status] || "info"
     },
     handleVoid(row) {
+      if (this.voidingId != null) return
       this.$modal.confirm(`确认作废「${row.name}」（端口号 ${row.portNo}）的中奖记录？作废后该端口号回到抽奖池，可被再次抽中。`)
-        .then(() => voidWinner(row.id))
+        .then(() => {
+          this.voidingId = row.id
+          return voidWinner(row.id)
+        })
         .then(() => {
           this.getList()
           this.$modal.msgSuccess("作废成功，端口号已回池")
         })
         .catch(() => {})
+        .finally(() => { this.voidingId = null })
     }
   }
 }

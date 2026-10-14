@@ -1,5 +1,6 @@
 package com.ruoyi.kcon.controller;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -44,15 +45,28 @@ public class PrizeController extends BaseController
 
     @PreAuthorize("@ss.hasPermi('kcon:prize:add')")
     @Log(title = "奖品档位", businessType = BusinessType.INSERT)
+    @RepeatSubmit
     @PostMapping
     public AjaxResult add(@Validated @RequestBody KconPrize prize)
     {
+        // 同一场次里出现同名档位，「当前应抽档位」会同时命中两条，
+        // 现场没法判断该抽哪个。前端也加了提交中禁用，但慢响应下拦不住，这里兜底。
+        KconPrize query = new KconPrize();
+        query.setSessionCode(prize.getSessionCode());
+        for (KconPrize p : drawService.selectPrizeList(query))
+        {
+            if (p.getTierName() != null && p.getTierName().equals(prize.getTierName()))
+            {
+                return error("该场次已存在同名奖项「" + prize.getTierName() + "」，请勿重复添加");
+            }
+        }
         prize.setCreateBy(getUsername());
         return toAjax(drawService.insertPrize(prize));
     }
 
     @PreAuthorize("@ss.hasPermi('kcon:prize:edit')")
     @Log(title = "奖品档位", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody KconPrize prize)
     {

@@ -1,5 +1,6 @@
 package com.ruoyi.kcon.controller;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -37,6 +38,12 @@ public class VerifyController extends BaseController
 
     /**
      * 核验 { "portNo": 12345, "phone": "13800138000" 或后四位 }
+     *
+     * 这里刻意不加 @RepeatSubmit：核验是只读判定，同一组输入被重复提交是合法的——
+     * 发放后要带着同一组输入再核一次刷新成「已领取」，核验失败也要能立刻重试。
+     * 加了防重会把这些正常操作拦成「不允许重复提交」，而前端又是静默 catch，
+     * 表现为「发放成功但表单没清空」这种很难查的现象。
+     * 真正需要防重的是下面的 /receive（发放），它有状态校验且不可撤销。
      */
     @PreAuthorize("@ss.hasPermi('kcon:verify:query')")
     @PostMapping
@@ -64,6 +71,7 @@ public class VerifyController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('kcon:verify:receive')")
     @Log(title = "兑奖发放", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
     @PostMapping("/receive")
     public AjaxResult receive(@RequestBody Map<String, Object> body)
     {
@@ -90,6 +98,7 @@ public class VerifyController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
     @Log(title = "中奖作废", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
     @PostMapping("/void/{winnerId}")
     public AjaxResult voidWinner(@PathVariable Long winnerId)
     {

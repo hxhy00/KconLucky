@@ -235,6 +235,8 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         // 只能去排工作人员的人工窗口。改为把候选项交给前端让人自己认领。
         // selectByTail4 已 left join kcon_checkin，signed / port_no / checkin_time
         // 随候选一起带出，因此点选候选后不需要再发一次请求。
+        // 留痕：连续命中撞号是「批量枚举」的典型特征，事后可据此复盘异常调用
+        log.info("找回端口号命中后四位撞号：tail4={}，候选 {} 位", kw, list.size());
         List<Map<String, Object>> candidates = new ArrayList<>();
         for (KconAttendee a : list)
         {

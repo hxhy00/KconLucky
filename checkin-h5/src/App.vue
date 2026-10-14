@@ -183,6 +183,14 @@
         </div>
 
         <p class="mt-4 text-slate-500 text-xs">签到时间：{{ result.checkinTime }}</p>
+
+        <!-- 选错人时的退路。以前这一页是死胡同，只能刷新整个页面重来，
+             而刷新后输入框里还是上一个人的手机号 -->
+        <button
+          class="mt-7 px-6 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-sm
+                 active:scale-[.99] transition"
+          @click="reset"
+        >不是我，重新输入</button>
       </section>
     </main>
 
@@ -224,7 +232,13 @@ function reset() {
   step.value = 'input'
   candidates.value = []
   person.value = null
+  result.value = null
   error.value = ''
+  // 输入也一并清空：不然下一位看到的还是上一个人的手机号
+  keyword.value = ''
+  lookupResult.value = null
+  lookupError.value = ''
+  lookupCandidates.value = []
 }
 
 // 找回端口号：截图丢了的人还在签到台时，直接用输入框里的手机号/后四位回查原端口号。

@@ -1,5 +1,6 @@
 package com.ruoyi.kcon.controller;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -64,6 +65,7 @@ public class AttendeeController extends BaseController
     /** 新增 */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:add')")
     @Log(title = "参会人名单", businessType = BusinessType.INSERT)
+    @RepeatSubmit
     @PostMapping
     public AjaxResult add(@Validated @RequestBody KconAttendee attendee)
     {
@@ -82,6 +84,7 @@ public class AttendeeController extends BaseController
     /** 编辑（用于补录公司/邮箱/参加次数/职务） */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:edit')")
     @Log(title = "参会人名单", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody KconAttendee attendee)
     {
@@ -110,6 +113,7 @@ public class AttendeeController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:import')")
     @Log(title = "名单导入", businessType = BusinessType.IMPORT)
+    @RepeatSubmit
     @PostMapping("/import")
     public AjaxResult importData(@RequestParam("file") MultipartFile file,
                                  @RequestParam(defaultValue = "append") String mode)

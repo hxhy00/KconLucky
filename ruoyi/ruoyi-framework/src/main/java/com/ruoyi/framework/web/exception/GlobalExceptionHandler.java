@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.text.Convert;
@@ -142,6 +143,21 @@ public class GlobalExceptionHandler
 
     /**
      * 拦截未知的运行时异常
+     */
+    /**
+     * 没有匹配到任何接口或静态资源。
+     * Spring 6 起这类请求抛 NoResourceFoundException，若不单独处理会被下面的
+     * RuntimeException/Exception 兜底成「系统繁忙」（500），
+     * 前端把 URL 拼错会被误判成服务端故障，排查时白绕一大圈。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public AjaxResult handleNoResourceFound(NoResourceFoundException e)
+    {
+        return AjaxResult.error(HttpStatus.NOT_FOUND, "接口不存在：" + e.getResourcePath());
+    }
+
+    /**
+     * 未知运行时异常
      */
     @ExceptionHandler(RuntimeException.class)
     public AjaxResult handleRuntimeException(RuntimeException e, HttpServletRequest request)

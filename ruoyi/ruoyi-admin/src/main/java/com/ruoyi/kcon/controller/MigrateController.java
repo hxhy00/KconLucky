@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -173,6 +174,7 @@ public class MigrateController extends BaseController
      */
     @PreAuthorize("@ss.hasRole('admin')")
     @Log(title = "全量数据恢复", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
     @PostMapping("/restore")
     public AjaxResult restore(@RequestParam("file") MultipartFile file) throws Exception
     {

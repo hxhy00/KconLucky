@@ -1,5 +1,10 @@
 <template>
   <div class="app-container">
+    <!-- 自动刷新失败时的常驻提示：以前 getStat 没有 catch，失败后数字一直停在旧值，
+         看板上分不清「今天真的只签到 12 人」和「数据已经 10 分钟没更新了」 -->
+    <el-alert v-if="statError" type="warning" :closable="false" show-icon
+              style="margin-bottom: 12px;" :title="statError" />
+
     <!-- 现场快捷入口：签到台/兑奖台高频只用这几个页面，
          免得每次都在左侧 9 个菜单里找。登录后第一屏就能看到。 -->
     <div class="quick-entry">
@@ -122,6 +127,7 @@ export default {
   data() {
     return {
       stat: {},
+      statError: "",
       signUrl: "",
       qrSrc: "",
       qrObjectUrl: "",
@@ -159,6 +165,10 @@ export default {
     getStat() {
       dashboard().then(res => {
         this.stat = res.data || {}
+        this.statError = ""
+      }).catch(() => {
+        // 保留上一次的有效数据，同时把「这份数据已经不可信了」摆在眼前
+        this.statError = "看板数据刷新失败，正在重试…（当前显示的可能是旧数据）"
       })
     },
     getQr() {

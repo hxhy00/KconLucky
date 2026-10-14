@@ -81,8 +81,8 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="submitForm">确 定</el-button>
-        <el-button @click="cancel">取 消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确 定</el-button>
+        <el-button :disabled="submitting" @click="cancel">取 消</el-button>
       </div>
     </el-dialog>
   </div>
@@ -99,6 +99,9 @@ export default {
       loading: true,
       prizeList: [],
       open: false,
+      // 提交中标志：连点两次「确定」会造出两条一模一样的奖项档位，
+      // 而后端 POST /admin/prize 没有唯一性校验，慢响应下拦不住
+      submitting: false,
       title: "",
       queryParams: { sessionCode: null },
       sessions: [],
@@ -156,14 +159,17 @@ export default {
       this.open = true
     },
     submitForm() {
+      if (this.submitting) return
       this.$refs["form"].validate(valid => {
         if (!valid) return
-        const fn = this.form.id != null ? updatePrize : addPrize
+        const isEdit = this.form.id != null
+        this.submitting = true
+        const fn = isEdit ? updatePrize : addPrize
         fn(this.form).then(() => {
-          this.$modal.msgSuccess(this.form.id != null ? "修改成功" : "新增成功")
+          this.$modal.msgSuccess(isEdit ? "修改成功" : "新增成功")
           this.open = false
           this.getList()
-        })
+        }).finally(() => { this.submitting = false })
       })
     },
     handleDelete(row) {
