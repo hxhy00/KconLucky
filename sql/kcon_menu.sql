@@ -54,7 +54,7 @@ VALUES
   (3003, '奖品设置',   0, 5, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',    'star',      'admin', NOW(), '场次奖项档位'),
   (3004, '中奖记录',   0, 6, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',   'money',     'admin', NOW(), '中奖名单与状态'),
   (3008, '兑奖日志',   0, 7, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'list',      'admin', NOW(), '核验操作追溯'),
-  (3006, '数据管理',   0, 8, 'data',      'kcon/data/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',    'trash',     'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
+  (3006, '数据管理',   0, 8, 'data',      'kcon/data/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',    'tool',      'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
 
 -- -------------------------------------------------------------
 -- 按钮权限

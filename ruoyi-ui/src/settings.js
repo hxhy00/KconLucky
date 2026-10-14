@@ -24,8 +24,9 @@ module.exports = {
 
   /**
    * 是否显示 tagsView
+   * KCon 现场菜单是平铺的固定几项，不需要页签栏做多任务切换，关闭以腾出纵向空间
    */
-  tagsView: true,
+  tagsView: false,
 
   /**
    * 持久化标签页
