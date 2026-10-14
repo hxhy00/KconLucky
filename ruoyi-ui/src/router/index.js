@@ -66,7 +66,7 @@ export const constantRoutes = [
     // KCon 现场系统：登录落地页。
     // redirect 只能指向「静态路由」——动态路由要等 GenerateRoutes 才注册，
     // 静态 redirect 在 beforeEach 之前解析，指向动态路由会落到 404。
-    // /index 直接渲染现场看板，activeMenu 让侧边栏「现场看板」保持高亮。
+    // /index 直接渲染数据总览，activeMenu 让侧边栏「数据总览」保持高亮。
     path: '',
     component: Layout,
     redirect: 'index',
@@ -76,7 +76,7 @@ export const constantRoutes = [
         component: () => import('@/views/kcon/dashboard/index'),
         name: 'Index',
         hidden: true,
-        meta: { title: '现场看板', icon: 'dashboard', activeMenu: '/kcon/dashboard', noCache: true }
+        meta: { title: '数据总览', icon: 'dashboard', activeMenu: '/dashboard', noCache: true }
       }
     ]
   },
