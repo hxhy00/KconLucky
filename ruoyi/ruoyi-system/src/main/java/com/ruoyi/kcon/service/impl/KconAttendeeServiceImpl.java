@@ -5,6 +5,7 @@ import com.ruoyi.kcon.domain.KconAttendee;
 import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.service.IKconAttendeeService;
+import com.ruoyi.kcon.service.IKconCheckinService;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -87,7 +88,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         List<KconAttendee> list = attendeeMapper.selectAttendeeList(query);
         for (KconAttendee a : list)
         {
-            a.setPhoneMask(maskPhone(a.getPhone()));
+            a.setPhoneMask(IKconCheckinService.maskPhone(a.getPhone()));
         }
         return list;
     }
@@ -98,7 +99,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         KconAttendee a = attendeeMapper.selectAttendeeById(id);
         if (a != null)
         {
-            a.setPhoneMask(maskPhone(a.getPhone()));
+            a.setPhoneMask(IKconCheckinService.maskPhone(a.getPhone()));
         }
         return a;
     }
@@ -385,7 +386,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         List<KconAttendee> list = attendeeMapper.selectSignSheet();
         for (KconAttendee a : list)
         {
-            a.setPhoneMask(maskPhone(a.getPhone()));
+            a.setPhoneMask(IKconCheckinService.maskPhone(a.getPhone()));
         }
         return list;
     }
@@ -540,14 +541,5 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             return null;
         }
         return phone.substring(phone.length() - 4);
-    }
-
-    private String maskPhone(String phone)
-    {
-        if (phone == null || phone.length() < 7)
-        {
-            return phone;
-        }
-        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 }
