@@ -129,7 +129,19 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             attendee.setPhone(attendee.getPhone().trim());
             attendee.setPhoneTail4(tail4(attendee.getPhone()));
         }
-        return attendeeMapper.updateAttendee(attendee);
+        int rows = attendeeMapper.updateAttendee(attendee);
+        // 乐观锁：带了版本号却更新 0 行，说明这条名单在编辑期间被别人改过（或已被删除）。
+        // 与其静默覆盖对方的修改，不如明确拒绝让人重新打开——现场两人同时补录名单时，
+        // 静默覆盖很难当场察觉，等发现时已分不清哪个版本是对的。
+        if (rows == 0 && attendee.getVersion() != null && !attendee.getVersion().isEmpty())
+        {
+            if (attendeeMapper.selectAttendeeById(attendee.getId()) == null)
+            {
+                throw new ServiceException("该名单已被删除，请刷新列表");
+            }
+            throw new ServiceException("该名单已被他人修改，请关闭后重新打开再改");
+        }
+        return rows;
     }
 
     @Override

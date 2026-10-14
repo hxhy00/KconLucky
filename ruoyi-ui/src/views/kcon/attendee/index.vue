@@ -61,9 +61,14 @@
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
+    <!-- 自动刷新失败时的常驻提示：以前只有一次性红条，页面数字静止却看不出「数据已经多久没更新了」 -->
+    <el-alert v-if="listError" type="warning" :closable="false" show-icon
+              style="margin-bottom: 8px;" :title="listError" />
+
     <!-- 列表 -->
-    <el-table v-loading="loading" :data="attendeeList" @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="55" align="center" />
+    <el-table v-loading="loading" :data="attendeeList" row-key="id"
+              :row-class-name="rowClassName" @selection-change="handleSelectionChange">
+      <el-table-column type="selection" width="55" align="center" :reserve-selection="true" />
       <el-table-column label="姓名" prop="name" width="100" />
       <el-table-column label="手机号" prop="phoneMask" width="130" />
       <el-table-column label="渠道" prop="channel" width="70" align="center">
@@ -144,8 +149,8 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="submitForm">确 定</el-button>
-        <el-button @click="cancel">取 消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确 定</el-button>
+        <el-button :disabled="submitting" @click="cancel">取 消</el-button>
       </div>
     </el-dialog>
 
@@ -201,6 +206,9 @@ import {
   importAttendee
 } from "@/api/kcon/attendee"
 
+// 静默增量轮询间隔
+const POLL_INTERVAL = 10000
+
 export default {
   name: "KconAttendee",
   data() {
@@ -219,6 +227,13 @@ export default {
       importMode: "append",
       importFile: null,
       timer: null,
+      // polling 防请求叠加；listError 是常驻的自动刷新失败提示
+      polling: false,
+      listError: "",
+      submitting: false,
+      // 轮询发现变化的行 id，短暂高亮
+      highlightIds: [],
+      highlightTimer: null,
       queryParams: {
         pageNum: 1,
         pageSize: 10,
@@ -244,25 +259,89 @@ export default {
   },
   created() {
     this.getList()
-    // 签到期间名单页的「已签到 / 端口号 / 签到时间」会持续变化，
-    // 只在打开时拉一次数据会一直停在旧值，所以加自动刷新。
-    // 10 秒一次，比看板的 5 秒保守，避免频繁请求。
-    this.timer = setInterval(this.getList, 10000)
+    // 签到期间名单页的「已签到 / 端口号 / 签到时间」会持续变化，需要自动刷新。
+    // 但刷新方式不能是「整页重拉」：以前轮询直接复用 getList()，每 10 秒把表格
+    // 刷成灰色遮罩并整体替换数组——勾选被清空、行序跳动，操作员边看观众边操作时
+    // 经常刚好在勾选后被刷掉。
+    // 现在改为静默增量刷新：不置 loading，结果按 id 就地合并，
+    // 只有内容真变了的那一行才更新并短暂高亮。
+    this.timer = setInterval(this.refreshQuietly, POLL_INTERVAL)
   },
   beforeDestroy() {
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
     }
+    if (this.highlightTimer) {
+      clearTimeout(this.highlightTimer)
+      this.highlightTimer = null
+    }
   },
   methods: {
+    // 显式刷新（首次加载 / 搜索 / 分页 / 增删改后对账）：带 loading，让人知道自己在等
     getList() {
       this.loading = true
-      listAttendee(this.queryParams).then(res => {
-        this.attendeeList = res.rows
+      return this.fetchList().finally(() => { this.loading = false })
+    },
+    // 轮询刷新：静默。弹窗开着时不打扰，上一轮没回来就跳过本轮避免请求叠加
+    refreshQuietly() {
+      if (this.loading || this.polling || this.open || this.importOpen) return
+      this.polling = true
+      this.fetchList().finally(() => { this.polling = false })
+    },
+    fetchList() {
+      return listAttendee(this.queryParams).then(res => {
+        this.mergeRows(res.rows || [])
         this.total = res.total
-        this.loading = false
-      }).catch(() => { this.loading = false })
+        this.listError = ""
+      }).catch(() => {
+        // 不再依赖 request.js 的一次性红条（轮询失败每 10 秒一条会刷屏），
+        // 改为页面内常驻提示，让「数据已经多久没更新」这件事可见
+        this.listError = "名单自动刷新失败，正在重试…（当前显示的可能是旧数据）"
+      })
+    },
+    // 按 id 就地合并，而不是整体替换数组：行序不变、勾选不丢
+    mergeRows(rows) {
+      const prevById = new Map(this.attendeeList.map(r => [r.id, r]))
+      const changed = []
+      this.attendeeList = rows.map(r => {
+        const prev = prevById.get(r.id)
+        if (!prev) {
+          changed.push(r.id)
+          return r
+        }
+        // 内容没变就复用原对象，避免整表重渲染
+        if (this.rowFingerprint(prev) === this.rowFingerprint(r)) return prev
+        changed.push(r.id)
+        return r
+      })
+      if (changed.length) this.flashChanged(changed)
+    },
+    // 只比对会因「别人签到」或「本页编辑」而变化的字段
+    rowFingerprint(r) {
+      return [r.name, r.phone, r.channel, r.ticketType, r.company, r.email,
+              r.attendCount, r.position, r.signed, r.portNo, r.checkinTime].join("|")
+    },
+    // 变化的行短暂高亮，让操作员注意到「刚才这一行更新了」，而不是数字悄悄变
+    flashChanged(ids) {
+      this.highlightIds = (ids || []).filter(id => id != null)
+      if (!this.highlightIds.length) return
+      if (this.highlightTimer) clearTimeout(this.highlightTimer)
+      this.highlightTimer = setTimeout(() => { this.highlightIds = [] }, 3000)
+    },
+    rowClassName({ row }) {
+      return this.highlightIds.indexOf(row.id) >= 0 ? "row-changed" : ""
+    },
+    // 这行是否满足当前筛选条件（乐观插入前判断，避免插进一条会被筛掉的行）
+    matchesQuery(row) {
+      const q = this.queryParams
+      const like = (v, kw) => !kw || String(v == null ? "" : v).indexOf(kw) >= 0
+      if (!like(row.name, q.name) || !like(row.phone, q.phone)) return false
+      if (!like(row.company, q.company) || !like(row.position, q.position)) return false
+      if (q.channel && row.channel !== q.channel) return false
+      if (q.ticketType && row.ticketType !== q.ticketType) return false
+      if (q.signed !== null && q.signed !== undefined && Number(q.signed) !== Number(row.signed || 0)) return false
+      return true
     },
     handleQuery() {
       this.queryParams.pageNum = 1
@@ -307,28 +386,50 @@ export default {
     submitForm() {
       this.$refs["form"].validate(valid => {
         if (!valid) return
-        if (this.form.id != null) {
-          updateAttendee(this.form).then(() => {
-            this.$modal.msgSuccess("修改成功")
-            this.open = false
-            this.getList()
-          })
-        } else {
-          addAttendee(this.form).then(() => {
-            this.$modal.msgSuccess("新增成功")
-            this.open = false
-            this.getList()
-          })
-        }
+        const isEdit = this.form.id != null
+        // 带上读取时的版本号做乐观锁：若编辑期间被别人改过，后端会拒绝而不是静默覆盖
+        const payload = { ...this.form }
+        this.submitting = true
+        const req = isEdit ? updateAttendee(payload) : addAttendee(payload)
+        req.then(res => {
+          this.open = false
+          this.$modal.msgSuccess(isEdit ? "修改成功" : "新增成功")
+          if (isEdit) {
+            // 乐观更新：立刻把改动写回本地那一行，不用等下一轮轮询
+            const i = this.attendeeList.findIndex(r => r.id === payload.id)
+            if (i >= 0) {
+              this.$set(this.attendeeList, i, { ...this.attendeeList[i], ...payload })
+              this.flashChanged([payload.id])
+            }
+          } else {
+            const created = res.data || {}
+            const row = { ...payload, ...created, signed: 0, portNo: null, checkinTime: null }
+            // 只有符合当前筛选条件才乐观插入，否则交给随后的静默对账决定
+            if (created.id != null && this.matchesQuery(row)) {
+              this.attendeeList.unshift(row)
+              this.total += 1
+              this.flashChanged([created.id])
+            }
+          }
+          // 静默对账：取回服务端写入的 update_time（版本号）与签到状态
+          this.refreshQuietly()
+        }).finally(() => { this.submitting = false })
       })
     },
     handleDelete(row) {
       const ids = row.id || this.ids
+      const idList = Array.isArray(ids) ? ids : [ids]
       this.$modal.confirm('确认删除选中的 ' + (row.id ? 1 : ids.length) + ' 条名单？')
         .then(() => delAttendee(ids))
         .then(() => {
-          this.getList()
+          // 乐观更新：先从本地列表移除，界面立刻有反馈
+          this.attendeeList = this.attendeeList.filter(r => idList.indexOf(r.id) < 0)
+          this.total = Math.max(0, this.total - idList.length)
+          this.ids = []
+          this.single = true
+          this.multiple = true
           this.$modal.msgSuccess("删除成功")
+          this.refreshQuietly()
         })
         .catch(() => {})
     },
@@ -388,6 +489,15 @@ export default {
 </script>
 
 <style scoped>
+/* 轮询发现该行数据变化时短暂染色，让操作员注意到「刚才这一行更新了」。
+   加在 td 上：Element 的表格背景色画在 td，只染 tr 是看不见的 */
+.app-container ::v-deep .el-table .row-changed td {
+  animation: kconRowFlash 3s ease-out;
+}
+@keyframes kconRowFlash {
+  0%   { background-color: #fdf1c8; }
+  100% { background-color: transparent; }
+}
 .port-cell {
   font-weight: 700;
   color: #d4342a;

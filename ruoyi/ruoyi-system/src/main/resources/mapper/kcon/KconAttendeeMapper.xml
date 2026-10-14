@@ -41,7 +41,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark,
                c.port_no as port_no,
                case when c.id is null then 0 else 1 end as signed,
-               date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as checkin_time
+               date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as checkin_time,
+               date_format(ifnull(a.update_time, a.create_time), '%Y-%m-%d %H:%i:%s') as version
         from kcon_attendee a
         left join kcon_checkin c on c.attendee_id = a.id
     </sql>
@@ -61,6 +62,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
                a.attend_count, a.position, a.phone_tail4,
                c.port_no as port_no,
+               c.checkin_time as checkin_time,
                case when c.id is null then 0 else 1 end as signed
         from kcon_attendee a
         left join kcon_checkin c on c.attendee_id = a.id
@@ -153,6 +155,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             update_time = now()
         </set>
         where id = #{id}
+        <!-- 乐观锁：带版本号时做条件更新；不带则退化为普通更新，兼容其它调用方 -->
+        <if test="version != null and version != ''">
+            and ifnull(update_time, create_time) = #{version}
+        </if>
     </update>
 
     <delete id="deleteAttendeeByIds" parameterType="Long">

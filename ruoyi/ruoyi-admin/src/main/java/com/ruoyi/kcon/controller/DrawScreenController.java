@@ -14,8 +14,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -47,11 +49,23 @@ public class DrawScreenController
     @Autowired
     private KconWinnerMapper winnerMapper;
 
-    /** 3.1 当前场次 + 统计 + 当前应抽档位 */
+    /**
+     * 3.1 当前场次 + 统计 + 当前应抽档位。
+     * 带上大屏上次收到的 {@code version} 时走增量：未变化只回一个极小的响应，
+     * 大屏据此跳过整份重渲染（投屏中重渲染会打断中奖动画）。
+     */
     @GetMapping("/status")
-    public AjaxResult status()
+    public AjaxResult status(@RequestParam(required = false) String version)
     {
-        return AjaxResult.success(drawService.screenStatus());
+        Map<String, Object> data = drawService.screenStatus();
+        if (version != null && version.equals(String.valueOf(data.get("version"))))
+        {
+            Map<String, Object> unchanged = new LinkedHashMap<>();
+            unchanged.put("unchanged", true);
+            unchanged.put("version", version);
+            return AjaxResult.success(unchanged);
+        }
+        return AjaxResult.success(data);
     }
 
     /** 3.2 切换场次 { "sessionCode": "PM" } */

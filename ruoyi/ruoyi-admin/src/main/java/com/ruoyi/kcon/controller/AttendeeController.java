@@ -73,7 +73,10 @@ public class AttendeeController extends BaseController
             return error("手机号已存在，请勿重复添加");
         }
         attendee.setCreateBy(getUsername());
-        return toAjax(attendeeService.insertAttendee(attendee));
+        attendeeService.insertAttendee(attendee);
+        // 回传带自增主键的实体：前端拿到 id 后可以立刻把这一行乐观插入列表，
+        // 不用等下一轮轮询才看到自己刚新增的人
+        return success(attendee);
     }
 
     /** 编辑（用于补录公司/邮箱/参加次数/职务） */

@@ -63,6 +63,32 @@
             <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
             <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
           </div>
+
+          <!-- 后四位撞号：列出候选让人自己认领。
+               以前这种情况一律报「查无此人」，当事人会以为自己没签到过而白跑一趟。 -->
+          <div v-if="lookupCandidates.length" class="mt-4">
+            <p class="text-slate-400 text-sm text-center mb-3">
+              后四位「{{ keyword.slice(-4) }}」匹配到 {{ lookupCandidates.length }} 位，请点击您的名字
+            </p>
+            <button
+              v-for="c in lookupCandidates"
+              :key="c.id"
+              class="w-full mb-2 px-4 py-3 rounded-xl bg-slate-800/80 border border-slate-700
+                     text-left active:scale-[.99] transition"
+              @click="pickCandidate(c)"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-semibold">{{ c.name }}</span>
+                <span class="text-xs shrink-0" :class="c.signed ? 'text-emerald-300' : 'text-slate-500'">
+                  {{ c.signed ? '已签到' : '未签到' }}
+                </span>
+              </div>
+              <div class="text-slate-400 text-xs mt-1">
+                {{ c.phoneMask }}<template v-if="c.company"> · {{ c.company }}</template>
+              </div>
+            </button>
+          </div>
+
           <p v-if="lookupError" class="mt-3 text-center text-rose-400 text-sm">{{ lookupError }}</p>
         </div>
       </section>
@@ -178,13 +204,15 @@ const person = ref(null)
 const result = ref(null)
 const lookupResult = ref(null)
 const lookupError = ref('')
+const lookupCandidates = ref([])
 const loading = ref(false)
 const error = ref('')
 
-// 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
+// 输入一变就清掉上一次的找回结果与候选，避免「改了手机号、下面还显示旧端口号」
 watch(keyword, () => {
   lookupResult.value = null
   lookupError.value = ''
+  lookupCandidates.value = []
 })
 
 function attendText(n) {
@@ -205,26 +233,44 @@ async function doLookup() {
   error.value = ''
   lookupError.value = ''
   lookupResult.value = null
+  lookupCandidates.value = []
   const kw = keyword.value.trim()
   if (!kw) return
   loading.value = true
   try {
     const res = await lookup(kw)
-    if (res.code !== 200 || !res.data || !res.data.signed || !res.data.portNo) {
-      // 后端在「查无此人」时仍返回 code=200，msg 是 RuoYi 固定的「操作成功」，
-      // 真正的提示放在 data.msg 里。直接读 res.msg 会显示成「操作成功」，
-      // 观众会以为查到了、却没看到端口号。
-      lookupError.value = (res.data && res.data.msg)
-        || (res.code !== 200 ? res.msg : '')
-        || '未查到签到记录，请联系现场工作人员'
+    if (res.code !== 200) {
+      lookupError.value = res.msg || '查询失败，请稍后重试'
       return
     }
-    lookupResult.value = res.data
+    const d = res.data || {}
+    // 以下三种情况后端都返回 code=200，真正的提示都在 data 里——
+    // 读 res.msg 只会拿到 RuoYi 固定的「操作成功」，观众会以为查到了却没看到号码。
+    if (d.ambiguous && Array.isArray(d.candidates) && d.candidates.length) {
+      lookupCandidates.value = d.candidates
+      return
+    }
+    if (!d.signed || !d.portNo) {
+      lookupError.value = d.msg || '未查到签到记录，请联系现场工作人员'
+      return
+    }
+    lookupResult.value = d
   } catch (e) {
     lookupError.value = '查询失败，请检查网络后重试'
   } finally {
     loading.value = false
   }
+}
+
+// 认领候选项：端口号已随候选一起返回，直接展示，不再发请求
+function pickCandidate(c) {
+  lookupError.value = ''
+  if (c.signed && c.portNo) {
+    lookupResult.value = { portNo: c.portNo, name: c.name, checkinTime: c.checkinTime }
+    lookupCandidates.value = []
+    return
+  }
+  lookupError.value = `${c.name} 尚未签到，请点「查 询」完成签到`
 }
 
 async function doQuery() {

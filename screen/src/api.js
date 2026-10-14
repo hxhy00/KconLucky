@@ -25,9 +25,12 @@ async function request(path, options = {}) {
   }
 }
 
-// 当前场次 + 统计
-export function fetchStatus() {
-  return request('/app/screen/status')
+// 当前场次 + 统计。
+// 带上上次收到的 version 走增量轮询：后端发现无变化时只回一个极小的响应，
+// 大屏据此跳过整份重渲染（投屏中重渲染会打断中奖动画）。
+export function fetchStatus(version) {
+  const q = version ? '?version=' + encodeURIComponent(version) : ''
+  return request('/app/screen/status' + q)
 }
 
 // 切换场次

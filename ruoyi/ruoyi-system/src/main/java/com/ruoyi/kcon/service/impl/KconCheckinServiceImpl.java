@@ -200,22 +200,65 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             return data;
         }
         String kw = keyword.trim();
-        KconAttendee attendee;
+        // 与签到查询统一入参校验，避免用「1 位数字」之类的无效输入反复探路
+        if (!kw.matches("\\d{4}|\\d{11}"))
+        {
+            data.put("signed", false);
+            data.put("msg", "请输入 11 位手机号或 4 位尾号");
+            return data;
+        }
         if (kw.length() == 11)
         {
-            attendee = attendeeMapper.selectAttendeeByPhone(kw);
+            KconAttendee byPhone = attendeeMapper.selectAttendeeByPhone(kw);
+            if (byPhone == null)
+            {
+                data.put("signed", false);
+                data.put("msg", "查无此人");
+                return data;
+            }
+            return fillLookup(data, byPhone);
         }
-        else
-        {
-            List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
-            attendee = (list != null && list.size() == 1) ? list.get(0) : null;
-        }
-        if (attendee == null)
+
+        List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
+        if (list == null || list.isEmpty())
         {
             data.put("signed", false);
             data.put("msg", "查无此人");
             return data;
         }
+        if (list.size() == 1)
+        {
+            return fillLookup(data, list.get(0));
+        }
+
+        // 后四位撞号：以前这里一律返回「查无此人」，当事人会以为自己没签到过，
+        // 只能去排工作人员的人工窗口。改为把候选项交给前端让人自己认领。
+        // selectByTail4 已 left join kcon_checkin，signed / port_no / checkin_time
+        // 随候选一起带出，因此点选候选后不需要再发一次请求。
+        List<Map<String, Object>> candidates = new ArrayList<>();
+        for (KconAttendee a : list)
+        {
+            Map<String, Object> c = toPublicView(a);
+            boolean signed = a.getSigned() != null && a.getSigned() == 1;
+            c.put("signed", signed);
+            if (signed)
+            {
+                c.put("portNo", a.getPortNo());
+                c.put("checkinTime", a.getCheckinTime());
+            }
+            candidates.add(c);
+        }
+        data.put("signed", false);
+        data.put("ambiguous", true);
+        data.put("candidates", candidates);
+        return data;
+    }
+
+    /**
+     * 唯一命中人选时补齐端口号信息。
+     */
+    private Map<String, Object> fillLookup(Map<String, Object> data, KconAttendee attendee)
+    {
         KconCheckin checkin = checkinMapper.selectByPhone(attendee.getPhone());
         data.put("signed", checkin != null);
         if (checkin != null)
@@ -223,6 +266,10 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             data.put("portNo", checkin.getPortNo());
             data.put("checkinTime", format(checkin.getCheckinTime()));
             data.put("name", attendee.getName());
+        }
+        else
+        {
+            data.put("msg", "该手机号尚未签到");
         }
         return data;
     }

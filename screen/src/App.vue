@@ -148,6 +148,28 @@
         </span>
       </div>
     </footer>
+
+    <!-- 与后端失去连接：连续失败才显示。以前断网大屏毫无提示，
+         头部数字停在旧值，看起来像「还没人来签到」而不是「大屏连不上」 -->
+    <div v-if="offline" class="offline-mask">
+      <div class="text-4xl font-black text-rose-300">与后端失去连接</div>
+      <div class="mt-5 text-lg text-slate-300">大屏正在自动重试，请检查大屏与后端之间的网络</div>
+      <div class="mt-2 text-sm text-slate-500">画面上的数字可能已经过期</div>
+    </div>
+
+    <!-- 自绘提示 / 确认层：替代原生 alert/confirm（投屏上会带出域名与系统灰框） -->
+    <div v-if="dialog.show" class="dialog-mask">
+      <div class="dialog-box">
+        <div class="dialog-text">{{ dialog.text }}</div>
+        <div class="flex gap-4 mt-8">
+          <button v-if="dialog.confirm" class="dialog-btn dialog-btn-ghost"
+                  @click="resolveDialog(false)">取 消</button>
+          <button class="dialog-btn" @click="resolveDialog(true)">
+            {{ dialog.confirm ? '确 定' : '知道了' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -164,6 +186,38 @@ const displayNo = ref('00000')
 let timer = null
 let ticker = null
 let lastWinnerId = null
+
+// 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
+let currentVersion = null
+// 已经「看到」过的最近中奖 id：用来识别管理端抽奖控制台抽出的新中奖
+let knownWinnerId = null
+let failStreak = 0        // 连续失败次数（单次抖动不闪遮罩）
+let firstLoadDone = false // 首次加载只记录不展示，避免刷新后凭空弹出上一轮结果
+const offline = ref(false)
+
+// 自绘提示 / 确认层，替代原生 alert / confirm
+// （投屏上弹系统原生弹窗会带出域名和灰色系统样式，观众也会看到）
+const dialog = ref({ show: false, text: '', confirm: false })
+let dialogResolver = null
+
+function resolveDialog(ok) {
+  dialog.value = { show: false, text: '', confirm: false }
+  const fn = dialogResolver
+  dialogResolver = null
+  if (fn) fn(ok)
+}
+function showTip(text) {
+  return new Promise(resolve => {
+    dialogResolver = resolve
+    dialog.value = { show: true, text, confirm: false }
+  })
+}
+function showConfirm(text) {
+  return new Promise(resolve => {
+    dialogResolver = resolve
+    dialog.value = { show: true, text, confirm: true }
+  })
+}
 
 const poolEmpty = computed(() => (status.value.poolCount ?? 0) <= 0)
 
@@ -229,22 +283,81 @@ async function loadStatus() {
   if (statusInflight) return
   statusInflight = true
   try {
-    const res = await fetchStatus()
+    const res = await fetchStatus(currentVersion)
     if (res.code === 200) {
       statusLoaded = true
-      status.value = res.data
-      if (phase.value === 'idle' && poolEmpty.value && status.value.checkedInToday >= 0) {
-        // 仅在有明确池数据且池空时提示
-        if (poolEmpty.value) phase.value = 'empty'
-      } else if (phase.value === 'empty' && !poolEmpty.value) {
-        phase.value = 'idle'
+      failStreak = 0
+      offline.value = false
+      const d = res.data || {}
+      // 增量：后端说没变化就什么都不做。
+      // 大屏在投屏，整份重渲染会打断中奖动画，也让画面看起来在闪。
+      if (!d.unchanged) {
+        currentVersion = d.version || null
+        status.value = d
+        syncFromServer(d)
       }
     }
   } catch (e) {
-    // 静默重试；连接是否正常由 statusLoaded 体现，不在这里改 phase
+    // 单次抖动不闪遮罩；连续失败才判定为断开，恢复后自动消失
+    failStreak += 1
+    if (failStreak >= 3) offline.value = true
   } finally {
     statusInflight = false
   }
+}
+
+/** 把服务端快照映射到本地 phase，并接管「管理端抽出的中奖」 */
+function syncFromServer(d) {
+  const lw = d.lastWinner
+
+  if (!firstLoadDone) {
+    // 刷新后不该凭空弹出上一轮的结果：只记住已有中奖，不展示
+    firstLoadDone = true
+    if (lw && lw.winnerId) knownWinnerId = lw.winnerId
+    if (phase.value === 'idle' && poolEmpty.value) phase.value = 'empty'
+    return
+  }
+
+  if (lw && lw.winnerId) {
+    if (lw.winnerId > knownWinnerId) {
+      // 出现新的中奖：可能是在管理端「抽奖控制台」抽出的。
+      // 以前大屏永远不会切到结果页，于是管理端抽了一个、大屏还停在上一轮，
+      // 而两边文案都写着「两边看到的是同一个抽奖池」。
+      knownWinnerId = lw.winnerId
+      if (phase.value !== 'rolling') {
+        showWinner(lw)
+        return
+      }
+    } else if (lw.winnerId < knownWinnerId) {
+      // 最新一条在别处被作废了：如果大屏正定格在这条上，回到待机
+      knownWinnerId = lw.winnerId
+      if (phase.value === 'result') {
+        winner.value = null
+        lastWinnerId = null
+        phase.value = 'idle'
+      }
+    }
+  } else if (knownWinnerId != null) {
+    knownWinnerId = null
+    if (phase.value === 'result') {
+      winner.value = null
+      lastWinnerId = null
+      phase.value = 'idle'
+    }
+  }
+
+  if (phase.value === 'idle' && poolEmpty.value) phase.value = 'empty'
+  else if (phase.value === 'empty' && !poolEmpty.value) phase.value = 'idle'
+}
+
+/** 进入中奖定格页。大屏自己抽中与管理端代抽共用同一条路径 */
+function showWinner(w) {
+  winner.value = w
+  lastWinnerId = w.winnerId
+  displayNo.value = String(w.portNo).padStart(5, '0')
+  // 先备好纸屑再切到定格页，避免纸屑晚一拍出现
+  makeConfetti()
+  phase.value = 'result'
 }
 
 function randomNo() {
@@ -266,7 +379,7 @@ async function doDraw() {
     // 区分「确实没号可抽」与「后端连不上导致 status 为空」：
     // 后者若显示成「请先让观众签到」，等于把故障误报成业务提示
     if (!statusLoaded) {
-      alert('无法连接服务，请检查大屏与后端之间的网络后重试')
+      await showTip('无法连接服务，请检查大屏与后端之间的网络后重试')
       return
     }
     phase.value = 'empty'
@@ -287,32 +400,29 @@ async function doDraw() {
     stopRolling()
 
     if (res.code === 200) {
-      winner.value = res.data
-      lastWinnerId = res.data.winnerId
-      displayNo.value = String(res.data.portNo).padStart(5, '0')
-      // 先备好纸屑再切到定格页，避免纸屑晚一拍出现
-      makeConfetti()
-      phase.value = 'result'
+      // 自己抽出的也要记为「已看到」，否则下一轮轮询会把它当成新中奖再播一次
+      knownWinnerId = res.data.winnerId
+      showWinner(res.data)
       await loadStatus()
     } else if (res.code === 4001) {
       phase.value = 'empty'
     } else {
       phase.value = 'idle'
-      alert(res.msg || '抽奖失败')
+      await showTip(res.msg || '抽奖失败')
     }
   } catch (e) {
     stopRolling()
     phase.value = 'idle'
     // 超时/断网时后端可能已经落库并写入中奖记录，绝不能静默回到待抽状态：
     // 否则操作员以为没抽到，再按一次空格就会再抽一个，静默产生两条中奖记录。
-    alert('抽奖请求未收到响应，结果未知。请先刷新页面确认是否已产生中奖，再决定是否重抽。')
+    await showTip('抽奖请求未收到响应，结果未知。请先刷新页面确认是否已产生中奖，再决定是否重抽。')
     await loadStatus()
   }
 }
 
 async function doVoid() {
   if (!lastWinnerId) return
-  if (!confirm('确认作废该中奖记录？号码将回到池中。')) return
+  if (!(await showConfirm('确认作废该中奖记录？号码将回到池中。'))) return
   try {
     const res = await voidWinner(lastWinnerId)
     if (res.code === 200) {
@@ -321,9 +431,14 @@ async function doVoid() {
       phase.value = 'idle'
       await loadStatus()
     } else {
-      alert(res.msg || '作废失败')
+      await showTip(res.msg || '作废失败')
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    // 以前这里是空的 catch：超时/断网时画面原样不动，操作员以为已经作废，
+    // 实际记录还在，下一个奖池里也没有这个号。
+    await showTip('作废请求未收到响应，结果未知。请刷新大屏确认后再决定是否重试。')
+    await loadStatus()
+  }
 }
 
 async function setSession(code) {
@@ -332,8 +447,14 @@ async function setSession(code) {
     winner.value = null
     lastWinnerId = null
     phase.value = 'idle'
+    // 场次变了，强制下次拉全量状态
+    currentVersion = null
     await loadStatus()
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    // 以前同样是空 catch：点了没反应、场次高亮也不变，操作员会反复点
+    await showTip('切换场次失败，请检查网络后重试。当前场次未改变。')
+    await loadStatus()
+  }
 }
 
 function onKey(e) {

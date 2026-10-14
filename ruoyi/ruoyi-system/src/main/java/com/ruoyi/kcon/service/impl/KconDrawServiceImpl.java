@@ -152,7 +152,40 @@ public class KconDrawServiceImpl implements IKconDrawService
         data.put("totalDrawn", totalDrawn);
 
         // 赞助商（存系统参数 kcon.sponsors，逗号分隔；为空则不显示赞助商条）
-        data.put("sponsors", sponsors());
+        List<String> sponsorList = sponsors();
+        data.put("sponsors", sponsorList);
+
+        // 最近一条有效中奖记录：大屏据此显示「在管理端抽奖控制台抽出」的中奖者。
+        // 以前这个字段不存在，大屏只能靠 poolCount 推断状态，于是管理端抽了奖、
+        // 大屏却一直停在上一轮，而两边文案还写着「看到的是同一个抽奖池」。
+        KconWinner last = winnerMapper.selectLatestValidWinner();
+        if (last != null)
+        {
+            Map<String, Object> lw = new LinkedHashMap<>();
+            lw.put("winnerId", last.getId());
+            lw.put("portNo", last.getPortNo());
+            lw.put("name", last.getName());
+            lw.put("company", last.getCompany());
+            lw.put("tierName", last.getTierName());
+            lw.put("sessionCode", last.getSessionCode());
+            lw.put("winTime", last.getWinTime());
+            lw.put("operator", last.getOperator());
+            data.put("lastWinner", lw);
+        }
+
+        // 增量轮询的版本号：以上任何一项变化都会让它变。
+        // 大屏下次把它带回来，未变时后端只回一个极小响应、前端也跳过重渲染
+        //（投屏中整份重渲染会打断中奖动画）。
+        data.put("version", String.join("|",
+                sessionCode,
+                String.valueOf(data.get("checkedInToday")),
+                String.valueOf(data.get("poolCount")),
+                String.valueOf(data.get("winnerCount")),
+                String.valueOf(totalDrawn),
+                tier != null ? String.valueOf(tier.getId()) : "-",
+                tier != null ? String.valueOf(tier.getDrawnCount()) : "-",
+                last != null ? String.valueOf(last.getId()) : "-",
+                String.join(",", sponsorList)));
         return data;
     }
 

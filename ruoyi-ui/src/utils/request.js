@@ -12,6 +12,24 @@ let downloadLoadingInstance
 // 是否显示重新登录
 export let isRelogin = { show: false }
 
+// 同一类错误在窗口期内只弹一次。
+// 轮询类请求（看板 5s / 抽奖控制台 5s / 名单 10s）在后端不可用时会每轮弹一条红条，
+// duration 也是 5 秒，正好和下一轮接上，于是一条接一条把屏幕刷满，
+// 真正的信息反而看不见。各轮询页面另有常驻的「自动刷新失败」提示，
+// 所以这里静默掉重复项不会让人失去感知。
+const ERROR_TOAST_WINDOW = 15000
+let lastErrorKey = ''
+let lastErrorAt = 0
+function toastError(message) {
+  const now = Date.now()
+  if (message === lastErrorKey && now - lastErrorAt < ERROR_TOAST_WINDOW) {
+    return
+  }
+  lastErrorKey = message
+  lastErrorAt = now
+  Message({ message: message, type: 'error', duration: 5 * 1000 })
+}
+
 axios.defaults.headers['Content-Type'] = 'application/json;charset=utf-8'
 // 创建axios实例
 const service = axios.create({
@@ -119,7 +137,7 @@ service.interceptors.response.use(res => {
     } else if (message.includes("Request failed with status code")) {
       message = "系统接口" + message.slice(-3) + "异常"
     }
-    Message({ message: message, type: 'error', duration: 5 * 1000 })
+    toastError(message)
     return Promise.reject(error)
   }
 )

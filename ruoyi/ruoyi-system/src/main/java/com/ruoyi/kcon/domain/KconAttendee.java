@@ -81,6 +81,17 @@ public class KconAttendee extends BaseEntity
     /** 手机号掩码（返回前端用，不入库） */
     private String phoneMask;
 
+    /**
+     * 乐观锁标记（不入库）：读取时的 ifnull(update_time, create_time) 文本。
+     * 编辑提交时原样带回，服务端用它做条件更新——若期间已被他人改动，条件不成立、
+     * 更新 0 行，于是明确拒绝，避免后提交的人静默覆盖前一个人的修改。
+     * 用格式化文本而非 Date，是为了绕开 Date 序列化的时区与精度往返问题。
+     */
+    private String version;
+
+    public String getVersion() { return version; }
+    public void setVersion(String version) { this.version = version; }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
