@@ -42,6 +42,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where id = #{id}
     </select>
 
+    <!-- 同场次同名档位计数（修改时用 excludeId 排除自身） -->
+    <select id="countBySessionAndTier" resultType="int">
+        select count(*)
+          from kcon_prize
+         where session_code = #{sessionCode}
+           and tier_name = #{tierName}
+        <if test="excludeId != null">
+           and id != #{excludeId}
+        </if>
+    </select>
+
     <!-- 当前应抽档位：该场次中未抽满、draw_order 最小的一个 -->
     <select id="selectCurrentTier" parameterType="String" resultMap="KconPrizeResult">
         <include refid="selectPrizeVo"/>

@@ -1,0 +1,10 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - img "KCon 2026" [ref=e5]
+    - heading "现场自助签到" [level=1] [ref=e6]
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - paragraph [ref=e9]: 请输入报名时的手机号 或用手机号后四位快速签到
+      - textbox "手机号 / 后四位" [ref=e10]
+      - button "查 询" [disabled] [ref=e11]
+  - contentinfo [ref=e12]: KCon 2026 · 中关村展示中心

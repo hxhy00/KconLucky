@@ -417,6 +417,7 @@ public class KconDrawServiceImpl implements IKconDrawService
     @Override
     public int insertPrize(KconPrize prize)
     {
+        validatePrize(prize, null);
         return prizeMapper.insertPrize(prize);
     }
 
@@ -433,7 +434,41 @@ public class KconDrawServiceImpl implements IKconDrawService
         {
             throw new ServiceException("数量不能小于已抽取数量 " + exist.getDrawnCount());
         }
+        // 已抽过的档位不允许改场次：否则 drawn_count 会跨场次串味，
+        // 出现「上午场档位显示已抽满、下午场却统计不到」的对不上账
+        if (exist.getDrawnCount() != null && exist.getDrawnCount() > 0
+                && prize.getSessionCode() != null
+                && !prize.getSessionCode().equals(exist.getSessionCode()))
+        {
+            throw new ServiceException("该档位已抽取 " + exist.getDrawnCount() + " 次，不能修改所属场次");
+        }
+        validatePrize(prize, prize.getId());
         return prizeMapper.updatePrize(prize);
+    }
+
+    /**
+     * 奖品档位新增/修改的公共校验。
+     *
+     * 场次必须真实存在：否则会产生「永远不会被抽到」的幽灵档位
+     * （selectCurrentTier 只按当前场次取档）。
+     * 同场次奖项名不允许重复：重复档位会让大屏进度条出现永远抽不满的项。
+     */
+    private void validatePrize(KconPrize prize, Long excludeId)
+    {
+        if (prize == null || StringUtils.isEmpty(prize.getSessionCode()))
+        {
+            throw new ServiceException("场次不能为空");
+        }
+        if (sessionMapper.selectByCode(prize.getSessionCode()) == null)
+        {
+            throw new ServiceException("场次不存在：" + prize.getSessionCode());
+        }
+        if (StringUtils.isNotEmpty(prize.getTierName())
+                && prizeMapper.countBySessionAndTier(
+                        prize.getSessionCode(), prize.getTierName(), excludeId) > 0)
+        {
+            throw new ServiceException("该场次下已存在同名奖项：" + prize.getTierName());
+        }
     }
 
     @Override
