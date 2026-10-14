@@ -274,7 +274,8 @@ public class KconVerifyServiceImpl implements IKconVerifyService
      *
      * 写入时已掩码，这里再掩一次是防御性兜底：maskPhone 对 138****0001 这类
      * 已掩码值是幂等的（长度仍为 11，首 3 后 4 不变），不会把好数据改坏；
-     * 而历史明文行、以及工作人员直连数据库手工补录的行会被自动掩掉。
+     * 短输入（历史误存的尾号）会被固定掩码为 "***"；
+     * 历史明文行、以及工作人员直连数据库手工补录的行也会被自动掩掉。
      * 掩完把 inputPhone 置空，明文一律不出后端。
      */
     private void fillDisplay(KconVerifyLog item)

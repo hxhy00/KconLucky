@@ -36,13 +36,19 @@ public interface IKconCheckinService
     Map<String, Object> lookup(String keyword);
 
     /**
-     * 手机号掩码：138****0001
+     * 手机号掩码：138****0001；短输入（如误存的尾号）返回 "***"，null/空串原样返回
      */
     static String maskPhone(String phone)
     {
-        if (phone == null || phone.length() < 7)
+        // 短输入（如核验日志里误存的 4 位尾号）原样返回会明文落库（kcon_verify_log.input_phone），
+        // 一律固定掩码；null/空串仍原样返回，由上游判空保证。
+        if (phone == null || phone.isEmpty())
         {
             return phone;
+        }
+        if (phone.length() < 7)
+        {
+            return "***";
         }
         return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
