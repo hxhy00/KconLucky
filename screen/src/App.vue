@@ -320,14 +320,22 @@ let statusInflight = false
 // 是否成功取到过一次状态：用于区分「真的没号可抽」与「后端连不上」
 let statusLoaded = false
 
+// 不同来源调用 loadStatus 的代号，用于「只让最新那个请求写回状态」。
+// 没有这个令牌时：一次 force 强制刷新与一次在途的普通轮询并发返回，
+// 后返回的那个（可能是旧场次数据）会覆盖先返回的新数据，画面回退到旧场次。
+let statusReqSeq = 0
+
 async function loadStatus(force = false) {
   // force：切换场次等场景必须立即拿到新场次的快照。
   // 此时若正好有一个 3 秒轮询在飞行中，普通调用会被早退掉，
   // 而那次请求带回的还是旧场次的 version 与数据，会把它覆盖回 currentVersion。
   if (statusInflight && !force) return
   statusInflight = true
+  const seq = ++statusReqSeq
   try {
     const res = await fetchStatus(currentVersion)
+    // 已经有更新的请求发出去了 → 本次结果作废，防止旧响应覆盖新状态
+    if (seq !== statusReqSeq) return
     if (res.code === 200) {
       statusLoaded = true
       failStreak = 0
@@ -340,13 +348,20 @@ async function loadStatus(force = false) {
         status.value = d
         syncFromServer(d)
       }
+    } else if (res.code !== undefined) {
+      // 业务失败（不是网络异常）：以前这里什么都不做，画面停在旧数据上，
+      // 操作员看到的场次/奖池数全是过期的，却没有任何提示。
+      // 计入失败连击，连续业务失败同样亮离线遮罩。
+      failStreak += 1
+      if (failStreak >= 3 && res.code !== 4001) offline.value = true
     }
   } catch (e) {
     // 单次抖动不闪遮罩；连续失败才判定为断开，恢复后自动消失
     failStreak += 1
     if (failStreak >= 3) offline.value = true
   } finally {
-    statusInflight = false
+    // 只有最新那个请求才有资格复位标记，否则会把后来者的在途状态提前清掉
+    if (seq === statusReqSeq) statusInflight = false
   }
 }
 
@@ -533,11 +548,25 @@ async function doDraw() {
  * 作废某位中奖者。传 winner 表示从汇总页撤掉指定的那一位，
  * 不传则撤掉最近一位（空格/退格快捷键走这条）。
  */
+// 作废在途标记。
+// 作废用的是自定义弹窗（showConfirm），不是系统原生模态，键盘事件照样会打进来：
+// 按住退格不放会连开多个确认框，或在弹窗上回车确认的瞬间又触发一次，把同一位作废两次。
+let voiding = false
+
 async function doVoid(target) {
+  if (voiding) return
   const id = (target && target.winnerId) || lastWinnerId
   if (!id) return
   const who = target && target.name ? `「${target.name}」` : ''
-  if (!(await showConfirm(`确认作废${who}的中奖记录？号码将回到池中，可被再次抽中。`))) return
+  voiding = true
+  let ok = false
+  try {
+    ok = await showConfirm(`确认作废${who}的中奖记录？号码将回到池中，可被再次抽中。`)
+  } finally {
+    // 用户只要作出选择（确认或取消）就释放，避免取消后卡住后续作废
+    if (!ok) voiding = false
+  }
+  if (!ok) return
   try {
     const res = await voidWinner(id)
     if (res.code === 200) {
@@ -560,6 +589,8 @@ async function doVoid(target) {
     // 实际记录还在，下一个奖池里也没有这个号。
     await showTip('作废请求未收到响应，结果未知。请刷新大屏确认后再决定是否重试。')
     await loadStatus()
+  } finally {
+    voiding = false
   }
 }
 
@@ -583,6 +614,13 @@ async function setSession(code) {
 }
 
 function onKey(e) {
+  // 自定义弹窗（提示/确认）打开时，键盘事件照样会冒到 window：
+  // 不拦的话，操作员在「确认作废」框上按空格会去触发抽奖，
+  // 且确认框的确认动作本身也走键盘，等于绕过弹窗执行了被拦截的操作。
+  if (dialog.value.show) {
+    if (e.code === 'Space' || e.code === 'Backspace') e.preventDefault()
+    return
+  }
   if (e.code === 'Space') { e.preventDefault(); doDraw() }
   else if (e.code === 'Backspace') { e.preventDefault(); doVoid() }
   else if (e.key === '1') setSession('AM')
