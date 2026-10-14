@@ -37,7 +37,8 @@ ENV TZ=Asia/Shanghai
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/web/nginx.conf /etc/nginx/nginx.conf
 COPY docker/web/index.html /usr/share/nginx/html/index.html
-COPY docker/web/kcon-logo.png /usr/share/nginx/html/kcon-logo.png
+COPY docker/web/kcon-mark.png /usr/share/nginx/html/kcon-mark.png
+COPY docker/web/favicon.ico /usr/share/nginx/html/favicon.ico
 COPY --from=build-admin   /app/dist /usr/share/nginx/html/admin
 COPY --from=build-checkin /app/dist /usr/share/nginx/html/checkin
 COPY --from=build-screen  /app/dist /usr/share/nginx/html/screen

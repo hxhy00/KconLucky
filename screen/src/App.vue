@@ -3,7 +3,11 @@
     <!-- 顶部：场次 + 统计 -->
     <header class="flex items-center justify-between px-10 py-6">
       <div class="flex items-center gap-4">
-        <img :src="logo" class="h-9" alt="KCon 2026" />
+        <!-- 图形与文字分离：图形用透明 PNG（深色底不再出现白方块），文字用真实文本 -->
+        <div class="flex items-center gap-2">
+          <img :src="logo" class="h-10" alt="KCon" />
+          <span class="text-xl font-black tracking-wide text-slate-200">KCon 2026</span>
+        </div>
         <!-- 场次切换：点击即刻切换，当前场次高亮。
              原先只能按键盘 1/2，页面上毫无提示，操作员不易发现 -->
         <div v-if="sessions.length" class="flex items-center gap-2">
@@ -150,7 +154,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { fetchStatus, draw, voidWinner, switchSession } from './api'
-import logo from './assets/kcon-logo-dark.png'
+import logo from './assets/kcon-mark.png'
 
 const status = ref({})
 const phase = ref('idle')      // idle | rolling | result | empty

@@ -66,7 +66,7 @@
 import { getCodeImg } from "@/api/login"
 import Cookies from "js-cookie"
 import defaultSettings from '@/settings'
-import logoImg from "@/assets/logo/kcon-wide.png"
+import logoImg from "@/assets/logo/logo-mark.png"
 
 export default {
   name: "Login",
@@ -74,6 +74,9 @@ export default {
     return {
       title: "签到抽奖管理端",
       footerContent: defaultSettings.footerContent,
+      // 必须放进 data：Vue2 模板只能访问 data / computed 里的属性，
+      // 之前只 import 没暴露，导致登录页 logo 一直渲染成破图（alt 文字）
+      logoImg,
       codeUrl: "",
       loginForm: {
         // 不在源码里预填超管口令：打包产物任何人都能看到，
@@ -177,7 +180,8 @@ export default {
 }
 .login-logo {
   display: block;
-  width: 210px;
+  /* 新版是正方形透明 mark（原为 306×104 横版整图），宽度按方形调小 */
+  width: 76px;
   margin: 0 auto 14px auto;
 }
 

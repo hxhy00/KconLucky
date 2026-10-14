@@ -1,0 +1,16 @@
+- generic [ref=e2]:
+  - img "KCon" [ref=e3]
+  - heading "签到抽奖系统" [level=1] [ref=e4]
+  - link "管理端 现场看板 · 兑奖核验 · 名单 · 奖品 · 中奖记录" [ref=e5] [cursor=pointer]:
+    - /url: /admin/
+    - generic [ref=e6]: 管理端
+    - generic [ref=e7]: 现场看板 · 兑奖核验 · 名单 · 奖品 · 中奖记录
+  - link "抽奖大屏 投屏使用，按 F11 全屏；Space 抽奖" [ref=e8] [cursor=pointer]:
+    - /url: /screen/
+    - generic [ref=e9]: 抽奖大屏
+    - generic [ref=e10]: 投屏使用，按 F11 全屏；Space 抽奖
+  - link "观众签到 手机扫码入口（本机打开即模拟观众）" [ref=e11] [cursor=pointer]:
+    - /url: /sign
+    - generic [ref=e12]: 观众签到
+    - generic [ref=e13]: 手机扫码入口（本机打开即模拟观众）
+  - generic [ref=e14]: 二维码与正式入口以「管理端 → 现场看板」显示的地址为准。

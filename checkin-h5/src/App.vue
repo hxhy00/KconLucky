@@ -2,8 +2,12 @@
   <div class="min-h-full flex flex-col">
     <!-- 顶部标题 -->
     <header class="px-5 pt-6 pb-4 text-center">
-      <img :src="logo" class="h-8 mx-auto" alt="KCon 2026" />
-      <h1 class="text-xl font-semibold mt-2">现场自助签到</h1>
+      <!-- 图形与文字分离：图形用透明 PNG（深色底不再出现白方块），文字用真实文本 -->
+      <div class="flex items-center justify-center gap-2">
+        <img :src="logo" class="h-9" alt="KCon" />
+        <span class="text-lg font-bold tracking-wide">KCon 2026</span>
+      </div>
+      <h1 class="text-xl font-semibold mt-2.5">现场自助签到</h1>
     </header>
 
     <main class="flex-1 px-5 pb-8 flex flex-col justify-center">
@@ -179,7 +183,7 @@
 <script setup>
 import { ref } from 'vue'
 import { queryAttendee, submitCheckin, lookup } from './api'
-import logo from './assets/kcon-logo-dark.png'
+import logo from './assets/kcon-mark.png'
 
 const step = ref('input')        // input | candidates | confirm | success
 const keyword = ref('')
