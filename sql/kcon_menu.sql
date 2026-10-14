@@ -39,25 +39,47 @@ UPDATE `sys_user` SET `status` = '1', `update_by` = 'admin'
  WHERE `user_name` = 'ry';
 
 -- -------------------------------------------------------------
--- 一级菜单：平铺，不再套「KCon 现场」目录
---   现场高频：现场看板 → 兑奖核验 → 抽奖控制台
---   开场前：  参会名单 → 奖品设置
---   结束后：  中奖记录 → 兑奖日志
---   一次性：  数据管理（数据清场 + 数据迁移合并为一页两 tab）
+-- 菜单结构：6 个一级项，其中「日志」「设置」为目录（menu_type='M'）
+--   1 数据总览     — 现场高频：签到率与统计
+--   2 参会名单     — 开场前导入名单 · 打印签到表
+--   3 抽奖控制台   — 现场高频：场次切换与抽奖操作
+--   4 兑奖核验     — 现场高频：端口号+手机号核验发放
+--   5 日志（目录） — 结束后复盘
+--       5.1 中奖日志 / 5.2 核验日志
+--   6 设置（目录） — 一次性/低频
+--       6.1 奖品设置 / 6.2 数据管理
+--
+-- 目录型菜单（parent_id=0, type='M'）经后端 buildMenus 处理后：
+--   path -> /{path}，子菜单在其下挂载，最终 URL = /{目录path}/{子菜单path}
+--   （如 /log/winner、/setting/prize），因此目录 path 用短英文。
+--   这里 component 故意留空：本项目 SysMenuServiceImpl#getComponent 对
+--   「parent_id=0 且 type='M'」会兜底为 Layout，无需在 DB 里写 'Layout'
+--   （写了也照样生效，两条路径等价）。
+--
+-- 【菜单 ID 固定不变】仅调整 parent_id / order_num / menu_name。
+-- 这样 sys_role_menu 中已有的授权关系无需重建，权限点 perms 也保持稳定。
 -- -------------------------------------------------------------
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
 VALUES
-  (3001, '现场看板',   0, 1, 'dashboard', 'kcon/dashboard/index', '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'dashboard', 'admin', NOW(), '签到率与统计'),
-  (3005, '兑奖核验',   0, 2, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'search',    'admin', NOW(), '端口号+手机号核验发放'),
+  -- 一级菜单（4 个平铺页面）
+  (3001, '数据总览',   0, 1, 'dashboard', 'kcon/dashboard/index', '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'dashboard', 'admin', NOW(), '签到率与统计'),
+  (3002, '参会名单',   0, 2, 'attendee',  'kcon/attendee/index',  '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'user',      'admin', NOW(), '名单管理与导入'),
   (3007, '抽奖控制台', 0, 3, 'draw',      'kcon/draw/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:draw:query',    'guide',     'admin', NOW(), '场次切换与抽奖操作（FR-16/19/20）'),
-  (3002, '参会名单',   0, 4, 'attendee',  'kcon/attendee/index',  '', '', 1, 0, 'C', '0', '0', 'kcon:attendee:list', 'user',      'admin', NOW(), '名单管理与导入'),
-  (3003, '奖品设置',   0, 5, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',    'star',      'admin', NOW(), '场次奖项档位'),
-  (3004, '中奖记录',   0, 6, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',   'money',     'admin', NOW(), '中奖名单与状态'),
-  (3008, '兑奖日志',   0, 7, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'list',      'admin', NOW(), '核验操作追溯'),
-  (3006, '数据管理',   0, 8, 'data',      'kcon/data/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',    'tool',      'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
+  (3005, '兑奖核验',   0, 4, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'search',    'admin', NOW(), '端口号+手机号核验发放'),
+  -- 一级目录：日志
+  (3100, '日志',       0, 5, 'log',       NULL,                   '', '', 1, 0, 'M', '0', '0', '',                   'log',       'admin', NOW(), '日志目录'),
+  -- 一级目录：设置
+  (3200, '设置',       0, 6, 'setting',   NULL,                   '', '', 1, 0, 'M', '0', '0', '',                   'system',    'admin', NOW(), '设置目录'),
+  -- 日志子菜单
+  (3004, '中奖日志',   3100, 1, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',  'money', 'admin', NOW(), '中奖名单与状态'),
+  (3008, '核验日志',   3100, 2, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query', 'list',  'admin', NOW(), '核验操作追溯'),
+  -- 设置子菜单
+  (3003, '奖品设置',   3200, 1, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',   'star',  'admin', NOW(), '场次奖项档位'),
+  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:data:reset',   'tool',  'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
 
 -- -------------------------------------------------------------
 -- 按钮权限
+-- 注意：按钮权限的 parent_id 仍指向「业务页面菜单 ID」，与页面挂在哪一层无关。
 -- -------------------------------------------------------------
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
 VALUES
