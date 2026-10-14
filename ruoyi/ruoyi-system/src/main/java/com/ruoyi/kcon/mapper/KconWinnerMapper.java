@@ -29,6 +29,12 @@ public interface KconWinnerMapper
     KconWinner selectLatestValidWinner();
 
     /**
+     * 指定场次最近一条有效（未作废）中奖记录。
+     * 「撤回最近一档」用它定位该场次最后一次抽出的整批。
+     */
+    KconWinner selectLatestValidWinnerBySession(@Param("sessionCode") String sessionCode);
+
+    /**
      * 同一批抽出的中奖记录（同一档位 + 同一中奖时间）。
      * 一次点击会抽出整档的人，大屏据此还原整批并逐个揭晓。
      *

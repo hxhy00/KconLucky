@@ -82,7 +82,7 @@
                    @click="handleDraw">抽一档</el-button>
         <el-button type="danger" size="medium" icon="el-icon-close"
                    :loading="voiding" :disabled="!lastWinner" v-hasPermi="['kcon:draw:operate']"
-                   @click="handleVoid">撤回最近一位</el-button>
+                   @click="handleVoid">撤回最近一档</el-button>
       </div>
     </el-card>
 
@@ -99,7 +99,7 @@
               <el-tag size="mini" type="warning">{{ lastWinner.tierName }}</el-tag>
               <span class="text-muted win-time">{{ lastWinner.winTime }}</span>
             </p>
-            <div class="text-muted void-hint">作废后端口号回到抽奖池，可被再次抽中。</div>
+            <div class="text-muted void-hint">点「撤回最近一档」会把这一档整批撤回，端口号全部回池。</div>
           </template>
           <div v-else class="empty-tip">暂无中奖记录。抽出的号码会实时显示在这里。</div>
         </el-card>
@@ -184,7 +184,7 @@
 </template>
 
 <script>
-import { getDrawStatus, doDraw, voidDrawWinner, switchDrawSession, getDrawSetting, saveDrawSetting } from "@/api/kcon/draw"
+import { getDrawStatus, doDraw, voidDrawBatch, switchDrawSession, getDrawSetting, saveDrawSetting } from "@/api/kcon/draw"
 
 // 轮询间隔：与「现场看板」一致，签到台/控制台挂在副屏上时数字自己走
 const POLL_INTERVAL = 5000
@@ -376,18 +376,26 @@ export default {
     handleVoid() {
       const w = this.lastWinner
       if (!w) {
-        this.$modal.msgWarning("当前场次没有可作废的中奖记录")
+        this.$modal.msgWarning("当前场次没有可撤回的中奖记录")
         return
       }
-      this.$modal.confirm(`确认作废「${w.name}」（端口号 ${w.portNo}，${w.tierName}）的中奖记录？作废后该端口号回到抽奖池，可被再次抽中。`)
-        .then(() => this.submitVoid(w.id))
+      // 一次点击抽出的是整档（可能多人），撤回也按整档：把这一档最后一次抽出的全部人作废。
+      // 若该档已有人领奖，后端会拒绝整档撤回并报错，避免静默漏撤。
+      const tier = w.tierName || "该档位"
+      this.$modal.confirm(
+        `确认撤回「${tier}」最近抽出的整档中奖记录？撤回后这些端口号全部回到抽奖池，可被再次抽中。`
+      )
+        .then(() => this.submitVoid())
         .catch(() => {})
     },
-    submitVoid(winnerId) {
+    submitVoid() {
       this.voiding = true
-      return voidDrawWinner({ winnerId: winnerId }).then(res => {
-        this.applyStatus(res.data, ++this.seq)
-        this.$modal.msgSuccess("作废成功，端口号已回池")
+      // 按当前场次撤回最近一档；sessionCode 为空时后端按全场最近一档处理
+      return voidDrawBatch({ sessionCode: this.status.sessionCode }).then(res => {
+        const data = res.data || {}
+        this.applyStatus(data, ++this.seq)
+        const n = data.voidedCount
+        this.$modal.msgSuccess(n ? `已撤回 ${n} 人，端口号已回池` : "撤回成功，端口号已回池")
       }).catch(() => {
         this.fetchStatus()
       }).finally(() => {

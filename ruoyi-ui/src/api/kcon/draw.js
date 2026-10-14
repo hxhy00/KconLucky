@@ -16,6 +16,12 @@ export function voidDrawWinner(data) {
   return request({ url: '/admin/draw/void', method: 'post', data })
 }
 
+// 撤回最近一档 { sessionCode }：把该场次最后一次抽出的整批全部作废，号码回池
+// 返回：刷新后的抽奖池状态 + voidedCount（实际撤回人数）
+export function voidDrawBatch(data) {
+  return request({ url: '/admin/draw/void-batch', method: 'post', data })
+}
+
 // 切换场次 { sessionCode }
 export function switchDrawSession(data) {
   return request({ url: '/admin/draw/session', method: 'post', data })

@@ -483,6 +483,72 @@ public class KconDrawServiceImpl implements IKconDrawService
     }
 
     @Override
+    public int voidLastBatch(String sessionCode, String operator)
+    {
+        // 与 draw() 同样的「锁覆盖事务」模式：整批要么全撤、要么全不撤，
+        // 且锁释放前事务已提交，避免并发抽奖读到不一致的档位已抽数。
+        synchronized (drawLock)
+        {
+            return transactionTemplate.execute(status -> doVoidLastBatch(sessionCode, operator));
+        }
+    }
+
+    /**
+     * 撤回最近一档主体。由 {@link #voidLastBatch} 在抽奖锁内通过事务模板调用。
+     */
+    private int doVoidLastBatch(String sessionCode, String operator)
+    {
+        // 1. 定位该场次最后一次抽出的「锚点」记录
+        KconWinner last = winnerMapper.selectLatestValidWinnerBySession(sessionCode);
+        if (last == null || last.getPrizeId() == null || last.getWinTime() == null)
+        {
+            return 0;
+        }
+
+        // 2. 还原整批：同一档位 + 同一中奖时间就是这一次点击抽出的全部人
+        List<KconWinner> batch = winnerMapper.selectBatch(last.getPrizeId(), format(last.getWinTime()));
+        if (batch.isEmpty())
+        {
+            return 0;
+        }
+
+        // 3. 逐条作废。已领取的不能撤（奖品已发出去），遇到就中断并明确报错，
+        //    让操作员知道这一档有人已领奖、不能整档撤回，避免静默漏撤。
+        int voided = 0;
+        for (KconWinner w : batch)
+        {
+            if (w.getStatus() != null && w.getStatus() == KconWinner.STATUS_RECEIVED)
+            {
+                throw new ServiceException(
+                        "该档已有奖品被领取（端口号 " + w.getPortNo() + "），不能整档撤回");
+            }
+            if (w.getStatus() != null && w.getStatus() == KconWinner.STATUS_VOID)
+            {
+                // 已是作废态（理论上 selectBatch 已过滤，防御性跳过）
+                continue;
+            }
+            KconWinner upd = new KconWinner();
+            upd.setId(w.getId());
+            upd.setStatus(KconWinner.STATUS_VOID);
+            upd.setOperator(operator);
+            int rows = winnerMapper.updateStatus(upd);
+            if (rows != 1)
+            {
+                throw new ServiceException("撤回失败，请刷新后重试");
+            }
+            if (w.getPrizeId() != null)
+            {
+                prizeMapper.decrementDrawnCount(w.getPrizeId());
+            }
+            voided++;
+        }
+
+        log.info("撤回最近一档 sessionCode={} tierName={} 作废 {} 人",
+                sessionCode, last.getTierName(), voided);
+        return voided;
+    }
+
+    @Override
     public void receive(Long winnerId, String operator)
     {
         KconWinner winner = winnerMapper.selectWinnerById(winnerId);

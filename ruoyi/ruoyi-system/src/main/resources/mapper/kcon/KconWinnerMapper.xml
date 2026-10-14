@@ -61,6 +61,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
+    <!-- 指定场次最近一条有效中奖记录：「撤回最近一档」据此定位该场次最后一次抽出的整批。
+         sessionCode 为空时退回全场最近一条，避免控制台未选场次时空指针 -->
+    <select id="selectLatestValidWinnerBySession" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where status != 2
+        <if test="sessionCode != null and sessionCode != ''">
+            and session_code = #{sessionCode}
+        </if>
+        order by id desc
+        limit 1
+    </select>
+
     <!-- 同一批抽出的记录：同一档位 + 同一中奖时间。
          整批由服务端写入同一个 win_time，因此这里能精确还原「这一档一次抽出的全部人」。
          不能用 now() 让库自己填——同一事务内多条 INSERT 可能跨秒，批次会对不上。 -->

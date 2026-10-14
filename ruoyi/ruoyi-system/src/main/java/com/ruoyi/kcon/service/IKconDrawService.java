@@ -38,6 +38,15 @@ public interface IKconDrawService
     void voidWinner(Long winnerId, String operator);
 
     /**
+     * 撤回最近一档：把指定场次最后一次抽出的整批全部作废，号码回池、档位已抽数回退。
+     * 整批在同一事务内完成，要么全撤、要么全不撤。
+     *
+     * @param sessionCode 场次编码；为空时按全场最近一档处理
+     * @return 实际作废的人数（0 表示该场次没有可撤回的记录）
+     */
+    int voidLastBatch(String sessionCode, String operator);
+
+    /**
      * 计算抽奖池端口号（已签到 ∩ 未中奖；下午场再剔除上午场已中奖）
      */
     List<Integer> calcPool(String sessionCode);

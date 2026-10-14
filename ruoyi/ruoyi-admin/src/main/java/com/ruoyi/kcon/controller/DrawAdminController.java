@@ -108,6 +108,26 @@ public class DrawAdminController extends BaseController
         return success(buildStatus());
     }
 
+    /** 撤回最近一档 { "sessionCode": "PM" }：把该场次最后一次抽出的整批全部作废，号码回池 */
+    @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
+    @Log(title = "抽奖控制台-撤回最近一档", businessType = BusinessType.OTHER)
+    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
+    @RepeatSubmit
+    @PostMapping("/void-batch")
+    public AjaxResult doVoidBatch(@RequestBody Map<String, Object> body)
+    {
+        String sessionCode = body == null ? null : (String) body.get("sessionCode");
+        int voided = drawService.voidLastBatch(sessionCode, getUsername());
+        if (voided == 0)
+        {
+            return error("当前场次没有可撤回的中奖记录");
+        }
+        // 顺带回一份刷新后的状态，控制台一次请求完成「撤回 + 更新计数」
+        Map<String, Object> result = buildStatus();
+        result.put("voidedCount", voided);
+        return success(result);
+    }
+
     /** 切换场次 { "sessionCode": "PM" } */
     @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
     @Log(title = "抽奖控制台-切换场次", businessType = BusinessType.OTHER)
