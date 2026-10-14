@@ -40,6 +40,31 @@
         </button>
 
         <p v-if="error" class="mt-4 text-center text-rose-400 text-sm">{{ error }}</p>
+
+        <!-- 找回端口号：放在签到页，而不是「签到完成页」——
+             截图丢了的人根本走不到完成页，入口放那儿等于不存在。
+             复用上面同一个输入框，走只读的 /app/checkin/lookup，不会产生新签到记录。 -->
+        <div class="mt-6 pt-5 border-t border-white/5">
+          <button
+            class="w-full h-12 rounded-xl border border-slate-700 text-slate-300 text-sm
+                   active:scale-[.99] transition disabled:opacity-40"
+            :disabled="!keyword || loading"
+            @click="doLookup"
+          >
+            {{ loading ? '查询中...' : '截图丢了？找回我的端口号' }}
+          </button>
+          <p class="mt-2 text-center text-slate-500 text-xs">
+            已签到过的，输入手机号或后四位也能查回
+          </p>
+
+          <!-- 找回结果 -->
+          <div v-if="lookupResult" class="mt-4 p-4 rounded-xl bg-brand/10 border border-brand/30 text-center">
+            <div class="text-brand text-xs tracking-widest">你的端口号</div>
+            <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
+            <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
+          </div>
+          <p v-if="lookupError" class="mt-3 text-center text-rose-400 text-sm">{{ lookupError }}</p>
+        </div>
       </section>
 
       <!-- P3 候选选择 -->
@@ -132,45 +157,6 @@
         </div>
 
         <p class="mt-4 text-slate-500 text-xs">签到时间：{{ result.checkinTime }}</p>
-
-        <!-- 需求 P5：截图丢了可凭手机号找回原端口号 -->
-        <div class="mt-5">
-          <button
-            class="w-full py-2.5 rounded-xl border border-slate-600 text-slate-300 text-sm
-                   active:scale-[.99] transition"
-            @click="lookupOpen = !lookupOpen"
-          >
-            {{ lookupOpen ? '收起' : '截图丢了？找回我的端口号' }}
-          </button>
-
-          <div v-if="lookupOpen" class="mt-3">
-            <input
-              v-model="lookupPhone"
-              type="tel"
-              inputmode="numeric"
-              maxlength="11"
-              placeholder="签到时填过的手机号"
-              class="w-full h-11 px-4 rounded-xl bg-slate-800/80 border border-slate-700
-                     text-center text-base tracking-widest outline-none
-                     focus:border-brand focus:ring-2 focus:ring-brand/30 transition"
-            />
-            <button
-              class="w-full h-11 mt-2 rounded-xl bg-brand text-slate-900 font-bold
-                     active:scale-[.99] transition disabled:opacity-40"
-              :disabled="!lookupPhone || loading"
-              @click="doLookup"
-            >
-              {{ loading ? '查询中...' : '查 回' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="lookupResult" class="mt-3 p-4 rounded-xl bg-brand/10 border border-brand/30 text-center">
-          <div class="text-brand text-xs tracking-widest">你的端口号</div>
-          <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
-          <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
-        </div>
-        <p v-if="lookupError" class="mt-3 text-center text-rose-400 text-sm">{{ lookupError }}</p>
       </section>
     </main>
 
@@ -181,7 +167,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { queryAttendee, submitCheckin, lookup } from './api'
 import logo from './assets/kcon-mark.png'
 
@@ -192,10 +178,14 @@ const person = ref(null)
 const result = ref(null)
 const lookupResult = ref(null)
 const lookupError = ref('')
-const lookupOpen = ref(false)
-const lookupPhone = ref('')
 const loading = ref(false)
 const error = ref('')
+
+// 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
+watch(keyword, () => {
+  lookupResult.value = null
+  lookupError.value = ''
+})
 
 function attendText(n) {
   if (!n) return '—'
@@ -209,12 +199,13 @@ function reset() {
   error.value = ''
 }
 
-// 找回端口号（需求 P5）：截图丢了、或只记得后四位且重号时，
-// 用签到时填过的手机号回查原端口号
+// 找回端口号：截图丢了的人还在签到台时，直接用输入框里的手机号/后四位回查原端口号。
+// 走只读的 /app/checkin/lookup——不写签到记录，重复点击也安全。
 async function doLookup() {
+  error.value = ''
   lookupError.value = ''
   lookupResult.value = null
-  const kw = lookupPhone.value.trim()
+  const kw = keyword.value.trim()
   if (!kw) return
   loading.value = true
   try {
@@ -238,6 +229,8 @@ async function doLookup() {
 
 async function doQuery() {
   error.value = ''
+  lookupResult.value = null
+  lookupError.value = ''
   const kw = keyword.value.trim()
   if (!kw) return
   loading.value = true
