@@ -44,6 +44,12 @@ public interface KconWinnerMapper
     List<KconWinner> selectBatch(@Param("prizeId") Long prizeId, @Param("winTime") String winTime);
 
     /**
+     * 某档位全部有效（未作废）中奖记录，按中奖时间升序（先抽的在前）。
+     * 控制台「中奖记录（按场次 × 档位）」分组展示用。
+     */
+    List<KconWinner> selectValidByPrize(@Param("prizeId") Long prizeId);
+
+    /**
      * winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
      * 大屏作废接口据此把可作废范围限制在「本次抽出的这一批」内。
      */

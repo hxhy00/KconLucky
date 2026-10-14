@@ -72,6 +72,16 @@ public interface IKconDrawService
     KconWinner selectWinnerById(Long id);
 
     /**
+     * 全部有效中奖记录，按场次 × 档位分组。
+     * 每个已配置的场次都会出现（含没配档位的场次，其 tiers 为空数组）；
+     * 档位以该场次全部档位为骨架（含从未抽过的档位，winners 为空数组），
+     * 按 draw_order 升序（与抽取顺序一致：三等 → 二等 → 一等），
+     * 只统计未作废（status != 2）的记录。
+     * 控制台「奖项进度与中奖记录」横栏展示用。
+     */
+    List<Map<String, Object>> winnerGroups();
+
+    /**
      * 标记已领取
      */
     void receive(Long winnerId, String operator);

@@ -699,4 +699,70 @@ public class KconDrawServiceImpl implements IKconDrawService
             default: return "";
         }
     }
+
+    /**
+     * 每个场次的完整档位配置 + 该档中奖人，供控制台「奖项进度与中奖记录」按场次横栏展示。
+     *
+     * 关键点：**没抽过的档位也要返回**（winners 为空数组）。
+     * 控制台那张表要回答「没抽的有多少 / 抽了多少 / 抽中的是谁」，
+     * 若只返回有中奖记录的档位，未开始的档位就会从表里消失，操作员反而看不到剩余量。
+     * 因此这里以 selectPrizeList（该场次全部档位，draw_order 升序）为骨架，
+     * 每个档位再补一次中奖人查询。
+     *
+     * 查询次数 = 场次数 × 档位数（现场 2 × 3 = 6 条复合索引小查询），
+     * 控制台 5 秒轮询一次，量级可忽略；不做大 join 是为了保持 mapper 简单可测。
+     */
+    @Override
+    public List<Map<String, Object>> winnerGroups()
+    {
+        List<KconSession> sessions = sessionMapper.selectSessionList();
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (KconSession s : sessions)
+        {
+            KconPrize tierQuery = new KconPrize();
+            tierQuery.setSessionCode(s.getCode());
+            List<KconPrize> prizeList = prizeMapper.selectPrizeList(tierQuery);
+            if (prizeList == null)
+            {
+                prizeList = new ArrayList<>();
+            }
+            // 该场次没配档位时也要返回（tiers 为空数组），不能 continue 跳过：
+            // 跳过后前端 sessionPanels 里就没有这个场次，控制台会把「配了场次但没配奖项」
+            // 误判成「一个场次都没配」，提示语和 tab 都对不上，操作员找不到问题在哪
+
+            List<Map<String, Object>> tierViews = new ArrayList<>();
+            for (KconPrize p : prizeList)
+            {
+                List<KconWinner> ws = winnerMapper.selectValidByPrize(p.getId());
+                List<Map<String, Object>> winnerViews = new ArrayList<>();
+                if (ws != null)
+                {
+                    for (KconWinner w : ws)
+                    {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("winnerId", w.getId());
+                        m.put("portNo", w.getPortNo());
+                        m.put("name", w.getName());
+                        m.put("company", w.getCompany());
+                        m.put("statusText", statusText(w.getStatus()));
+                        m.put("winTime", format(w.getWinTime()));
+                        winnerViews.add(m);
+                    }
+                }
+                Map<String, Object> t = new LinkedHashMap<>();
+                t.put("tierId", p.getId());
+                t.put("tierName", p.getTierName());
+                t.put("quantity", p.getQuantity());
+                t.put("drawnCount", p.getDrawnCount());
+                t.put("winners", winnerViews);
+                tierViews.add(t);
+            }
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("sessionCode", s.getCode());
+            g.put("sessionName", s.getName());
+            g.put("tiers", tierViews);
+            groups.add(g);
+        }
+        return groups;
+    }
 }

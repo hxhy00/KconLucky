@@ -84,6 +84,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by id
     </select>
 
+    <!-- 某档位全部有效（未作废）中奖记录：控制台按场次 × 档位分组展示用。
+         同一档位可能分多批抽满，按中奖时间升序列出 -->
+    <select id="selectValidByPrize" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where prize_id = #{prizeId}
+          and status != 2
+        order by win_time asc, id asc
+    </select>
+
     <!-- winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
          大屏免登录作废接口据此把可作废范围限制在「本次抽出的这一批」内：
          汇总页要能单独撤掉某个人，但仍不该动得了更早的历史记录。 -->

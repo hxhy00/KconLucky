@@ -86,37 +86,33 @@
       </div>
     </el-card>
 
-    <!-- 上一次中奖 + 各档位奖池进度 -->
-    <el-row :gutter="20" style="margin-top: 20px;">
-      <el-col :span="10">
-        <el-card shadow="never" class="last-winner-card">
-          <div slot="header"><span>最近一位中奖</span></div>
-          <template v-if="lastWinner">
-            <div class="winner-port">{{ lastWinner.portNo }}</div>
-            <div class="winner-name">{{ lastWinner.name }}</div>
-            <p class="winner-meta">{{ lastWinner.company || '—' }}</p>
-            <p class="winner-meta">
-              <el-tag size="mini" type="warning">{{ lastWinner.tierName }}</el-tag>
-              <span class="text-muted win-time">{{ lastWinner.winTime }}</span>
-            </p>
-            <div class="text-muted void-hint">点「撤回最近一档」会把这一档整批撤回，端口号全部回池。</div>
-          </template>
-          <div v-else class="empty-tip">暂无中奖记录。抽出的号码会实时显示在这里。</div>
-        </el-card>
-      </el-col>
+    <!-- 奖项进度 + 中奖记录：合并成一张卡片，用横栏切换场次。
+         两表原本分开，操作员核对「这一档还剩几个没抽、已经抽中的是谁」要左右对看；
+         合并后一行一档，进度与中奖人同屏，未抽/已抽/抽中谁一眼看清 -->
+    <el-card shadow="never" style="margin-top: 20px;">
+      <div slot="header">
+        <span>奖项进度与中奖记录</span>
+        <span class="text-muted header-hint">每一行是一个档位：左侧看进度，右侧看中奖人</span>
+      </div>
 
-      <el-col :span="14">
-        <el-card shadow="never">
-          <div slot="header"><span>各档位奖池进度</span></div>
-          <el-table :data="tiers" size="mini">
-            <div slot="empty" class="empty-tip">
-              当前场次未配置奖项档位，请先到「奖品设置」添加后再抽奖。
-            </div>
-            <el-table-column label="奖项" prop="tierName" min-width="110" />
-            <el-table-column label="已抽 / 总量" width="110" align="center">
+      <el-tabs v-if="sessionPanels.length" v-model="activePanel" type="card" @tab-click="handlePanelClick">
+        <el-tab-pane v-for="p in sessionPanels" :key="p.sessionCode"
+                     :name="p.sessionCode"
+                     :label="p.sessionName + '（已中奖 ' + p.totalWinners + ' 人）'">
+          <el-alert v-if="!p.isCurrent" type="info" :closable="false" show-icon
+                    :title="'这是' + p.sessionName + '的记录；抽奖操作只作用于当前场次「' + (sessionName || '未设置') + '」'"
+                    style="margin-bottom: 12px;" />
+
+          <el-table :data="p.tiers" size="mini" row-key="tierId">
+            <template slot="empty">
+              <div class="empty-tip">{{ p.sessionName }}未配置奖项档位，请先到「奖品设置」添加。</div>
+            </template>
+
+            <el-table-column label="奖项" prop="tierName" width="100" />
+            <el-table-column label="已抽 / 总量" width="100" align="center">
               <template slot-scope="scope">{{ rowDrawn(scope.row) }} / {{ rowTotal(scope.row) }}</template>
             </el-table-column>
-            <el-table-column label="剩余" width="80" align="center">
+            <el-table-column label="剩余" width="70" align="center">
               <template slot-scope="scope">{{ rowRemain(scope.row) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="90" align="center">
@@ -124,15 +120,35 @@
                 <el-tag size="mini" :type="rowStatusType(scope.row)">{{ rowStatusText(scope.row) }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="进度" min-width="160">
+            <el-table-column label="进度" width="160">
               <template slot-scope="scope">
                 <el-progress :percentage="rowPercent(scope.row)" :stroke-width="12" />
               </template>
             </el-table-column>
+
+            <!-- 中奖人：直接铺在这一档的行里，避免再单开一张表让操作员左右对看 -->
+            <el-table-column label="中奖人（端口号 / 姓名 / 公司）" min-width="360">
+              <template slot-scope="scope">
+                <div v-if="scope.row.winners && scope.row.winners.length" class="winner-chips">
+                  <span v-for="w in scope.row.winners" :key="w.winnerId" class="winner-chip">
+                    <b class="chip-port">{{ w.portNo }}</b>
+                    <span class="chip-name">{{ w.name }}</span>
+                    <span class="chip-company">{{ w.company || '—' }}</span>
+                    <el-tag v-if="w.statusText === '已领取'" size="mini" type="success">已领取</el-tag>
+                  </span>
+                </div>
+                <span v-else class="text-muted">尚未抽出</span>
+              </template>
+            </el-table-column>
           </el-table>
-        </el-card>
-      </el-col>
-    </el-row>
+        </el-tab-pane>
+      </el-tabs>
+      <!-- 走到这里说明 sessionPanels 为空。每个已配置场次都会进 winnerGroups（含没配档位的），
+           所以此态只可能是「一个场次都没配」，档位缺失由各 tab 内表格的 slot="empty" 提示 -->
+      <div v-else class="empty-tip">未配置场次，请先到「场次设置」添加。</div>
+
+      <div class="text-muted void-hint">点「撤回最近一档」会把当前场次最近抽出的整档撤回，端口号全部回池。</div>
+    </el-card>
 
     <!-- 大屏设置：赞助商名称等展示内容，运营可直接改，不用改代码发版 -->
     <el-card shadow="never" style="margin-top: 20px;">
@@ -196,7 +212,8 @@ export default {
       initLoading: true,
       loadError: "",
       // /admin/draw/status 返回体：sessionCode / sessionName / checkedInToday /
-      // poolCount / winnerCount / sessions / currentTier / tiers / lastWinner
+      // poolCount / winnerCount / sessions / currentTier / tiers / lastWinner / winnerGroups
+      // （tiers 只含当前场次、供「当前应抽档位」用；横栏表格统一走 winnerGroups）
       status: {},
       drawing: false,
       voiding: false,
@@ -211,15 +228,17 @@ export default {
       savingSetting: false,
       // 本次抽出的整批（一次点击会抽出整档的人，如三等奖一次出 3 位）
       lastBatch: [],
-      lastBatchTier: ""
+      lastBatchTier: "",
+      // 奖项进度与中奖记录的横栏选中场次：默认跟随当前抽奖场次，
+      // 操作员手动切到别的场次后不再被轮询强行拽回（watch 里只做一次跟随）
+      activePanel: "",
+      // 是否已把 activePanel 对齐到「当前场次」一次；手动切换后置 true 不再跟随
+      panelTouched: false
     }
   },
   computed: {
     sessions() {
       return this.status.sessions || []
-    },
-    tiers() {
-      return this.status.tiers || []
     },
     currentTier() {
       return this.status.currentTier || null
@@ -231,6 +250,34 @@ export default {
     },
     lastWinner() {
       return this.status.lastWinner || null
+    },
+    /** 全部有效中奖，按场次 × 档位分组（后端已按 draw_order 排好：三等 → 二等 → 一等） */
+    winnerGroups() {
+      return this.status.winnerGroups || []
+    },
+    /**
+     * 按场次合并「奖项进度」与「中奖记录」，供横栏切换。
+     *
+     * 数据源就是后端 winnerGroups：它已按 draw_order 升序返回每个场次的**全部档位**
+     * （含没抽过的档位，winners 为空数组）以及各自的 quantity / drawnCount，
+     * 因此前端不再需要从 status.tiers 拼凑或反推总量——那份只含当前场次，无法回答
+     * 「另一场还剩多少没抽」。档位行原样透传，只补一个 isCurrent 供模板区分当前场次。
+     */
+    sessionPanels() {
+      const currentCode = this.status.sessionCode
+      return this.winnerGroups.map(g => ({
+        sessionCode: g.sessionCode,
+        sessionName: g.sessionName,
+        isCurrent: g.sessionCode === currentCode,
+        totalWinners: (g.tiers || []).reduce((n, t) => n + (t.winners ? t.winners.length : 0), 0),
+        tiers: (g.tiers || []).map(t => ({
+          id: t.tierId,
+          tierName: t.tierName,
+          quantity: t.quantity || 0,
+          drawnCount: t.drawnCount || 0,
+          winners: t.winners || []
+        }))
+      }))
     },
     sessionName() {
       return this.status.sessionName || ""
@@ -257,6 +304,15 @@ export default {
     },
     drawDisabled() {
       return this.poolEmpty || this.tierAllDrawn || this.operating
+    }
+  },
+  watch: {
+    // 拿到状态后把横栏对齐到当前场次；操作员手动点过 tab 后不再打扰
+    // （element-ui 程序化改 v-model 不派发 tab-click，因此不会污染 panelTouched）
+    sessionPanels(panels) {
+      if (this.panelTouched || !panels.length) return
+      const current = panels.find(p => p.isCurrent) || panels[0]
+      this.setActivePanel(current.sessionCode)
     }
   },
   created() {
@@ -321,6 +377,18 @@ export default {
         this.appliedSeq = seq
       }
       this.status = data
+    },
+    // 切换横栏的唯一入口（自动跟随 / 切场次后同步都走这里）。
+    // 集中一处赋值便于保证 activePanel 一定指向真实存在的 tab
+    setActivePanel(code) {
+      if (!code || this.activePanel === code) return
+      this.activePanel = code
+    },
+    // 操作员手动切了横栏：标记后不再被轮询自动跟随到当前场次，
+    // 否则 5 秒一次的刷新会把他正在看的历史场次拽回去。
+    // （程序化改 activePanel 不会触发 tab-click，故这里只会收到真实点击）
+    handlePanelClick() {
+      this.panelTouched = true
     },
     // ---------------- 操作 ----------------
     handleDraw() {
@@ -414,6 +482,13 @@ export default {
       this.switching = true
       return switchDrawSession({ sessionCode: code }).then(res => {
         this.applyStatus(res.data, ++this.seq)
+        // 切场次是明确的操作意图，横栏同步跟过去，让操作员看到的就是刚切到的场次。
+        // 必须确认该场次真的进了 panels（场次可能刚被删、或后端返回的 sessionCode 与请求不一致），
+        // 否则 v-model 指向一个不存在的 tab，界面会变成所有 tab 都不选中、内容空白
+        this.panelTouched = false
+        const target = this.sessionPanels.find(p => p.sessionCode === this.status.sessionCode)
+          || this.sessionPanels[0]
+        if (target) this.setActivePanel(target.sessionCode)
         this.$modal.msgSuccess("已切换到「" + this.sessionName + "」")
       }).catch(() => {
         this.fetchStatus()
@@ -502,30 +577,35 @@ export default {
   margin-left: 12px;
 }
 
-.last-winner-card {
-  min-height: 260px;
+.header-hint {
+  margin-left: 12px;
+  font-size: 12px;
 }
-.winner-port {
-  font-size: 40px;
-  font-weight: 700;
-  color: #d4342a;
-  line-height: 1.2;
+
+/* 中奖人挂在档位行内：一行多人时自动换行，每人不换行避免姓名被拦腰截断 */
+.winner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
-.winner-name {
-  font-size: 18px;
-  font-weight: 600;
-  margin-top: 6px;
-  color: #303133;
-}
-.winner-meta {
-  margin: 6px 0;
-  font-size: 14px;
+.winner-chip {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 13px;
   color: #606266;
 }
-.win-time {
-  margin-left: 8px;
-  font-size: 13px;
+.chip-port {
+  color: #d4342a;
+  margin-right: 6px;
 }
+.chip-name {
+  margin-right: 6px;
+}
+.chip-company {
+  color: #909399;
+}
+
 .void-hint {
   margin-top: 12px;
   font-size: 13px;

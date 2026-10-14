@@ -145,7 +145,8 @@ public class DrawAdminController extends BaseController
      *
      * = screenStatus()（当前场次 / 三项统计 / sessions / currentTier）
      * + tiers（本场次各档位奖池进度）
-     * + lastWinner（本场次最近一条仍可作废的中奖记录）
+     * + lastWinner（本场次最近一条仍可作废的中奖记录，撤回按钮的锚点）
+     * + winnerGroups（全部有效中奖，按场次 × 档位分组）
      */
     private Map<String, Object> buildStatus()
     {
@@ -168,6 +169,15 @@ public class DrawAdminController extends BaseController
         startPage();
         List<KconWinner> winners = drawService.selectWinnerList(winnerQuery);
         data.put("lastWinner", winners == null || winners.isEmpty() ? null : toLastWinner(winners.get(0)));
+
+        // 3. 中奖记录（按场次 × 档位分组）：控制台不再只显示全局最近一位，
+        //    操作员能一眼核对每档已抽出的人。放在 lastWinner 之后执行，
+        //    避免其内部多条查询消耗掉 startPage() 的分页上下文。
+        //    先 clearPage() 加固：startPage() 把分页参数存在 ThreadLocal 里，
+        //    若上一步的查询因异常未真正执行 SQL，残留参数会污染 winnerGroups 的多条查询
+        //    （Tomcat 线程复用，残留会跨请求带到下一个用户的请求上）
+        clearPage();
+        data.put("winnerGroups", drawService.winnerGroups());
 
         return data;
     }
