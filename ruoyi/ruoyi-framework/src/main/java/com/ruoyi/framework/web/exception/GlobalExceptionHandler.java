@@ -3,14 +3,18 @@ package com.ruoyi.framework.web.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingPathVariableException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.text.Convert;
@@ -50,6 +54,52 @@ public class GlobalExceptionHandler
         String requestURI = request.getRequestURI();
         log.error("请求地址'{}',不支持'{}'请求", requestURI, e.getMethod());
         return AjaxResult.error(e.getMessage());
+    }
+
+    /**
+     * 缺少上传文件。
+     * 例：POST /admin/attendee/import 未带 file 表单域。
+     *
+     * RuoYi 默认没有这个分支，会落到通用 Exception 处理器，用户只能看到
+     * 「系统繁忙，请稍后重试」，无法判断是自己少传了东西还是服务端出了问题。
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public AjaxResult handleMissingPart(MissingServletRequestPartException e, HttpServletRequest request)
+    {
+        String part = e.getRequestPartName();
+        log.warn("请求地址'{}',缺少上传内容'{}'", request.getRequestURI(), part);
+        return AjaxResult.error("file".equals(part) ? "请选择要上传的文件" : "缺少必要的上传内容：" + part);
+    }
+
+    /**
+     * 缺少必填的请求参数。例：GET /app/checkin/lookup 未带 keyword。
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public AjaxResult handleMissingParameter(MissingServletRequestParameterException e, HttpServletRequest request)
+    {
+        log.warn("请求地址'{}',缺少请求参数'{}'", request.getRequestURI(), e.getParameterName());
+        return AjaxResult.error("缺少必要参数：" + e.getParameterName());
+    }
+
+    /**
+     * 请求体无法解析：JSON 语法错误，或 POST/PUT 根本没有携带 body。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public AjaxResult handleUnreadableBody(HttpMessageNotReadableException e, HttpServletRequest request)
+    {
+        log.warn("请求地址'{}',请求体无法解析：{}", request.getRequestURI(), e.getMessage());
+        return AjaxResult.error("请求体格式错误：请确认提交的是合法 JSON，且 POST/PUT 请求带有 body");
+    }
+
+    /**
+     * 把非 multipart 请求打到了需要上传文件的接口
+     * （例如 Content-Type 写成了 application/json）。
+     */
+    @ExceptionHandler(MultipartException.class)
+    public AjaxResult handleMultipart(MultipartException e, HttpServletRequest request)
+    {
+        log.warn("请求地址'{}',非 multipart 请求：{}", request.getRequestURI(), e.getMessage());
+        return AjaxResult.error("请以 multipart/form-data 方式上传文件");
     }
 
     /**
