@@ -197,63 +197,32 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         if (keyword == null || keyword.trim().isEmpty())
         {
             data.put("signed", false);
+            // 与下方格式错误分支保持同一返回结构：前端只按 data.msg 提示，
+            // 少了它就会掉进通用兜底文案，提示不到「要输什么」
+            data.put("msg", "请输入完整 11 位手机号");
             return data;
         }
         String kw = keyword.trim();
-        // 与签到查询统一入参校验，避免用「1 位数字」之类的无效输入反复探路
-        if (!kw.matches("\\d{4}|\\d{11}"))
+        // 只接受完整 11 位手机号。
+        // 这里曾允许「4 位尾号」，理由是截图丢了的人只需记住尾号就能当场找回端口号。
+        // 但 /lookup 是免登录接口，尾号空间只有 10^4，枚举一遍成本极低，等于把
+        // 「谁在场、尾号是多少、端口号是多少」全量敞开；而兑奖核验靠「本人知道完整手机号」
+        // 来判定，尾号一旦可被枚举，这层判定就被从源头削弱了。
+        // 因此这里砍掉尾号分支：核验与找回统一要求完整 11 位，攻击面从 10^4 收敛到 10^11。
+        if (!kw.matches("\\d{11}"))
         {
             data.put("signed", false);
-            data.put("msg", "请输入 11 位手机号或 4 位尾号");
+            data.put("msg", "请输入完整 11 位手机号（为防冒领，找回端口号不再支持只输后四位）");
             return data;
         }
-        if (kw.length() == 11)
-        {
-            KconAttendee byPhone = attendeeMapper.selectAttendeeByPhone(kw);
-            if (byPhone == null)
-            {
-                data.put("signed", false);
-                data.put("msg", "查无此人");
-                return data;
-            }
-            return fillLookup(data, byPhone);
-        }
-
-        List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
-        if (list == null || list.isEmpty())
+        KconAttendee byPhone = attendeeMapper.selectAttendeeByPhone(kw);
+        if (byPhone == null)
         {
             data.put("signed", false);
             data.put("msg", "查无此人");
             return data;
         }
-        if (list.size() == 1)
-        {
-            return fillLookup(data, list.get(0));
-        }
-
-        // 后四位撞号：以前这里一律返回「查无此人」，当事人会以为自己没签到过，
-        // 只能去排工作人员的人工窗口。改为把候选项交给前端让人自己认领。
-        // selectByTail4 已 left join kcon_checkin，signed / port_no / checkin_time
-        // 随候选一起带出，因此点选候选后不需要再发一次请求。
-        // 留痕：连续命中撞号是「批量枚举」的典型特征，事后可据此复盘异常调用
-        log.info("找回端口号命中后四位撞号：tail4={}，候选 {} 位", kw, list.size());
-        List<Map<String, Object>> candidates = new ArrayList<>();
-        for (KconAttendee a : list)
-        {
-            Map<String, Object> c = toPublicView(a);
-            boolean signed = a.getSigned() != null && a.getSigned() == 1;
-            c.put("signed", signed);
-            if (signed)
-            {
-                c.put("portNo", a.getPortNo());
-                c.put("checkinTime", a.getCheckinTime());
-            }
-            candidates.add(c);
-        }
-        data.put("signed", false);
-        data.put("ambiguous", true);
-        data.put("candidates", candidates);
-        return data;
+        return fillLookup(data, byPhone);
     }
 
     /**

@@ -43,18 +43,20 @@
 
         <!-- 找回端口号：放在签到页，而不是「签到完成页」——
              截图丢了的人根本走不到完成页，入口放那儿等于不存在。
-             复用上面同一个输入框，走只读的 /app/checkin/lookup，不会产生新签到记录。 -->
+             复用上面同一个输入框，走只读的 /app/checkin/lookup，不会产生新签到记录。
+             注意：找回只认完整 11 位手机号，不支持后四位——尾号只有 10^4 种，
+             免登录接口上可被枚举，会连带削弱兑奖核验「本人知道完整号码」这层防冒领判定。 -->
         <div class="mt-6 pt-5 border-t border-white/5">
           <button
             class="w-full h-12 rounded-xl border border-slate-700 text-slate-300 text-sm
                    active:scale-[.99] transition disabled:opacity-40"
-            :disabled="!keyword || loading"
+            :disabled="!canLookup || loading"
             @click="doLookup"
           >
             {{ loading ? '查询中...' : '截图丢了？找回我的端口号' }}
           </button>
           <p class="mt-2 text-center text-slate-500 text-xs">
-            已签到过的，输入手机号或后四位也能查回
+            需输入完整 11 位手机号，后四位不支持找回
           </p>
 
           <!-- 找回结果 -->
@@ -64,31 +66,8 @@
             <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
           </div>
 
-          <!-- 后四位撞号：列出候选让人自己认领。
-               以前这种情况一律报「查无此人」，当事人会以为自己没签到过而白跑一趟。 -->
-          <div v-if="lookupCandidates.length" class="mt-4">
-            <p class="text-slate-400 text-sm text-center mb-3">
-              后四位「{{ keyword.slice(-4) }}」匹配到 {{ lookupCandidates.length }} 位，请点击您的名字
-            </p>
-            <button
-              v-for="c in lookupCandidates"
-              :key="c.id"
-              class="w-full mb-2 px-4 py-3 rounded-xl bg-slate-800/80 border border-slate-700
-                     text-left active:scale-[.99] transition"
-              @click="pickCandidate(c)"
-            >
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-semibold">{{ c.name }}</span>
-                <span class="text-xs shrink-0" :class="c.signed ? 'text-emerald-300' : 'text-slate-500'">
-                  {{ c.signed ? '已签到' : '未签到' }}
-                </span>
-              </div>
-              <div class="text-slate-400 text-xs mt-1">
-                {{ c.phoneMask }}<template v-if="c.company"> · {{ c.company }}</template>
-              </div>
-            </button>
-          </div>
-
+          <!-- 这里曾列出「后四位撞号」的候选让人自己认领。找回只认完整 11 位后，
+               后端不再返回 ambiguous / candidates，该分支已无来源。 -->
           <p v-if="lookupError" class="mt-3 text-center text-rose-400 text-sm">{{ lookupError }}</p>
         </div>
       </section>
@@ -184,13 +163,10 @@
 
         <p class="mt-4 text-slate-500 text-xs">签到时间：{{ result.checkinTime }}</p>
 
-        <!-- 选错人时的退路。以前这一页是死胡同，只能刷新整个页面重来，
-             而刷新后输入框里还是上一个人的手机号 -->
-        <button
-          class="mt-7 px-6 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-sm
-                 active:scale-[.99] transition"
-          @click="reset"
-        >不是我，重新输入</button>
+        <!-- 这里曾有一个「不是我，重新输入」按钮。签到成功是终态，不该再给额外操作：
+             它暗示「还能改」，弱化了「请截图保存」这个真正的核心动作。
+             注意：当前 success 页没有任何自动返回机制，下一位观众需要手动下拉刷新
+             或后退才能回到输入页（见 README「已知问题」）。 -->
       </section>
     </main>
 
@@ -201,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { queryAttendee, submitCheckin, lookup } from './api'
 import logo from './assets/kcon-mark.png'
 
@@ -212,15 +188,17 @@ const person = ref(null)
 const result = ref(null)
 const lookupResult = ref(null)
 const lookupError = ref('')
-const lookupCandidates = ref([])
 const loading = ref(false)
 const error = ref('')
 
-// 输入一变就清掉上一次的找回结果与候选，避免「改了手机号、下面还显示旧端口号」
+// 找回端口号只认完整 11 位手机号：后端已砍掉尾号分支，前端提前禁用按钮，
+// 避免观众输了 4 位后拿到一句「不支持」却不知道要找什么。
+const canLookup = computed(() => /^\d{11}$/.test(keyword.value.trim()))
+
+// 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
 watch(keyword, () => {
   lookupResult.value = null
   lookupError.value = ''
-  lookupCandidates.value = []
 })
 
 function attendText(n) {
@@ -238,18 +216,21 @@ function reset() {
   keyword.value = ''
   lookupResult.value = null
   lookupError.value = ''
-  lookupCandidates.value = []
 }
 
-// 找回端口号：截图丢了的人还在签到台时，直接用输入框里的手机号/后四位回查原端口号。
+// 找回端口号：截图丢了的人还在签到台时，用输入框里的完整手机号回查原端口号。
 // 走只读的 /app/checkin/lookup——不写签到记录，重复点击也安全。
+// 只认完整 11 位：尾号可枚举，会让兑奖核验的防冒领判定失去意义（详见后端实现）。
 async function doLookup() {
   error.value = ''
   lookupError.value = ''
   lookupResult.value = null
-  lookupCandidates.value = []
   const kw = keyword.value.trim()
   if (!kw) return
+  if (!canLookup.value) {
+    lookupError.value = '请输入完整 11 位手机号（后四位不支持找回，防止号码被冒领）'
+    return
+  }
   loading.value = true
   try {
     const res = await lookup(kw)
@@ -258,12 +239,8 @@ async function doLookup() {
       return
     }
     const d = res.data || {}
-    // 以下三种情况后端都返回 code=200，真正的提示都在 data 里——
+    // 后端这里固定返回 code=200，真正的提示都在 data.msg 里——
     // 读 res.msg 只会拿到 RuoYi 固定的「操作成功」，观众会以为查到了却没看到号码。
-    if (d.ambiguous && Array.isArray(d.candidates) && d.candidates.length) {
-      lookupCandidates.value = d.candidates
-      return
-    }
     if (!d.signed || !d.portNo) {
       lookupError.value = d.msg || '未查到签到记录，请联系现场工作人员'
       return
@@ -274,17 +251,6 @@ async function doLookup() {
   } finally {
     loading.value = false
   }
-}
-
-// 认领候选项：端口号已随候选一起返回，直接展示，不再发请求
-function pickCandidate(c) {
-  lookupError.value = ''
-  if (c.signed && c.portNo) {
-    lookupResult.value = { portNo: c.portNo, name: c.name, checkinTime: c.checkinTime }
-    lookupCandidates.value = []
-    return
-  }
-  lookupError.value = `${c.name} 尚未签到，请点「查 询」完成签到`
 }
 
 async function doQuery() {
