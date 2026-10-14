@@ -33,7 +33,7 @@ export function fetchStatus(version) {
   return request('/app/screen/status' + q)
 }
 
-// 切换场次
+// 切换场次（展示控制，保留）
 export function switchSession(sessionCode) {
   return request('/app/screen/session', {
     method: 'POST',
@@ -41,18 +41,6 @@ export function switchSession(sessionCode) {
   })
 }
 
-// 抽一个
-export function draw(sessionCode, prizeId) {
-  return request('/app/screen/draw', {
-    method: 'POST',
-    body: JSON.stringify({ sessionCode, prizeId })
-  })
-}
-
-// 作废重抽
-export function voidWinner(winnerId) {
-  return request('/app/screen/void', {
-    method: 'POST',
-    body: JSON.stringify({ winnerId })
-  })
-}
+// 注意：大屏只负责展示，不再提供抽奖 / 作废接口。
+// 抽奖全程由管理端「抽奖控制台」发起，大屏靠 fetchStatus 轮询被动感知新批次并揭晓。
+// 这里曾导出的 draw() / voidWinner() 已随对应后端端点一起删除。

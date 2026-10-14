@@ -88,29 +88,26 @@
             <div class="winner-port">{{ w.portNo }}</div>
             <div class="winner-name">{{ w.name }}</div>
             <div class="winner-company">{{ w.company || '' }}</div>
-            <!-- 有人不在现场时要能单独撤掉他：撤掉后该位从汇总页消失、名额退回本档，
-                 点「抽下一档」即可把缺的那位补上 -->
-            <button class="winner-void-btn" @click="doVoid(w)">撤 回</button>
           </div>
         </div>
 
         <div v-if="shortfall > 0" class="mt-8 text-xl text-amber-300">
           当前可抽号数不足，本次只抽出 {{ resultList.length }} 位，还差 {{ shortfall }} 位
-          （可让更多观众签到后继续抽）
+          （请在抽奖控制台让更多观众签到后继续抽）
         </div>
 
-        <button class="mt-10 px-14 py-4 rounded-2xl text-2xl font-black tracking-[0.3em]
-                       bg-brand text-white hover:brightness-110 glow active:scale-95 transition"
-                @click="doDraw">抽 下 一 档</button>
-        <div class="mt-3 text-sm text-slate-500">空格键同样可以开始下一次抽奖</div>
+        <!-- 大屏只展示，不再提供「抽下一档」按钮。下一档由管理端「抽奖控制台」发起，
+             大屏会在 1.5 秒内自动感知并开始揭晓 -->
+        <div class="mt-10 text-sm text-slate-500 tracking-[0.3em]">
+          下 一 档 请 在 抽 奖 控 制 台 操 作
+        </div>
       </template>
 
-      <!-- S1/S2 待机 & 滚动 -->
+      <!-- 待机：大屏只展示，等待管理端「抽奖控制台」发起。
+           rolling 阶段已不可达（不再有本地 doDraw），统一显示「准备抽奖」+ 灰色占位号 -->
       <template v-else>
-        <div class="text-lg text-slate-400 mb-6 tracking-[0.3em]">
-          {{ phase === 'rolling' ? '抽 奖 中' : '准 备 抽 奖' }}
-        </div>
-        <div class="rand-num glow" :class="phase === 'rolling' ? 'text-brand' : 'text-slate-700'">
+        <div class="text-lg text-slate-400 mb-6 tracking-[0.3em]">准 备 抽 奖</div>
+        <div class="rand-num glow text-slate-700">
           {{ displayNo }}
         </div>
         <div v-if="status.currentTier" class="mt-8 text-xl text-slate-400">
@@ -121,19 +118,10 @@
           </span>
         </div>
 
-        <!-- 可见的抽奖按钮：大屏虽支持空格快捷键，但投屏机上鼠标点按钮更直观。
-             一次点击 = 一次抽奖，端口号滚动效果由 doDraw 内部的 startRolling 驱动 -->
-        <button
-          v-if="phase === 'idle'"
-          class="mt-12 px-16 py-4 rounded-2xl text-2xl font-black tracking-[0.3em] transition active:scale-95"
-          :class="poolEmpty
-            ? 'bg-white/5 text-slate-600 cursor-not-allowed'
-            : 'bg-brand text-white hover:brightness-110 glow'"
-          :disabled="poolEmpty"
-          @click="doDraw"
-        >开始抽奖</button>
-        <div v-else class="mt-12 text-sm text-slate-500 tracking-[0.3em]">
-          抽 奖 进 行 中 ， 请 稍 候
+        <!-- 大屏只展示，不再提供「开始抽奖」按钮。抽奖由管理端「抽奖控制台」发起，
+             大屏靠轮询被动感知新批次并自动播放滚动揭晓动画 -->
+        <div class="mt-12 text-sm text-slate-500 tracking-[0.3em]">
+          {{ poolEmpty ? '当 前 无 可 抽 号 数 ， 请 在 控 制 台 确 认' : '等 待 抽 奖 控 制 台 发 起 …' }}
         </div>
       </template>
     </main>
@@ -202,11 +190,15 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { fetchStatus, draw, voidWinner, switchSession } from './api'
+// 大屏只展示：fetchStatus 轮询被动感知，switchSession 切场次。
+// 抽奖 / 作废已收归管理端「抽奖控制台」，这里不再导入 draw / voidWinner。
+import { fetchStatus, switchSession } from './api'
 import logo from './assets/kcon-mark.png'
 
 const status = ref({})
-const phase = ref('idle')      // idle | rolling | revealing | result | empty
+// idle 待机 | revealing 逐个揭晓中 | result 汇总页 | empty 池空。
+// 不再有 rolling：大屏不主动抽奖，端口号滚动只发生在被动揭晓路径里。
+const phase = ref('idle')
 const displayNo = ref('00000')
 
 // 一次点击抽出整档的人，所以「揭晓」是一段过程而不是一帧：
@@ -253,12 +245,8 @@ function showTip(text) {
     dialog.value = { show: true, text, confirm: false }
   })
 }
-function showConfirm(text) {
-  return new Promise(resolve => {
-    dialogResolver = resolve
-    dialog.value = { show: true, text, confirm: true }
-  })
-}
+// showConfirm 已随 doVoid 一起删除：大屏不再有需要二次确认的写操作。
+// 弹窗只剩 showTip（纯提示），模板据此始终显示「知道了」。
 
 const poolEmpty = computed(() => (status.value.poolCount ?? 0) <= 0)
 
@@ -396,10 +384,9 @@ function syncFromServer(d) {
       if (phase.value === 'result') {
         resultList.value = (batch.winners || []).map(w => ({ ...w }))
       }
-    } else if (!revealing && phase.value !== 'rolling') {
-      // 新的整批：可能是管理端「抽奖控制台」代抽的。
-      // 以前大屏永远不会切到结果页，于是管理端抽了、大屏还停在上一轮，
-      // 而两边文案都写着「两边看到的是同一个抽奖池」。
+    } else if (!revealing) {
+      // 新的整批：抽奖全程由管理端「抽奖控制台」发起，大屏检测到新 batchKey
+      // 就播放揭晓动画。revealing 为真时说明正是本次揭晓触发的同步，不要重播。
       revealAll(batch.winners || [], batch.tierName, 0)
       return
     }
@@ -480,119 +467,18 @@ function randomNo() {
   return String(Math.floor(Math.random() * 65535) + 1).padStart(5, '0')
 }
 
-function startRolling() {
-  ticker = setInterval(() => { displayNo.value = randomNo() }, 45)
-}
+// startRolling 已随 doDraw 一起删除：大屏不再主动发起滚动，
+// 端口号滚动只由被动揭晓路径 revealAll → rollTo 驱动。
 
 function stopRolling() {
   clearInterval(ticker)
   ticker = null
 }
 
-async function doDraw() {
-  // 揭晓过程中不接受新的抽奖：整批还没播完就抽下一档，画面会乱
-  if (phase.value === 'rolling' || phase.value === 'revealing' || revealing) return
-  if (poolEmpty.value) {
-    // 区分「确实没号可抽」与「后端连不上导致 status 为空」：
-    // 后者若显示成「请先让观众签到」，等于把故障误报成业务提示
-    if (!statusLoaded) {
-      await showTip('无法连接服务，请检查大屏与后端之间的网络后重试')
-      return
-    }
-    phase.value = 'empty'
-    return
-  }
-
-  phase.value = 'rolling'
-  startRolling()
-  const MIN_MS = 1400
-  const start = Date.now()
-
-  try {
-    const tierId = status.value.currentTier?.id
-    const res = await draw(status.value.sessionCode, tierId)
-
-    const elapsed = Date.now() - start
-    if (elapsed < MIN_MS) await sleep(MIN_MS - elapsed)
-    stopRolling()
-
-    if (res.code === 200) {
-      const d = res.data || {}
-      const ws = d.winners || []
-      // 整批都算「已看到」：否则紧接着的 3 秒轮询会把它当成新中奖，把揭晓重播一遍
-      if (ws.length) knownWinnerId = ws[ws.length - 1].winnerId
-      knownBatchKey = d.batchKey || null
-      // 抽奖接口现在会带回最新状态，直接用，省掉一次请求
-      if (d.status) {
-        status.value = d.status
-        currentVersion = d.status.version || null
-      }
-      await revealAll(ws, d.tierName, d.shortfall)
-    } else if (res.code === 4001) {
-      phase.value = 'empty'
-    } else {
-      phase.value = 'idle'
-      await showTip(res.msg || '抽奖失败')
-    }
-  } catch (e) {
-    stopRolling()
-    phase.value = 'idle'
-    // 超时/断网时后端可能已经落库并写入中奖记录，绝不能静默回到待抽状态：
-    // 否则操作员以为没抽到，再按一次空格就会再抽一整批，静默多出好几个人。
-    await showTip('抽奖请求未收到响应，结果未知。请先刷新页面确认是否已产生中奖，再决定是否重抽。')
-    await loadStatus()
-  }
-}
-
-/**
- * 作废某位中奖者。传 winner 表示从汇总页撤掉指定的那一位，
- * 不传则撤掉最近一位（空格/退格快捷键走这条）。
- */
-// 作废在途标记。
-// 作废用的是自定义弹窗（showConfirm），不是系统原生模态，键盘事件照样会打进来：
-// 按住退格不放会连开多个确认框，或在弹窗上回车确认的瞬间又触发一次，把同一位作废两次。
-let voiding = false
-
-async function doVoid(target) {
-  if (voiding) return
-  const id = (target && target.winnerId) || lastWinnerId
-  if (!id) return
-  const who = target && target.name ? `「${target.name}」` : ''
-  voiding = true
-  let ok = false
-  try {
-    ok = await showConfirm(`确认作废${who}的中奖记录？号码将回到池中，可被再次抽中。`)
-  } finally {
-    // 用户只要作出选择（确认或取消）就释放，避免取消后卡住后续作废
-    if (!ok) voiding = false
-  }
-  if (!ok) return
-  try {
-    const res = await voidWinner(id)
-    if (res.code === 200) {
-      if (target) {
-        // 汇总页就地移除该位，不打断画面。
-        // 与服务端随后的批次同步结果保持一致（否则本地标「已作废」、同步后又整个消失，两种表现打架）。
-        // 空出的名额已退回本档，点「抽下一档」即可补抽。
-        resultList.value = resultList.value.filter(w => w.winnerId !== id)
-        if (lastWinnerId === id) lastWinnerId = null
-      } else {
-        lastWinnerId = null
-        phase.value = 'idle'
-      }
-      await loadStatus()
-    } else {
-      await showTip(res.msg || '作废失败')
-    }
-  } catch (e) {
-    // 以前这里是空的 catch：超时/断网时画面原样不动，操作员以为已经作废，
-    // 实际记录还在，下一个奖池里也没有这个号。
-    await showTip('作废请求未收到响应，结果未知。请刷新大屏确认后再决定是否重试。')
-    await loadStatus()
-  } finally {
-    voiding = false
-  }
-}
+// 注意：大屏不再主动抽奖 / 作废。
+// 抽奖由管理端「抽奖控制台」发起并落库，大屏靠 loadStatus 轮询被动感知新批次，
+// 在 syncFromServer 里检测到新 batchKey 时调用 revealAll 播放揭晓动画。
+// 这里曾有的 doDraw() / doVoid() 已随对应后端端点一起删除。
 
 async function setSession(code) {
   try {
@@ -614,22 +500,17 @@ async function setSession(code) {
 }
 
 function onKey(e) {
-  // 自定义弹窗（提示/确认）打开时，键盘事件照样会冒到 window：
-  // 不拦的话，操作员在「确认作废」框上按空格会去触发抽奖，
-  // 且确认框的确认动作本身也走键盘，等于绕过弹窗执行了被拦截的操作。
-  if (dialog.value.show) {
-    if (e.code === 'Space' || e.code === 'Backspace') e.preventDefault()
-    return
-  }
-  if (e.code === 'Space') { e.preventDefault(); doDraw() }
-  else if (e.code === 'Backspace') { e.preventDefault(); doVoid() }
-  else if (e.key === '1') setSession('AM')
+  // 大屏只展示，键盘只剩切场次（1=上午场 / 2=下午场）。
+  // 空格抽奖、退格作废已随控制权收归管理端而移除。
+  if (e.key === '1') setSession('AM')
   else if (e.key === '2') setSession('PM')
 }
 
 onMounted(() => {
   loadStatus()
-  timer = setInterval(loadStatus, 3000)
+  // 管理端「抽奖控制台」点抽奖后，大屏靠这条轮询感知新批次并开始滚动揭晓。
+  // 间隔越短延迟越低、请求量越大；现场内网下 1.5s 完全扛得住，主持人手感更跟手。
+  timer = setInterval(loadStatus, 1500)
   window.addEventListener('keydown', onKey)
 })
 
