@@ -77,7 +77,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="奖项名称" prop="tierName">
-          <el-input v-model="form.tierName" placeholder="如 特等奖 / 一等奖 / 三等奖" maxlength="32" />
+          <!-- 不用自由文本：大屏纸屑特效按档位名关键字判定等级（特等/一等 → 最高档，
+               二等 → 次档，其余 → 兜底），现场手打「一等」「第1名」等变体会漏匹配，
+               导致抽一等奖却放最朴素的动效。改为下拉只允许选固定档位名 -->
+          <el-select v-model="form.tierName" placeholder="请选择奖项档位">
+            <el-option v-for="t in tierOptions" :key="t" :label="t" :value="t" />
+          </el-select>
+          <span class="tip">名字决定大屏庆祝特效的等级</span>
         </el-form-item>
         <el-form-item label="数量" prop="quantity">
           <el-input-number v-model="form.quantity" :min="1" :max="999" controls-position="right" />
@@ -102,6 +108,11 @@
 import { listPrize, addPrize, updatePrize, delPrize } from "@/api/kcon/prize"
 import { listSessions } from "@/api/kcon/session"
 
+// 可选档位名：与 screen 大屏的纸屑特效关键字严格对应
+// （screen/src/App.vue 的 makeConfetti：含「特等/一等」→ 最高档，含「二等」→ 次档，其余 → 兜底）。
+// 用下拉替代自由文本，避免现场打出「一等」「第1名」等漏匹配的变体
+const TIER_OPTIONS = ["特等奖", "一等奖", "二等奖", "三等奖"]
+
 export default {
   name: "KconPrize",
   data() {
@@ -110,8 +121,9 @@ export default {
       prizeList: [],
       total: 0,
       open: false,
-      // 提交中标志：连点两次「确定」会造出两条一模一样的奖项档位，
-      // 而后端 POST /admin/prize 没有唯一性校验，慢响应下拦不住
+      // 提交中标志：连点两次「确定」会重复提交。
+      // 后端确有同场次同名的唯一性校验（Controller 预检 + validatePrize），
+      // 重复请求会被拒；但被拒也得让用户看到一次报错，不如前端直接锁住按钮
       submitting: false,
       title: "",
       queryParams: { pageNum: 1, pageSize: 10, sessionCode: null },
@@ -119,9 +131,21 @@ export default {
       form: {},
       rules: {
         sessionCode: [{ required: true, message: "请选择场次", trigger: "change" }],
-        tierName: [{ required: true, message: "奖项名称不能为空", trigger: "blur" }],
+        tierName: [{ required: true, message: "请选择奖项档位", trigger: "change" }],
         quantity: [{ required: true, message: "数量不能为空", trigger: "blur" }]
       }
+    }
+  },
+  computed: {
+    /**
+     * 档位下拉选项。固定四档之外，把当前 form 里的历史档位名（老数据可自由输入过
+     * 「优胜奖」等）自动补进选项，避免编辑时下拉显示空白、把奖项名提交成空。
+     * 用 computed 派生而非在 handleUpdate/reset 里手动增删，彻底免掉
+     * 「忘记复原导致临时选项污染下一次新增」的隐患。
+     */
+    tierOptions() {
+      const cur = this.form && this.form.tierName
+      return cur && !TIER_OPTIONS.includes(cur) ? TIER_OPTIONS.concat([cur]) : TIER_OPTIONS
     }
   },
   created() {
@@ -138,8 +162,10 @@ export default {
     getList() {
       this.loading = true
       listPrize(this.queryParams).then(res => {
-        this.prizeList = res.rows
-        this.total = res.total
+        // rows 兜底：响应缺字段时 prizeList 会变成 undefined，
+        // 后续 submitForm 的去重判断 some() 会直接抛错
+        this.prizeList = res.rows || []
+        this.total = res.total || 0
         this.loading = false
       }).catch(() => { this.loading = false })
     },
@@ -176,6 +202,19 @@ export default {
       this.$refs["form"].validate(valid => {
         if (!valid) return
         const isEdit = this.form.id != null
+        // 同场次同名档位提前拦：档位收敛为固定四档后，重复建「一等奖」比自由文本时更容易发生。
+        // 注意这只是「当前页已加载数据」的快速提示，不是唯一防线——
+        // 真正的唯一性由后端 validatePrize / countBySessionAndTier 强校验（新增与修改都过），
+        // 所以此处漏判也不会写进脏数据，后端会拒绝
+        const dup = this.prizeList.some(r =>
+          r.sessionCode === this.form.sessionCode &&
+          r.tierName === this.form.tierName &&
+          r.id !== this.form.id
+        )
+        if (dup) {
+          this.$modal.msgError(`该场次下已存在「${this.form.tierName}」，请勿重复添加`)
+          return
+        }
         this.submitting = true
         const fn = isEdit ? updatePrize : addPrize
         fn(this.form).then(() => {
