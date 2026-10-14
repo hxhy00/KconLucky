@@ -79,10 +79,10 @@
       <div class="action-row">
         <el-button type="primary" size="medium" icon="el-icon-present"
                    :loading="drawing" :disabled="drawDisabled" v-hasPermi="['kcon:draw:operate']"
-                   @click="handleDraw">抽一个</el-button>
+                   @click="handleDraw">抽一档</el-button>
         <el-button type="danger" size="medium" icon="el-icon-close"
                    :loading="voiding" :disabled="!lastWinner" v-hasPermi="['kcon:draw:operate']"
-                   @click="handleVoid">作废上一次中奖</el-button>
+                   @click="handleVoid">撤回最近一位</el-button>
       </div>
     </el-card>
 
@@ -90,7 +90,7 @@
     <el-row :gutter="20" style="margin-top: 20px;">
       <el-col :span="10">
         <el-card shadow="never" class="last-winner-card">
-          <div slot="header"><span>上一次中奖</span></div>
+          <div slot="header"><span>最近一位中奖</span></div>
           <template v-if="lastWinner">
             <div class="winner-port">{{ lastWinner.portNo }}</div>
             <div class="winner-name">{{ lastWinner.name }}</div>
@@ -162,6 +162,24 @@
         </div>
       </el-alert>
     </el-card>
+
+    <!-- 本次抽出：一次点击会抽出整档的人（如三等奖一次 3 位），整批列出来方便核对 -->
+    <el-card v-if="lastBatch.length" shadow="never" style="margin-top: 20px;">
+      <div slot="header">
+        <span>本次抽出「{{ lastBatchTier }}」共 {{ lastBatch.length }} 人</span>
+        <el-button type="text" style="float: right; padding: 3px 0"
+                   @click="lastBatch = []">清除</el-button>
+      </div>
+      <el-table :data="lastBatch" size="mini">
+        <el-table-column label="端口号" prop="portNo" width="110" align="center">
+          <template slot-scope="scope">
+            <b>{{ scope.row.portNo }}</b>
+          </template>
+        </el-table-column>
+        <el-table-column label="姓名" prop="name" width="150" />
+        <el-table-column label="公司" prop="company" show-overflow-tooltip />
+      </el-table>
+    </el-card>
   </div>
 </template>
 
@@ -190,7 +208,10 @@ export default {
       appliedSeq: 0,
       // 大屏设置（赞助商等）
       settingForm: { sponsors: "" },
-      savingSetting: false
+      savingSetting: false,
+      // 本次抽出的整批（一次点击会抽出整档的人，如三等奖一次出 3 位）
+      lastBatch: [],
+      lastBatchTier: ""
     }
   },
   computed: {
@@ -312,7 +333,11 @@ export default {
         return
       }
       const tierName = this.currentTier.tierName
-      this.$modal.confirm(`在「${this.sessionName}」抽出「${tierName}」？中奖后大屏会立即同步。`)
+      const remain = this.rowRemain(this.currentTier)
+      this.$modal.confirm(
+        `将一次抽出「${tierName}」剩余的全部 ${remain} 位（当前场次可抽号数 ${this.poolCount}，` +
+        `不够时只抽得出来的那些）。抽出后大屏会逐个揭晓。确认继续？`
+      )
         .then(() => this.submitDraw())
         .catch(() => {})
     },
@@ -323,8 +348,24 @@ export default {
         prizeId: this.currentTier.id
       }).then(res => {
         const data = res.data || {}
+        const ws = data.winners || []
+        // 一次点击抽出整档的人：把整批列出来，方便操作员逐位核对
+        this.lastBatch = ws
+        this.lastBatchTier = data.tierName || ""
+        // 抽奖接口现在会带回最新状态，这里能真正乐观更新。
+        // 旧版响应里没有 status，applyStatus 拿到 undefined 等于什么都没做，
+        // 结果就是「点了抽奖要等下一轮 5 秒轮询，数字和进度条才动」。
         this.applyStatus(data.status, ++this.seq)
-        this.$modal.msgSuccess(`恭喜 ${data.name || ''}（端口号 ${data.portNo}）中奖「${data.tierName}」`)
+        if (ws.length) {
+          this.$modal.msgSuccess(
+            `「${data.tierName}」一次抽出 ${ws.length} 人，大屏正在逐个揭晓`
+          )
+        }
+        if (data.shortfall > 0) {
+          this.$modal.msgWarning(
+            `可抽号数不足，还差 ${data.shortfall} 位未能抽出，请让更多观众签到后再抽`
+          )
+        }
       }).catch(() => {
         // 抽奖失败（如池被抽空）后状态可能已变，兜底刷新一次
         this.fetchStatus()
