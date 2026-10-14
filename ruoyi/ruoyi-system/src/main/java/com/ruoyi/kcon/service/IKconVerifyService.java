@@ -20,11 +20,27 @@ public interface IKconVerifyService
      *   PHONE_MISMATCH 手机号与持号人不符
      *   RECEIVED       已领取过
      *
+     * 纯判定，不写核验日志。日志只记录「人工核验」动作，见 {@link #verifyAndLog}。
+     * 内部复用（如 receive 的前置校验）走本方法，避免把系统内部行为记成人工核验。
+     *
      * @param portNo  端口号
-     * @param phone   输入的手机号（全号或后四位）
+     * @param phone   输入的手机号（完整 11 位）
      * @param operator 操作人
      */
     Map<String, Object> verify(Integer portNo, String phone, String operator);
+
+    /**
+     * 人工核验：执行 {@link #verify} 并落一条核验日志。
+     *
+     * 仅管理端「核验」接口调用。日志表语义为「工作人员在什么时间核验过哪个端口号」，
+     * 因此发放流程内部的校验、发放后的状态刷新均不得借此写日志，否则一次兑奖会
+     * 留下多条记录，污染审计。
+     *
+     * @param portNo  端口号
+     * @param phone   输入的手机号（完整 11 位）
+     * @param operator 操作人
+     */
+    Map<String, Object> verifyAndLog(Integer portNo, String phone, String operator);
 
     /**
      * 标记已领取

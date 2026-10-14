@@ -81,7 +81,6 @@ public class KconVerifyServiceImpl implements IKconVerifyService
             // 查一下签到表：查得到说明本场确实签到过、只是还没被抽中；
             // 查不到才说明这个端口号压根不存在，截图是伪造的。
             KconCheckin issued = checkinMapper.selectByPortNo(portNo);
-            writeLog(portNo, phone, KconVerifyLog.RESULT_NOT_ISSUED, operator);
             data.put("result", KconVerifyLog.RESULT_NOT_ISSUED);
             if (issued != null)
             {
@@ -102,11 +101,11 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         // 让领奖人口头报完整号码只多打几个字，却把这条链路彻底关掉。
         KconCheckin checkin = checkinMapper.selectByPortNo(portNo);
         String holderPhone = checkin != null ? checkin.getPhone() : winner.getPhone();
-        String input = phone == null ? "" : phone.trim();
+        // verify() 开头已对 phone 判空抛异常（控制器入口允许 null），此处 trim 安全
+        String input = phone.trim();
 
         if (!input.matches("\\d{11}"))
         {
-            writeLog(portNo, phone, KconVerifyLog.RESULT_PHONE_MISMATCH, operator);
             data.put("result", KconVerifyLog.RESULT_PHONE_MISMATCH);
             data.put("msg", "请输入完整 11 位手机号（为保证不被冒领，已不支持只报后四位）");
             return data;
@@ -114,16 +113,16 @@ public class KconVerifyServiceImpl implements IKconVerifyService
 
         if (holderPhone == null || !holderPhone.equals(input))
         {
-            writeLog(portNo, phone, KconVerifyLog.RESULT_PHONE_MISMATCH, operator);
             data.put("result", KconVerifyLog.RESULT_PHONE_MISMATCH);
             data.put("msg", "手机号与该端口号持有人不符");
-            data.put("holderMask", IKconCheckinService.maskPhone(holderPhone));
+            // 刻意不回传 holderMask（持号人手机号掩码）。
+            // 这里正是「报错号码」的现场：把真号码尾号回显出来，报案人据此补全即可通过核验，
+            // 等于给冒领者提供了一次免费的自证机会。掩码只允许在后台日志里留痕，不下发。
             return data;
         }
 
         if (winner.getStatus() != null && winner.getStatus() == KconWinner.STATUS_RECEIVED)
         {
-            writeLog(portNo, phone, KconVerifyLog.RESULT_RECEIVED, operator);
             data.put("result", KconVerifyLog.RESULT_RECEIVED);
             // 需求 FR-24.2：明确告知领取时间。观众截图丢了要重报、或疑似冒领时，
             // 兑奖台需要知道「这个号几点几分已被领走」，而不是一句「之前领取」。
@@ -136,10 +135,19 @@ public class KconVerifyServiceImpl implements IKconVerifyService
             return data;
         }
 
-        writeLog(portNo, phone, KconVerifyLog.RESULT_VALID, operator);
         data.put("result", KconVerifyLog.RESULT_VALID);
         data.put("msg", "核验通过");
         fillWinner(data, winner);
+        return data;
+    }
+
+    @Override
+    public Map<String, Object> verifyAndLog(Integer portNo, String phone, String operator)
+    {
+        Map<String, Object> data = verify(portNo, phone, operator);
+        // 一次人工核验只记一条日志。写日志失败不影响核验结果（writeLog 内部已吞异常）。
+        // result 兜底为非空字符串：万一 verify 新增分支漏 put，也不落一条 result="null" 的脏日志。
+        writeLog(portNo, phone, nvlOf(data.get("result")), operator);
         return data;
     }
 
@@ -148,10 +156,11 @@ public class KconVerifyServiceImpl implements IKconVerifyService
     public void receive(Integer portNo, String phone, String operator)
     {
         Map<String, Object> v = verify(portNo, phone, operator);
-        String result = String.valueOf(v.get("result"));
+        // null 兜底为空串：万一 verify 新增分支漏 put，也不会抛出「null」这种提示
+        String result = nvlOf(v.get("result"));
         if (!KconVerifyLog.RESULT_VALID.equals(result))
         {
-            throw new ServiceException(String.valueOf(v.get("msg")));
+            throw new ServiceException(nvlOf(v.get("msg")));
         }
 
         KconWinner winner = winnerMapper.selectActiveByPortNo(portNo);
@@ -182,7 +191,8 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         data.put("email", w.getEmail());
         data.put("tierName", w.getTierName());
         data.put("sessionCode", w.getSessionCode());
-        data.put("phoneMask", IKconCheckinService.maskPhone(w.getPhone()));
+        // 刻意不下发 phoneMask：端口号 + 手机号尾号 = 一条「自助核验」旁路。
+        // 身份已由服务端比对完整 11 位手机号证明，前端无需也不应展示号码。
         // FR-23：显式给出是否中奖，避免前端靠「有 tierName 就算中奖」去猜
         data.put("winnerFlag", "已中奖");
     }
@@ -211,7 +221,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         }
         catch (Exception e)
         {
-            log.warn("写核验日志失败：{}", e.getMessage());
+            // 保留堆栈：getMessage() 对 NPE 等可能为 null，现场排障时丢关键信息。
+            // 这里吞异常是有意的——写日志失败不应阻断核验本身。
+            log.warn("写核验日志失败 portNo={}", portNo, e);
         }
     }
 
@@ -248,9 +260,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
             fillDisplay(item);
             KconVerifyLogExportVo vo = new KconVerifyLogExportVo();
             vo.setPortNo(item.getPortNo() == null ? "" : String.valueOf(item.getPortNo()));
-            vo.setInputPhoneMask(nvl(item.getInputPhoneMask()));
-            vo.setResultText(nvl(item.getResultText()));
-            vo.setOperator(nvl(item.getOperator()));
+            vo.setInputPhoneMask(nvlOf(item.getInputPhoneMask()));
+            vo.setResultText(nvlOf(item.getResultText()));
+            vo.setOperator(nvlOf(item.getOperator()));
             vo.setCreateTime(item.getCreateTime() == null ? "" : fmt.format(item.getCreateTime()));
             vos.add(vo);
         }
@@ -310,8 +322,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         }
     }
 
-    private String nvl(String s)
+    /** 空值 → 空串兜底：同时避免 String.valueOf(null) 产出字符串 "null" */
+    private String nvlOf(Object o)
     {
-        return s == null ? "" : s;
+        return o == null ? "" : String.valueOf(o);
     }
 }

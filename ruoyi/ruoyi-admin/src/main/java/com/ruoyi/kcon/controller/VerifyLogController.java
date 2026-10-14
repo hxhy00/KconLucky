@@ -21,7 +21,9 @@ import java.util.List;
 /**
  * 兑奖核验日志查询（管理端）
  *
- * 只读接口：每次核验与发放都已在 KconVerifyServiceImpl 留痕，本页只查不改。
+ * 只读接口：每次**人工核验**已在 KconVerifyServiceImpl 留痕，本页只查不改。
+ * 发放流程内部的前置复核不写本表（发放动作凭 sys_oper_log + kcon_winner 的领取时间/操作人追溯），
+ * 因此一次兑奖在本表只对应「核验」那一条记录。
  *
  * @author kcon
  */

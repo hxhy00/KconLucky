@@ -30,7 +30,10 @@
       <el-result v-if="verifyData" icon="success" title="核验通过" :sub-title="verifyData.msg"
                  v-show="verifyResult === 'VALID'">
         <div slot="extra" class="verify-info">
-          <p><b>{{ verifyData.name }}</b>（{{ verifyData.phoneMask }}）</p>
+          <!-- 刻意不显示手机号掩码：核验台是公开工位，掩码（138****0001）配上端口号，
+               就是一条「本人可自助核验」的旁路——围观者可看到尾号再去签到页找回端口号。
+               身份已由「本人报出的完整 11 位手机号与持号人一致」证明，无需再回显。 -->
+          <p><b>{{ verifyData.name }}</b></p>
           <p>{{ verifyData.company }} {{ verifyData.position }}</p>
           <!-- 需求 FR-23：邮箱用于二次核对身份 -->
           <p v-if="verifyData.email">邮箱：{{ verifyData.email }}</p>
@@ -42,10 +45,10 @@
 
       <el-result v-if="verifyData && verifyResult !== 'VALID'" icon="warning"
                  :title="resultTitle(verifyResult)" :sub-title="verifyData.msg">
-        <div slot="extra" v-if="verifyData.holderMask">
-          <p class="verify-info">持号人手机号：{{ verifyData.holderMask }}</p>
-        </div>
-        <!-- 需求 FR-24.2：明确告知领取时间与领取人 -->
+        <!-- 失败/已领取时也不再回显持号人手机号掩码：
+             这里回显等于把真号码的尾号告诉了一个已经报错号码的人，
+             他据此再猜一次即可通过核验——回显本身就是一条自证旁路。
+             已在领取时间/操作人上保留可追溯信息，足够兑奖台判断。 -->
         <div slot="extra" v-if="verifyResult === 'RECEIVED' && verifyData.receiveTime">
           <p class="verify-info">领取时间：{{ verifyData.receiveTime }}</p>
           <p class="verify-info" v-if="verifyData.receiveOperator">领取操作人：{{ verifyData.receiveOperator }}</p>
@@ -146,15 +149,12 @@ export default {
         .then(() => receivePrize(body))
         .then(() => {
           this.$modal.msgSuccess("发放成功")
-          // 发放后重新核验，刷新状态为已领取
-          return verify(body)
-        })
-        .then(res => {
-          this.verifyData = res.data
-          this.verifyResult = res.data.result
+          // 发放后不再回调查询接口刷新状态：那样会再写一条核验日志，
+          // 使一次兑奖在日志里留下多条记录。界面马上要接了下一位，
+          // 结果卡片无需展示「已领取」，直接作废本次核验结果即可。
+          this.resetVerify()
           // 下一位：清空两个输入框并把焦点落回端口号。
           // 这是全场最高频的操作，以前要手动删两次才能输入下一个人，每人多花 2-3 秒。
-          // 清空会触发 watch 里的 resetVerify()，结果卡片随之收起，正好接上下一位的节奏。
           this.form.portNo = ""
           this.form.phone = ""
           this.$nextTick(() => {
