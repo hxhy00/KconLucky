@@ -28,6 +28,21 @@ public interface KconWinnerMapper
      */
     KconWinner selectLatestValidWinner();
 
+    /**
+     * 同一批抽出的中奖记录（同一档位 + 同一中奖时间）。
+     * 一次点击会抽出整档的人，大屏据此还原整批并逐个揭晓。
+     *
+     * @param prizeId 档位 id
+     * @param winTime 中奖时间（yyyy-MM-dd HH:mm:ss，整批由服务端写入同一个值）
+     */
+    List<KconWinner> selectBatch(@Param("prizeId") Long prizeId, @Param("winTime") String winTime);
+
+    /**
+     * winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
+     * 大屏作废接口据此把可作废范围限制在「本次抽出的这一批」内。
+     */
+    int countInSameBatch(@Param("latestId") Long latestId, @Param("winnerId") Long winnerId);
+
     int insertWinner(KconWinner winner);
 
     /**

@@ -125,13 +125,20 @@ public class DrawScreenController
             return AjaxResult.error("winnerId 格式错误");
         }
         // 本接口免登录（大屏是固定在现场的展示终端），所以不能像管理端那样放开作废任意记录。
-        // 只允许作废「最近一条有效中奖记录」——正是大屏当前展示、操作员要撤掉的那一条，
-        // 与大屏 UI 的能力一致。这样即使有人从内网直连调用，也只能影响最新一条，
-        // 且必然被现场立刻察觉，无法用脚本批量清空奖池。
+        // 允许作废的范围是「最近一次抽出的那一批」——一次点击会抽出整档的人，
+        // 汇总页需要能单独撤掉其中某一位（例如本人不在现场）。
+        // 但仍然动不了更早的历史记录：即使有人从内网直连调用，
+        // 也只能影响刚刚抽出的这一批，必然被现场立刻察觉，无法用脚本批量清空奖池。
         KconWinner latest = winnerMapper.selectLatestValidWinner();
-        if (latest == null || !latest.getId().equals(winnerId))
+        if (latest == null)
         {
-            return AjaxResult.error("只能作废最近一条中奖记录，请在大屏上确认后再试");
+            return AjaxResult.error("当前没有可作废的中奖记录");
+        }
+        boolean allowed = latest.getId().equals(winnerId)
+                || winnerMapper.countInSameBatch(latest.getId(), winnerId) > 0;
+        if (!allowed)
+        {
+            return AjaxResult.error("只能作废本次抽出的中奖记录，请在大屏上确认后再试");
         }
         drawService.voidWinner(winnerId, "大屏操作员");
         return AjaxResult.success(drawService.screenStatus());

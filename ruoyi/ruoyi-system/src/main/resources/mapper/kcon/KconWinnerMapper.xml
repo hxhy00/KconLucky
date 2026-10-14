@@ -61,6 +61,29 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
+    <!-- 同一批抽出的记录：同一档位 + 同一中奖时间。
+         整批由服务端写入同一个 win_time，因此这里能精确还原「这一档一次抽出的全部人」。
+         不能用 now() 让库自己填——同一事务内多条 INSERT 可能跨秒，批次会对不上。 -->
+    <select id="selectBatch" resultMap="KconWinnerResult">
+        <include refid="selectWinnerVo"/>
+        where prize_id = #{prizeId}
+          and win_time = #{winTime}
+          and status != 2
+        order by id
+    </select>
+
+    <!-- winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
+         大屏免登录作废接口据此把可作废范围限制在「本次抽出的这一批」内：
+         汇总页要能单独撤掉某个人，但仍不该动得了更早的历史记录。 -->
+    <select id="countInSameBatch" resultType="int">
+        select count(*)
+        from kcon_winner a
+        join (select prize_id, win_time from kcon_winner where id = #{latestId}) b
+          on a.prize_id = b.prize_id and a.win_time = b.win_time
+        where a.id = #{winnerId}
+          and a.status != 2
+    </select>
+
     <!-- 某端口号当前有效的中奖记录（未作废） -->
     <select id="selectActiveByPortNo" parameterType="java.lang.Integer" resultMap="KconWinnerResult">
         <include refid="selectWinnerVo"/>
@@ -75,7 +98,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          prize_id, tier_name, status, win_time, operator)
         values
         (#{portNo}, #{attendeeId}, #{name}, #{company}, #{position}, #{phone}, #{email}, #{sessionCode},
-         #{prizeId}, #{tierName}, 0, now(), #{operator})
+         #{prizeId}, #{tierName}, 0, #{winTime}, #{operator})
     </insert>
 
     <!-- 状态流转：带上原状态条件，避免重复点击导致重复发放 -->
