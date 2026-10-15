@@ -47,6 +47,14 @@ target/
 Thumbs.db
 *.swp
 
+# ---- AI 编码助手本地数据 ----
+# .codebuddy/ 是 CodeBuddy IDE 的本地工作数据（含会话、索引、本地偏好），
+# 属于「本机状态」而非团队资产，不入版本库。
+# 注意：spec-kit 生成的 slash 命令正是落在 .codebuddy/commands/，
+# 该目录同样不入库；团队成员各自用 `specify init` 就地生成即可（见
+# .specify/README 说明）。
+.codebuddy/
+
 # ---- 临时文件 ----
 *.tmp
 *.bak

@@ -1,0 +1,37 @@
+schema_version: "1.0"
+
+preset:
+  id: "kconlucky-docs-baseline"
+  name: "KConLucky Docs-Baseline Workflow"
+  version: "1.0.0"
+  description: "以 docs/ 为唯一需求基线：spec 沿用 docs/01 的 FR 编号、plan 锁定既定技术栈并强制回写 docs/02-03、tasks 对齐回写检查项。"
+  author: "KConLucky"
+  license: "UNLICENSED"
+
+requires:
+  speckit_version: ">=1.2.0"
+
+provides:
+  templates:
+    - type: "template"
+      name: "spec-template"
+      file: "templates/spec-template.md"
+      description: "Feature spec：沿用 docs/01 的 FR-x 编号，强制 Out of Scope"
+      replaces: "spec-template"
+
+    - type: "template"
+      name: "plan-template"
+      file: "templates/plan-template.md"
+      description: "Implementation plan：锁定技术栈，Constitution Check 对齐章程"
+      replaces: "plan-template"
+
+    - type: "template"
+      name: "tasks-template"
+      file: "templates/tasks-template.md"
+      description: "Tasks：任务粒度与回写 docs/ 检查项对齐"
+      replaces: "tasks-template"
+
+tags:
+  - "docs-baseline"
+  - "constitution"
+  - "kconlucky"
