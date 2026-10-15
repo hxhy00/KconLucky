@@ -1,6 +1,7 @@
 <template>
   <div class="h-full flex flex-col select-none pattern-grid">
-    <!-- 顶部：场次 + 统计 -->
+    <!-- 顶部：场次。统计（今日已签到/可抽号数/已中奖）已按需求整体移除：
+         不让全场观众实时盯运营数字，数据只在管理端控制台可见 -->
     <header class="flex items-center justify-between px-10 py-6">
       <div class="flex items-center gap-4">
         <!-- 图形与文字分离：图形用透明 PNG（深色底不再出现白方块），文字用真实文本 -->
@@ -12,20 +13,6 @@
         <span class="px-4 py-1.5 rounded-full text-sm bg-brand/10 text-brand border border-brand/30">
           {{ status.sessionName || '—' }}
         </span>
-      </div>
-      <div class="flex items-center gap-10 text-sm">
-        <div class="text-center">
-          <div class="text-2xl font-bold tabular-nums">{{ status.checkedInToday ?? 0 }}</div>
-          <div class="text-slate-400 mt-0.5">今日已签到</div>
-        </div>
-        <div class="text-center">
-          <div class="text-2xl font-bold tabular-nums text-brand">{{ status.poolCount ?? 0 }}</div>
-          <div class="text-slate-400 mt-0.5">可抽号数</div>
-        </div>
-        <div class="text-center">
-          <div class="text-2xl font-bold tabular-nums text-gold">{{ status.winnerCount ?? 0 }}</div>
-          <div class="text-slate-400 mt-0.5">已中奖</div>
-        </div>
       </div>
     </header>
 
@@ -50,8 +37,7 @@
         </div>
 
         <div v-if="revealSettled" class="mt-10 text-center fade-up">
-          <!-- 只展示端口号与姓名：公司名不上大屏（获奖者个人信息不对外公开） -->
-          <div class="text-6xl font-black">{{ currentReveal.name }}</div>
+          <!-- 只展示端口号：姓名按需求不上大屏（观众隐私，避免号码对应到真人） -->
         </div>
         <div v-else class="mt-10 text-2xl text-slate-700 tracking-[0.3em]">滚 动 中</div>
       </template>
@@ -74,8 +60,8 @@
 
         <div class="winner-grid">
           <div v-for="w in resultList" :key="w.winnerId" class="winner-cell">
-            <div class="winner-port">{{ w.portNo }}</div>
-            <div class="winner-name">{{ w.name }}</div>
+            <!-- 只展示端口号：姓名不上大屏（观众隐私）。去掉姓名后单列号码加大保持可读 -->
+            <div class="winner-port text-5xl md:text-6xl">{{ w.portNo }}</div>
           </div>
         </div>
 

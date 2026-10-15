@@ -152,12 +152,14 @@
 
         <div class="port-no text-brand my-6 tabular-nums">{{ result.portNo }}</div>
 
+        <!-- 核心引导：端口号 = 抽奖凭证 + 兑奖凭证（spec 005）。
+             胸牌提示降为次要信息，避免抢走「号码是抽奖用的」这个主认知 -->
         <p class="text-slate-300 text-sm leading-relaxed">
-          请您截屏保存，用于兑换抽奖礼品<br />
-          <span class="text-amber-300">奖品很丰厚哦 🎁</span>
+          请截屏保存此号码，凭它参与现场抽奖<br />
+          中奖后凭此号码到礼品区兑换奖品
         </p>
 
-        <div class="mt-7 p-4 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-200 text-sm">
+        <div class="mt-7 p-4 rounded-xl bg-slate-800/60 border border-slate-700 text-slate-400 text-sm">
           请向工作人员出示此截图领取胸牌
         </div>
 
