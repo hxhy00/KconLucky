@@ -25,4 +25,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         set status = case when code = #{code} then 1 else 0 end
     </update>
 
+    <update id="deactivateAll">
+        update kcon_session set status = 0
+    </update>
+
 </mapper>
