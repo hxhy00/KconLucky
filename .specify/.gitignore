@@ -8,6 +8,10 @@ feature.json
 # Per-machine extension config overrides.
 extensions/*/local-config.yml
 
+# Regenerable machine-local extension cache (catalog snapshots + downloaded
+# archives). Not meant to be shared; re-fetched on demand by the CLI.
+extensions/.cache/
+
 # Executable adapter packages and their per-checkout provenance registry.
 # Execution consent is stored separately in the user's local trust registry.
 integrations/packages/

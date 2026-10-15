@@ -1,0 +1,27 @@
+# Branch Convention — KconLucky
+#
+# 项目采用「轻量分支流」：不设 develop，feature 分支直接从 main 切出，完成后合回 main。
+# 本配置只约束「分支命名」，不改动 specs/ 目录结构（保持扁平 001-xxx）。
+#
+# 参考：.specify/memory/constitution.md 的分支策略章节
+
+convention:
+  # 分支带类型前缀，目录保持扁平
+  branch_pattern: "{type}/{seq}-{kebab}"
+  folder_pattern: "{seq}-{kebab}"
+
+  type_prefix:
+    feature: "feature"
+    bugfix: "bugfix"
+    hotfix: "hotfix"
+    refactor: "refactor"
+    docs: "docs"
+
+  default_type: "feature"
+  seq_padding: 3
+  seq_start: 1
+  date_format: "YYYYMMDD"
+  ticket_pattern: "[A-Z]+-[0-9]+"
+  max_length: 60
+  separator: "-"
+  lowercase: true
