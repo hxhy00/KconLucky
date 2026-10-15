@@ -147,6 +147,9 @@ public class AttendeeController extends BaseController
     public void template(HttpServletResponse response) throws IOException
     {
         ExcelUtil<KconAttendee> util = new ExcelUtil<>(KconAttendee.class);
+        // 模板排除「端口号」列：导入时不解析该列，端口号在签到时才随机分配，
+        // 留着只会误导用户以为可以预填（2026-10-15 测试报告问题 5）。
+        util.hideColumn("portNo");
         util.exportExcel(response, new ArrayList<>(), "参会名单导入模板");
     }
 

@@ -10,6 +10,7 @@ import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.mapper.KconPortPoolMapper;
 import com.ruoyi.kcon.mapper.KconPrizeMapper;
+import com.ruoyi.kcon.mapper.KconSessionMapper;
 import com.ruoyi.kcon.mapper.KconVerifyLogMapper;
 import com.ruoyi.kcon.mapper.KconWinnerMapper;
 import com.ruoyi.kcon.domain.KconCheckinExportVo;
@@ -53,6 +54,9 @@ public class ExportController extends BaseController
 
     @Autowired
     private KconVerifyLogMapper verifyLogMapper;
+
+    @Autowired
+    private KconSessionMapper sessionMapper;
 
     /** 导出签到全量明细 */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:export')")
@@ -142,6 +146,7 @@ public class ExportController extends BaseController
     public AjaxResult reset()
     {
         // 可回滚的部分先做
+        sessionMapper.deactivateAll();     // 场次状态复位为未开始（测试报告问题 4）
         portPoolMapper.releaseAll();
         prizeMapper.resetDrawnCount();
         // 不可回滚的部分后做
@@ -149,6 +154,6 @@ public class ExportController extends BaseController
         winnerMapper.truncateWinner();
         verifyLogMapper.truncateLog();
         attendeeMapper.truncateAttendee();
-        return success("清场完成：名单、签到、中奖、核验日志已清空，端口号池与奖品已抽数已归零");
+        return success("清场完成：名单、签到、中奖、核验日志已清空，端口号池与奖品已抽数已归零，场次状态已复位");
     }
 }

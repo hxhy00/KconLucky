@@ -191,9 +191,15 @@ const lookupError = ref('')
 const loading = ref(false)
 const error = ref('')
 
+// 全角数字转半角：现场有人用全角输入法（如 １３８...），\d 只认半角，
+// 不转换会被误判为「位数不足」（2026-10-15 测试报告问题 8）
+function normalizeDigits(s) {
+  return s.trim().replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+}
+
 // 找回端口号只认完整 11 位手机号：后端已砍掉尾号分支，前端提前禁用按钮，
 // 避免观众输了 4 位后拿到一句「不支持」却不知道要找什么。
-const canLookup = computed(() => /^\d{11}$/.test(keyword.value.trim()))
+const canLookup = computed(() => /^\d{11}$/.test(normalizeDigits(keyword.value)))
 
 // 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
 watch(keyword, () => {
@@ -225,7 +231,7 @@ async function doLookup() {
   error.value = ''
   lookupError.value = ''
   lookupResult.value = null
-  const kw = keyword.value.trim()
+  const kw = normalizeDigits(keyword.value)
   if (!kw) return
   if (!canLookup.value) {
     lookupError.value = '请输入完整 11 位手机号（后四位不支持找回，防止号码被冒领）'
@@ -257,7 +263,7 @@ async function doQuery() {
   error.value = ''
   lookupResult.value = null
   lookupError.value = ''
-  const kw = keyword.value.trim()
+  const kw = normalizeDigits(keyword.value)
   if (!kw) return
   loading.value = true
   try {

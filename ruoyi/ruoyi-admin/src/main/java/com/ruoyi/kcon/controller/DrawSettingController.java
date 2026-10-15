@@ -61,8 +61,14 @@ public class DrawSettingController extends BaseController
     @PostMapping("/setting")
     public AjaxResult saveSetting(@RequestBody Map<String, String> body)
     {
-        String sponsors = body == null ? null : body.get("sponsors");
-        String value = StringUtils.trimToEmpty(sponsors);
+        // 区分「没带 sponsors 字段」和「显式清空」：空 body / {} 提交不该把线上
+        // 赞助商静默清掉（2026-10-15 测试报告问题 3），只有显式传 {"sponsors":""}
+        // 才视为清空意图。
+        if (body == null || !body.containsKey("sponsors"))
+        {
+            return error("缺少 sponsors 字段，未做任何修改");
+        }
+        String value = StringUtils.trimToEmpty(body.get("sponsors"));
 
         // 走 ISysConfigService 是因为它会同时写库与刷新 Redis 缓存，
         // 直接往 Redis 塞值容器重启就丢了。

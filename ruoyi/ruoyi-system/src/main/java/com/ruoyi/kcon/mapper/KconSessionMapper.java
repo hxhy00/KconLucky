@@ -19,4 +19,9 @@ public interface KconSessionMapper
      * 设为进行中，其余置为未开始
      */
     int activate(String code);
+
+    /**
+     * 所有场次状态复位为未开始（数据清场时调用）
+     */
+    int deactivateAll();
 }
