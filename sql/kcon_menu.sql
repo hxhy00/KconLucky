@@ -59,19 +59,28 @@ UPDATE `sys_user` SET `status` = '1', `update_by` = 'admin'
 -- 【菜单 ID 固定不变】仅调整 parent_id / order_num / menu_name。
 -- 这样 sys_role_menu 中已有的授权关系无需重建，权限点 perms 也保持稳定。
 --
--- 【route_name 必须显式指定，且不能与页面组件名相同】
--- 路由名默认由 path 推导（capitalize(path)），会和 RuoYi 自带路由重名：
+-- 【route_name 必须显式指定】
+-- 路由名默认由 path 推导（capitalize(path)，只处理首字符），会和 RuoYi 自带路由重名：
 --   3006 data  → Data，与 ruoyi-ui 内置的字典页路由 name:'Data' 撞名
 --   3100 log   → Log ，与 RuoYi 自带菜单「日志管理」(menu_id 108, path=log) 撞名
--- vue-router 的 name 映射只保留先注册的那一个，重名会让按 name 跳转、
--- 缓存判定等行为变得不可预期，故这两处显式命名。
+-- vue-router 的 name 映射只保留先注册的那一个，重名会让按 name 跳转与
+-- 缓存判定变得不可预期，故这两处显式命名。
 --
--- 反过来，route_name 也不能写成与组件名相同（如 KconData）：
--- RuoYi 的 tagsView 把「路由名」放进 cachedViews，AppMain 的
--- <keep-alive :include="cachedViews"> 再按「组件名」匹配，
--- 两者一相等就会悄悄开启页面缓存 —— 从其它页面返回时看到旧数据，
--- 例如数据管理页已输入的「清场」确认词会跨页面残留，一键即可清空现场数据。
--- 因此这里取 KconLog / KconDataManage，与任何组件名都不相同。
+-- 命名约束（两条，缺一不可）：
+--   ① 避开全部内置路由名与 RuoYi 自带菜单的推导名；
+--   ② 避开现有 8 个页面组件名（KconDashboard / KconAttendee / KconDrawConsole /
+--      KconVerify / KconWinner / KconVerifyLog / KconPrize / KconData）。
+--
+-- 关于 ② 的原因：若将来到「菜单管理」里重新打开页签栏（settings.js 的 tagsView
+-- 现为 false，且 TagsView 组件已移除），tagsView 会把**路由名**写入 cachedViews，
+-- 而 AppMain 的 <keep-alive :include="cachedViews"> 是按**组件名**匹配的，
+-- 两者一相等就等于开启页面缓存，返回时会看到旧数据（如今后写了
+-- `<keep-alive>` 却发现「数据没重新加载」，根因通常就在这里）。
+-- 当前页签栏关闭、cachedViews 恒为空，不存在缓存问题，此约束是为将来留的。
+--
+-- 注意：撞名只在 name 层消除了，path 层 3100 与 108 仍同为 log。
+-- 这两个菜单请勿在「菜单管理」界面编辑（会被 RuoYi 的路由判重拦下），
+-- 需要调整时改本文件或走 SQL。
 -- -------------------------------------------------------------
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
 VALUES
@@ -81,7 +90,7 @@ VALUES
   (3007, '抽奖控制台', 0, 3, 'draw',      'kcon/draw/index',      '', '', 1, 0, 'C', '0', '0', 'kcon:draw:query',    'guide',     'admin', NOW(), '场次切换与抽奖操作（FR-16/19/20）'),
   (3005, '兑奖核验',   0, 4, 'verify',    'kcon/verify/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query',  'search',    'admin', NOW(), '端口号+手机号核验发放'),
   -- 一级目录：日志
-  (3100, '日志',       0, 5, 'log',       NULL,                   '', 'KconLog', 1, 0, 'M', '0', '0', '',  'log',       'admin', NOW(), '日志目录'),
+  (3100, '日志',       0, 5, 'log',       NULL,                   '', 'KconLog',      1, 0, 'M', '0', '0', '',            'log',       'admin', NOW(), '日志目录'),
   -- 一级目录：设置
   (3200, '设置',       0, 6, 'setting',   NULL,                   '', '', 1, 0, 'M', '0', '0', '',                   'system',    'admin', NOW(), '设置目录'),
   -- 日志子菜单
@@ -89,7 +98,7 @@ VALUES
   (3008, '核验日志',   3100, 2, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query', 'list',  'admin', NOW(), '核验操作追溯'),
   -- 设置子菜单
   (3003, '奖品设置',   3200, 1, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',   'star',  'admin', NOW(), '场次奖项档位'),
-  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset',   'tool',  'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
+  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
 
 -- -------------------------------------------------------------
 -- 按钮权限

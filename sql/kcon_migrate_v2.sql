@@ -60,4 +60,22 @@ SET @sql := IF(@exists = 0,
   'DO 0');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- -------------------------------------------------------------
+-- 5. sys_menu 补 KCon 菜单的显式 route_name
+--    路由名默认由 path 推导（capitalize(path)），不写 route_name 会与
+--    RuoYi 自带路由撞名：
+--      3006 path=data → Data，与 ruoyi-ui 内置字典页路由 name:'Data' 冲突
+--      3100 path=log  → Log ，与自带菜单「日志管理」(108, path=log) 冲突
+--    vue-router 的 name 映射只保留先注册的那个，重名会让按 name 跳转与
+--    缓存判定变得不可预期，故显式命名。
+--
+--    幂等：只在 route_name 为空时写入。已经手工改过的库不会被回退。
+--    注意 3100 与 108 的 path 字符串仍同为 log（name 层已分开，path 层未变），
+--    所以这两个菜单不要在「菜单管理」界面里改，会被 RuoYi 的路由判重拦下。
+-- -------------------------------------------------------------
+UPDATE `sys_menu` SET `route_name` = 'KconDataManage'
+ WHERE `menu_id` = 3006 AND (`route_name` IS NULL OR `route_name` = '');
+UPDATE `sys_menu` SET `route_name` = 'KconLog'
+ WHERE `menu_id` = 3100 AND (`route_name` IS NULL OR `route_name` = '');
+
 SELECT '迁移 v2 执行完成' AS result;
