@@ -36,10 +36,19 @@ FROM nginx:1.27-alpine
 ENV TZ=Asia/Shanghai
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/web/nginx.conf /etc/nginx/nginx.conf
-COPY docker/web/index.html /usr/share/nginx/html/index.html
-COPY docker/web/kcon-mark.png /usr/share/nginx/html/kcon-mark.png
-COPY docker/web/favicon.ico /usr/share/nginx/html/favicon.ico
-COPY --from=build-admin   /app/dist /usr/share/nginx/html/admin
-COPY --from=build-checkin /app/dist /usr/share/nginx/html/checkin
-COPY --from=build-screen  /app/dist /usr/share/nginx/html/screen
+COPY docker/web/entrypoint.sh /release-and-run.sh
+COPY docker/web/index.html /opt/web-release/index.html
+COPY docker/web/kcon-mark.png /opt/web-release/kcon-mark.png
+COPY docker/web/favicon.ico /opt/web-release/favicon.ico
+# 新版产物暂存在挂载点之外：compose 把宿主机卷挂到 /usr/share/nginx/html
+# 会遮住挂载点内的所有镜像内容，暂存目录放这里会被卷盖掉导致发布失败。
+# entrypoint 启动时把它合并发布进卷，并把更早版本的孤儿资源回收。
+COPY --from=build-admin   /app/dist /opt/web-release/admin
+COPY --from=build-checkin /app/dist /opt/web-release/checkin
+COPY --from=build-screen  /app/dist /opt/web-release/screen
+RUN chmod +x /release-and-run.sh
+# 覆盖 ENTRYPOINT 后基础镜像的 CMD 不会自动保留，必须显式声明，
+# 否则 entrypoint 里 exec "$@" 执行空参数直接退出（现象：容器反复重启、退出码 0）
+ENTRYPOINT ["/release-and-run.sh"]
+CMD ["nginx", "-g", "daemon off;"]
 EXPOSE 80

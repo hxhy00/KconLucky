@@ -165,7 +165,8 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" size="small" icon="el-icon-check"
-                     :loading="savingSetting" @click="saveSetting">保存</el-button>
+                     :loading="savingSetting" :disabled="!settingLoaded"
+                     @click="saveSetting">保存</el-button>
           <span class="text-muted" style="margin-left: 10px; font-size: 12px;">
             大屏每 3 秒自动刷新，保存后约 3 秒生效
           </span>
@@ -226,6 +227,9 @@ export default {
       // 大屏设置（赞助商等）
       settingForm: { sponsors: "" },
       savingSetting: false,
+      // 设置是否已成功读取过：读取失败时表单是"假空"，此时保存会误清线上赞助商，
+      // 必须禁用保存按钮并引导重新读取（第三轮测试报告问题 1 根因补强）
+      settingLoaded: false,
       // 本次抽出的整批（一次点击会抽出整档的人，如三等奖一次出 3 位）
       lastBatch: [],
       lastBatchTier: "",
@@ -332,9 +336,21 @@ export default {
       getDrawSetting().then(res => {
         const list = res.data?.sponsors || res.sponsors || []
         this.settingForm.sponsors = Array.isArray(list) ? list.join(", ") : String(list || "")
-      }).catch(() => {})
+        this.settingLoaded = true
+      }).catch(() => {
+        // 读取失败保持 settingLoaded=false，保存按钮保持禁用，
+        // 避免用户在"假空"表单上点保存把线上赞助商清掉
+        this.settingLoaded = false
+        this.$modal.msgError("抽奖设置读取失败，请点「重新读取」后再操作")
+      })
     },
     saveSetting() {
+      // 双保险：设置未成功读取时表单是"假空"，直接保存会误清赞助商
+      if (!this.settingLoaded) {
+        this.$modal.msgWarning("设置尚未成功读取，请先点「重新读取」确认当前赞助商内容")
+        this.loadSetting()
+        return
+      }
       // 空表单 = 显式清空意图，必须二次确认：UI 总是带 sponsors 字段提交，
       // 不确认的话误点保存就会把线上赞助商静默清掉（第二轮测试报告问题 2）
       if (!this.settingForm.sponsors.trim()) {

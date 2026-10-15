@@ -111,6 +111,11 @@ services:
       - "${WEB_PORT:-80}:80"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      # 静态资源持久化到宿主机卷：换版时 entrypoint 把上一版挪进 prev/ 保留，
+      # 已打开设备（缓存旧 index.html）刷新请求旧 hash chunk 由 nginx 回退
+      # prev/ 提供，不再 404 白屏（第三轮测试报告问题 5）
+      - ./data/web-static:/usr/share/nginx/html
     networks: [kcon]
 
 networks:
