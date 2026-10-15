@@ -74,13 +74,15 @@ UPDATE `sys_user` SET `status` = '1', `update_by` = 'admin'
 -- 关于 ② 的原因：若将来到「菜单管理」里重新打开页签栏（settings.js 的 tagsView
 -- 现为 false，且 TagsView 组件已移除），tagsView 会把**路由名**写入 cachedViews，
 -- 而 AppMain 的 <keep-alive :include="cachedViews"> 是按**组件名**匹配的，
--- 两者一相等就等于开启页面缓存，返回时会看到旧数据（如今后写了
+-- 两者一相等就等于开启页面缓存，返回时会看到旧数据（日后写了
 -- `<keep-alive>` 却发现「数据没重新加载」，根因通常就在这里）。
--- 当前页签栏关闭、cachedViews 恒为空，不存在缓存问题，此约束是为将来留的。
+-- 当前页签栏关闭、cachedViews 不含任何真实组件名，不存在缓存问题，此约束是为将来留的。
 --
 -- 注意：撞名只在 name 层消除了，path 层 3100 与 108 仍同为 log。
--- 这两个菜单请勿在「菜单管理」界面编辑（会被 RuoYi 的路由判重拦下），
--- 需要调整时改本文件或走 SQL。
+-- 请勿在「菜单管理」界面编辑 3100：SysMenuServiceImpl#checkRouteConfigUnique
+-- 的「根目录路由冲突」分支会因 108 同为 path=log 而判重拦截，导致改任何字段都存不进去。
+-- （反向不受影响：108 的 route_name 仍是 log，与 3100 的 KconLog 不同，可正常编辑。）
+-- 需要调整 3100 时改本文件或走 SQL。
 -- -------------------------------------------------------------
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`)
 VALUES

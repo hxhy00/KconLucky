@@ -78,4 +78,14 @@ UPDATE `sys_menu` SET `route_name` = 'KconDataManage'
 UPDATE `sys_menu` SET `route_name` = 'KconLog'
  WHERE `menu_id` = 3100 AND (`route_name` IS NULL OR `route_name` = '');
 
+-- -------------------------------------------------------------
+-- 执行结果自检：上两条 UPDATE 若目标库没有这两行（例如部署早于菜单调整），
+-- 会静默影响 0 行。这里把结果打出来，执行者一眼能确认是否真的补上了。
+-- 两行的 route_name 均应为非空；若为空说明该库缺这两个菜单，
+-- 需检查 sys_menu 是否被裁剪过，而不是重跑本脚本。
+-- -------------------------------------------------------------
+SELECT `menu_id`, `menu_name`, `path`, `route_name` AS `期望 KconDataManage / KconLog`
+  FROM `sys_menu`
+ WHERE `menu_id` IN (3006, 3100);
+
 SELECT '迁移 v2 执行完成' AS result;
