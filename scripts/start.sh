@@ -25,6 +25,6 @@ echo " 启动完成"
 echo " 管理端：   http://${LAN_IP}:${PORT}/admin/"
 echo " 签到 H5：  http://${LAN_IP}:${PORT}/sign/"
 echo " 抽奖大屏： http://${LAN_IP}:${PORT}/screen/"
-echo " 默认账号： admin / admin123"
+echo " 默认账号： KconLucky / Kcon2026Aa."
 echo "============================================"
 docker compose ps

@@ -2,7 +2,7 @@
 # KCon 2026 签到 + 抽奖系统 · 一键启动
 # 用法：docker compose up -d --build
 # 访问：http://<LAN_IP>/           入口分流页（管理端 / 大屏 / 签到）
-#       http://<LAN_IP>/admin/     管理端（默认 admin/admin123）
+#       http://<LAN_IP>/admin/     管理端（默认 KconLucky/Kcon2026Aa.）
 #       http://<LAN_IP>/screen/    抽奖大屏
 #       http://<LAN_IP>/sign/      观众签到（二维码指向此地址）
 # =============================================================
