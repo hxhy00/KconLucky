@@ -77,7 +77,8 @@ service.interceptors.request.use(config => {
       const s_data = sessionObj.data                // 请求数据
       const s_time = sessionObj.time                // 请求时间
       if (s_data === requestObj.data && requestObj.time - s_time < interval && s_url === requestObj.url) {
-        const message = '数据正在处理，请勿重复提交'
+        // 「请勿重复提交」会让用户以为是操作失败；真实原因是触发频率过快（第二轮测试报告问题 5）
+        const message = '操作过于频繁，请稍后重试'
         console.warn(`[${s_url}]: ` + message)
         return Promise.reject(new Error(message))
       } else {

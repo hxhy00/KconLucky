@@ -335,6 +335,17 @@ export default {
       }).catch(() => {})
     },
     saveSetting() {
+      // 空表单 = 显式清空意图，必须二次确认：UI 总是带 sponsors 字段提交，
+      // 不确认的话误点保存就会把线上赞助商静默清掉（第二轮测试报告问题 2）
+      if (!this.settingForm.sponsors.trim()) {
+        this.$modal.confirm("赞助商为空，保存将移除大屏底部的赞助商条，是否继续？").then(() => {
+          this.doSaveSetting()
+        }).catch(() => {})
+        return
+      }
+      this.doSaveSetting()
+    },
+    doSaveSetting() {
       this.savingSetting = true
       saveDrawSetting({ sponsors: this.settingForm.sponsors })
         .then(() => {
