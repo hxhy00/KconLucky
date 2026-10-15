@@ -56,10 +56,11 @@ spec/plan/tasks 中出现的 mock，写成「见 `docs/06-Mock台账.md` 第 N �
    不进版本库。多人协作时各自 `cd` 到项目根跑 `/speckit.*` 即可自动定位。
 
 3. **git 分支与 feature 目录解耦（本项目有意为之）**
-   本项目**未**安装 `git` 扩展，所以 `/speckit.specify` 不会自动创建 `feature/xxx` 分支，
-   也不会依赖分支名去定位 spec 目录。分支仍按 Git Flow 手工管理（见章程第六节）。
-   这样做的理由：Git Flow 的分支命名（`feature/<主题>`）与 Spec Kit 的
-   `NNN-<slug>` 目录命名是两套规则，自动联动会产生大量无意义分支。
+   本项目**未**安装 `git` 扩展，所以 `/speckit.specify` 不会自动创建分支，
+   也不会依赖分支名去定位 spec 目录。本项目实际为 **`main` 单分支流**（见章程第六节），
+   不按分支区分 feature。
+   这样做的理由：Spec Kit 的 `NNN-<slug>` 目录命名已能唯一标识 feature，
+   再为每个 feature 建分支会产生大量无意义分支。
 
 4. **本项目项目规约目录是 `docs/` 而不是 `specs/`**
    本项目的 `specs/` 在初始化 Spec Kit 之前不存在，因此不存在命名冲突。

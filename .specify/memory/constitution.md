@@ -1,8 +1,8 @@
 # KConLucky 项目章程（Constitution）
 
-**版本**：1.0.0
+**版本**：1.0.1
 **批准日期**：2026-10-15
-**最近修订**：2026-10-15
+**最近修订**：2026-10-15（订正第六条：项目实为 `main` 单分支流，且无 commit 校验工具，原文误述为 Git Flow + 强制校验）
 
 > 本章程是 Spec Kit 工作流的最高约束。`/speckit.plan` 的 Constitution Check 按此逐条判定，
 > 与章程 MUST 条款冲突的方案一律判定为 CRITICAL，必须修改方案而非稀释章程。
@@ -86,8 +86,9 @@
 
 **MUST**：
 
-1. 遵循 Git Flow：`main` 只放已发布版本，日常在 `develop`，功能走 `feature/<主题>`。
-2. Commit message 强制 Conventional Commits（`.husky/commit-msg` + `commitlint.config.mjs` 会直接拒绝不合规提交）。
+1. 本项目实际为 **`main` 单分支流**（远端仅有 `main`，无 `develop`/`feature`）。改动直接提交到 `main`，不擅自新建 Git Flow 分支。若将来要引入分支模型，须先在本文件与 `docs/04-部署运行.md` 中更新约定。
+2. Commit message **遵循 Conventional Commits 格式**（`<type>(<scope>): <subject>`）。
+   注意：项目当前**没有** commit 钩子或 lint 工具强制校验，属团队约定而非工具强制，因此提交前须自行核对格式。
 3. 可自行 `commit`，**不准直接 `push`**；推送前向用户说明分支与范围，由用户手动执行。
 4. 禁止 `git commit --amend`、`git reset --hard`、`git push --force`，除非用户明确要求。
 

@@ -106,7 +106,7 @@
 - [ ] TXXX [P] 回写 `docs/05-功能缺口.md`（本 feature 的实测记录）
 - [ ] TXXX [P] 清理 `docs/06-Mock台账.md` 中已被真实实现替换的条目
 - [ ] TXXX 对照 `docs/01-需求规格.md` 的 AC 逐条打勾，形成验收单
-- [ ] TXXX 按 Conventional Commits 提交（分支：`feature/<主题>` 或 `develop`），只 commit 不 push
+- [ ] TXXX 按 Conventional Commits 提交到 `main`，只 commit 不 push
 
 ---
 

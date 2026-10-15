@@ -53,7 +53,7 @@
 - [ ] **三、数据与迁移**：DDL 是否同时更新 `sql/kcon_lucky.sql` 与幂等迁移脚本？是否同步 `docs/02`？
 - [ ] **四、控制权唯一**：写操作是否只在服务端做鉴权？签到端是否只有「签到」一个写操作？
 - [ ] **五、依赖与工具链**：是否使用国内源？是否避免软链接？是否未新增冗余文档？
-- [ ] **六、Git 与提交**：是否在 `develop`/`feature/*` 分支上？是否只 commit 不 push？
+- [ ] **六、Git 与提交**：是否按 Conventional Commits 写 commit？是否只 commit 不 push？
 - [ ] **七、语言与表达**：文档是否简体中文？术语是否统一？
 
 [Gates determined based on constitution file]
