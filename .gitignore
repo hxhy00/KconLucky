@@ -18,8 +18,13 @@ target/
 # ---- 运行时数据（绝对不能进版本库）----
 # data/ 里有 MySQL 数据文件、Redis dump、上传文件，体积 200MB+，
 # 且属于现场数据。迁移时随项目目录整体拷贝即可，不进代码仓库。
-data/
-logs/
+#
+# 必须写成 /data/ 而不是 data/：gitignore 规则匹配「任意层级」的同名目录，
+# 写成 data/ 会连源码目录 ruoyi-ui/src/views/kcon/data/（数据管理页）一起排除，
+# 导致该页面从未入库。新克隆的仓库缺这个文件，前端动态 import 报
+# "Cannot find module './kcon/data/index'"，点击菜单无反应且控制台报错。
+/data/
+/logs/
 *.log
 
 # ---- 密钥与本地配置 ----

@@ -25,7 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,7 +38,8 @@ import org.springframework.web.multipart.MultipartFile;
  * mysqldump 在后端镜像构建时通过 apt 安装（见 docker/backend/Dockerfile）。
  *
  * 安全设计（恢复是不可逆操作，误操作会直接丢掉现场数据）：
- *   1. 导出/恢复都要求 super-admin 角色，权限点 kcon:data:migrate；
+ *   1. 导出/恢复都要求 super-admin 角色（仅 hasRole('admin') 单重校验，刻意不挂
+ *      kcon:data:migrate 权限点——它从未在任何地方被校验，挂上去只会造成「双重校验」的错觉）；
  *   2. 恢复前自动先导出一份当前数据存档，失败即中止，不会「先破坏后备份」；
  *   3. 恢复要求上传 .sql 文件，大小受限，且必须是 SELECT/CREATE/INSERT 等
  *      DDL/DML 语句，出现 DROP DATABASE / DROP TABLE 等破坏性语句直接拒绝；

@@ -19,5 +19,7 @@ selenium-debug.log
 *.sln
 *.local
 
-package-lock.json
-yarn.lock
+# 注意：package-lock.json / yarn.lock 必须入库。
+# 不锁版本时 npm install 会从 registry 重新解析依赖树，构建结果随上游漂移、
+# 不可复现（服务器 docker/web/Dockerfile 三处用的正是 npm install，
+# 它不会因缺锁文件而报错，只会静默解析出不同的版本）。
