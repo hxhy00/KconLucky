@@ -109,10 +109,11 @@ public class KconDrawServiceImpl implements IKconDrawService
         data.put("sessionName", current != null ? current.getName() : "");
         data.put("checkedInToday", checkinMapper.countToday());
         data.put("poolCount", calcPool(sessionCode).size());
-        // spec 006 FR-A7：被排除人数，控制台据此解释「已签到多、可抽少」的差值。
-        // 不进 version——大屏不消费该字段（spec 005 已收紧大屏统计口径），
-        // 加进去只会让已导入名单变化时大屏白渲染一次。
-        data.put("excludedCount", countExcludedToday());
+        // 注意：此方法**同时服务免登录的大屏接口**（DrawScreenController /app/screen/status），
+        // 因此这里只放「观众可见也不构成泄露」的字段。
+        // spec 006 的 excludedCount 刻意不在此处返回——它会让
+        // checkedInToday - poolCount 的差额含义被匿名请求读到，等于对外公布筛选口径。
+        // 该字段由管理端 DrawAdminController#buildStatus 自行附加（FR-A7/FR-A8）。
         data.put("winnerCount", winnerMapper.countWinners(null));
         data.put("sessions", sessions);
 

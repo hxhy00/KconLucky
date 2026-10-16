@@ -57,8 +57,11 @@ public interface IKconDrawService
     List<Integer> calcPool(String sessionCode);
 
     /**
-     * 今日已签到但不参与抽奖的人数（spec 006 FR-A7 可观测性）。
+     * 今日已签到但不在抽奖范围内的人数（spec 006 FR-A7 可观测性）。
      * 控制台用于解释「今日已签到 300、可抽号数 180」的差值，避免被当成 bug。
+     *
+     * <p>**只允许管理端接口调用**：该数字与 checkedInToday 的差额即筛选取向，
+     * 不得出现在免登录响应中（大屏 /app/screen/status 就不带它，见 FR-A8）。
      */
     int countExcludedToday();
 
