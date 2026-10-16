@@ -54,7 +54,13 @@ public class CheckinAppController extends BaseController
     /**
      * 2.2 确认签到
      * POST /app/checkin/submit  { "attendeeId": 12 }
+     *
+     * 限流 60 次/分钟（IP）：本接口免登录且会真正落库分配端口号，
+     * 不限流则可被脚本枚举 attendeeId 批量替人签到、耗尽端口池。
+     * 阈值为 query（200）与 lookup（30）之间：现场多人共用同一 WiFi 出口 IP，
+     * 取 60/分钟（约 1 次/秒）既不误伤排队签到，又让批量攻击不划算。
      */
+    @RateLimiter(time = 60, count = 60, limitType = LimitType.IP)
     @PostMapping("/submit")
     public AjaxResult submit(@RequestBody Map<String, Object> body)
     {
