@@ -64,6 +64,7 @@
             <div class="text-brand text-xs tracking-widest">你的端口号</div>
             <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
             <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
+            <!-- spec 006：与签到成功页同口径——不暴露抽奖资格，找回结果一律不区分 -->
           </div>
 
           <!-- 这里曾列出「后四位撞号」的候选让人自己认领。找回只认完整 11 位后，
@@ -153,7 +154,12 @@
         <div class="port-no text-brand my-6 tabular-nums">{{ result.portNo }}</div>
 
         <!-- 核心引导：端口号 = 抽奖凭证 + 兑奖凭证（spec 005）。
-             胸牌提示降为次要信息，避免抢走「号码是抽奖用的」这个主认知 -->
+             胸牌提示降为次要信息，避免抢走「号码是抽奖用的」这个主认知。
+
+             注意：非买票者（spec 006）在这里看到的内容与买票者**完全一致**。
+             不提示「您不参与抽奖」是刻意设计——筛选规则不对外暴露，
+             否则等于告诉对方「你的票是白来的」，既引发现场争执，也把口径送了出去。
+             判定结果只留在服务端，供抽奖池与统计使用。 -->
         <p class="text-slate-300 text-sm leading-relaxed">
           请截屏保存此号码，凭它参与现场抽奖<br />
           中奖后凭此号码到礼品区兑换奖品

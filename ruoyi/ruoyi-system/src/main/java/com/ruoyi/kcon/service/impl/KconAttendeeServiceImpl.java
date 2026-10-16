@@ -34,7 +34,7 @@ import java.util.Map;
  *
  * 导入容错设计：
  *   - 按表头名匹配列，顺序任意
- *   - 必填：姓名 / 手机号 / 渠道标识 / 票种
+ *   - 必填：姓名 / 手机号 / 渠道标识 / 票种 / 是否参与抽奖（spec 006 补充）
  *   - 选填：公司 / 邮箱 / 第几次参加 KCon / 职务·年级
  *   - 未识别的列直接忽略（例如票务总表带来的 购票时间/金额/发票需求）
  *
@@ -65,15 +65,18 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         HEADER_ALIAS.put("职务/年级", "position");
         HEADER_ALIAS.put("职务", "position");
         HEADER_ALIAS.put("年级", "position");
+        HEADER_ALIAS.put("是否参与抽奖", "drawEligible");
+        HEADER_ALIAS.put("参与抽奖", "drawEligible");
     }
 
     /** 必填列（标准字段名） */
-    private static final List<String> REQUIRED = List.of("name", "phone", "channel", "ticketType");
+    private static final List<String> REQUIRED = List.of("name", "phone", "channel", "ticketType", "drawEligible");
 
     /** 必填列的中文名（报错用） */
     private static final Map<String, String> FIELD_CN = Map.of(
             "name", "姓名", "phone", "手机号",
-            "channel", "渠道标识", "ticketType", "票种"
+            "channel", "渠道标识", "ticketType", "票种",
+            "drawEligible", "是否参与抽奖"
     );
 
     @Autowired
@@ -119,6 +122,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     {
         attendee.setPhoneTail4(tail4(attendee.getPhone()));
         attendee.setPhone(attendee.getPhone().trim());
+        // draw_eligible 列 NOT NULL：直连 API 新增时可能不带该字段，缺省按「否」
+        // （与导入口径一致：只有显式「是」才进池），避免插 null 触发 SQL 错误
+        if (attendee.getDrawEligible() == null)
+        {
+            attendee.setDrawEligible(0);
+        }
         return attendeeMapper.insertAttendee(attendee);
     }
 
@@ -218,7 +227,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         if (!missing.isEmpty())
         {
             throw new ServiceException("缺少必填列：" + String.join("、", missing)
-                    + "。正确表头应包含：姓名、手机号、渠道标识、票种（公司/邮箱/第几次参加KCon/职务年级为选填）");
+                    + "。正确表头应包含：姓名、手机号、渠道标识、票种、是否参与抽奖（公司/邮箱/第几次参加KCon/职务年级为选填）");
         }
 
         // 3. replace 模式先清空
@@ -245,9 +254,13 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
 
         String batch = "B" + System.currentTimeMillis();
         int inserted = 0, updated = 0, skipped = 0;
+        // 漏填「是否参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
+        int drawFlagMissing = 0;
         int phoneIdx = colIndex.get("phone");
         // 记录被跳过行的行号与原因：只返回一个「跳过 N 条」，现场拿着 Excel 不知道要改哪几行
         List<Map<String, Object>> skipDetails = new ArrayList<>();
+        // 记录漏填「是否参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
+        List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
 
         for (int r = 1; r < rows.size(); r++)
         {
@@ -293,11 +306,27 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 continue;
             }
 
+            // spec 006 补充（2026-10-16 确认）：是否参与抽奖为第 5 必填列，
+            // 是票务侧的显式事实，不由票种/渠道推导。口径「必须显式填，空即视为否」：
+            // 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
+            // （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
+            String drawFlag = cell(row, colIndex.get("drawEligible")).trim();
+            int drawEligible = "是".equals(drawFlag) ? 1 : 0;
+            if (drawFlag.isEmpty())
+            {
+                // 该行照常入库（按「否」），只做单独计数提示：漏填行名单缺失会
+                // 让持有人失去抽奖资格，现场需要知道具体行号去补。不并入 skipped——
+                // skipped 表示「没导入」，这行导入了，混在一起统计会对不上。
+                drawFlagMissing++;
+                addFlagMissingDetail(flagMissingDetails, lineNo);
+            }
+
             KconAttendee a = new KconAttendee();
             a.setName(name);
             a.setPhone(phone);
             a.setChannel(channel);
             a.setTicketType(ticketType);
+            a.setDrawEligible(drawEligible);
             a.setPhoneTail4(tail4(phone));
             a.setImportBatch(batch);
             a.setCreateBy(operator);
@@ -335,8 +364,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             }
         }
 
-        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 明细条数={}",
-                mode, inserted, updated, skipped, skipDetails.size());
+        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 漏填参与标记={} 明细条数={}",
+                mode, inserted, updated, skipped, drawFlagMissing, skipDetails.size());
 
         Map<String, Object> stat = new LinkedHashMap<>();
         stat.put("total", attendeeMapper.countAll());
@@ -344,8 +373,25 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         stat.put("updated", updated);
         stat.put("skipped", skipped);
         stat.put("skipDetails", skipDetails);
+        stat.put("drawFlagMissing", drawFlagMissing);
+        stat.put("flagMissingDetails", flagMissingDetails);
         stat.put("batch", batch);
         return stat;
+    }
+
+    /** 漏填「是否参与抽奖」明细上限：与失败行明细一致，够现场定位即可 */
+    private static final int FLAG_MISSING_DETAIL_LIMIT = 20;
+
+    private void addFlagMissingDetail(List<Map<String, Object>> details, int lineNo)
+    {
+        if (details.size() >= FLAG_MISSING_DETAIL_LIMIT)
+        {
+            return;
+        }
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("row", lineNo);
+        d.put("reason", "是否参与抽奖为空（按「否」处理）");
+        details.add(d);
     }
 
     /** 失败行明细上限：够现场定位问题即可，避免响应体过大 */
