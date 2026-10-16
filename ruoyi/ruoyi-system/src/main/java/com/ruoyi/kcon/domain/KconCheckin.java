@@ -33,6 +33,15 @@ public class KconCheckin extends BaseEntity
     @Excel(name = "签到时间")
     private Date checkinTime;
 
+    /** 渠道标识（联表带出，抽奖池过滤用，非本表列） */
+    private String channel;
+
+    /** 票种（联表带出，抽奖池过滤用，非本表列） */
+    private String ticketType;
+
+    /** 是否参与抽奖：1=是 0=否（联表带出，抽奖池过滤用，非本表列） */
+    private Integer drawEligible;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -50,4 +59,13 @@ public class KconCheckin extends BaseEntity
 
     public Date getCheckinTime() { return checkinTime; }
     public void setCheckinTime(Date checkinTime) { this.checkinTime = checkinTime; }
+
+    public String getChannel() { return channel; }
+    public void setChannel(String channel) { this.channel = channel; }
+
+    public String getTicketType() { return ticketType; }
+    public void setTicketType(String ticketType) { this.ticketType = ticketType; }
+
+    public Integer getDrawEligible() { return drawEligible; }
+    public void setDrawEligible(Integer drawEligible) { this.drawEligible = drawEligible; }
 }

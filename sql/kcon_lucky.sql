@@ -15,7 +15,7 @@ USE `kcon_lucky`;
 
 -- -------------------------------------------------------------
 -- 3.1 kcon_attendee 参会人名单
---     导入必填 4 列：姓名 / 手机号 / 渠道标识 / 票种
+--     导入必填 5 列：姓名 / 手机号 / 渠道标识 / 票种 / 是否参与抽奖（spec 006）
 --     选填 4 列：公司 / 邮箱 / 第几次参加 KCon / 职务·年级（可后端补录）
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `kcon_attendee`;
@@ -25,6 +25,7 @@ CREATE TABLE `kcon_attendee` (
   `phone`        VARCHAR(20)  NOT NULL                COMMENT '手机号（业务主键，唯一）',
   `channel`      VARCHAR(8)   DEFAULT NULL            COMMENT '渠道标识：S/T/C/H/D/G/V',
   `ticket_type`  VARCHAR(32)  DEFAULT NULL            COMMENT '票种：散客票/早鸟票/标准票等（自由文本）',
+  `draw_eligible` TINYINT    NOT NULL DEFAULT 0       COMMENT '是否参与抽奖：1=是 0=否（导入第 5 必填列，留空/无法识别按「否」入库）',
   `company`      VARCHAR(128) DEFAULT NULL            COMMENT '公司',
   `email`        VARCHAR(128) DEFAULT NULL            COMMENT '邮箱',
   `attend_count` INT          DEFAULT NULL            COMMENT '第几次参加 KCon（1=首次，空=未知）',

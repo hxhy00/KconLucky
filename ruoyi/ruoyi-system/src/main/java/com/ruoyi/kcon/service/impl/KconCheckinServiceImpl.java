@@ -8,6 +8,7 @@ import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.mapper.KconPortPoolMapper;
 import com.ruoyi.kcon.service.IKconCheckinService;
+import com.ruoyi.system.service.ISysConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +48,10 @@ public class KconCheckinServiceImpl implements IKconCheckinService
 
     @Autowired
     private KconPortPoolMapper portPoolMapper;
+
+    /** 抽奖资格判定依赖的系统参数（黑名单），服务不可用时降级为内置默认值 */
+    @Autowired
+    private ISysConfigService sysConfigService;
 
     @Override
     public Map<String, Object> queryAttendee(String keyword)
@@ -177,6 +182,16 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         data.put("checkinTime", format(checkinTime));
         data.put("repeat", repeat);
         data.put("name", attendee.getName());
+
+        // spec 006 FR-A4/A5：非买票者照常签到、照常拿端口号，不拦截；
+        // 返回体带出 drawEligible，前端据此向非买票者提示「不参与本次抽奖」，
+        // 避免其散场后到兑奖台争执。判定口径与抽奖池一致（DrawEligibility）。
+        boolean drawEligible = DrawEligibility.isEligible(
+                attendee.getDrawEligible(), attendee.getChannel(), attendee.getTicketType(),
+                DrawEligibility.excludeChannels(sysConfigService),
+                DrawEligibility.excludeTicketKeywords(sysConfigService));
+        data.put("drawEligible", drawEligible);
+
         data.put("tip", "您的抽奖端口号为 " + portNo + "，请您截屏保存，用于兑换抽奖礼品；请向工作人员出示此截图领取胸牌");
         return data;
     }
@@ -237,6 +252,11 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             data.put("portNo", checkin.getPortNo());
             data.put("checkinTime", format(checkin.getCheckinTime()));
             data.put("name", attendee.getName());
+            // 与签到成功页同口径：找回端口号的非买票者也要看到「不参与抽奖」提示
+            data.put("drawEligible", DrawEligibility.isEligible(
+                    attendee.getDrawEligible(), attendee.getChannel(), attendee.getTicketType(),
+                    DrawEligibility.excludeChannels(sysConfigService),
+                    DrawEligibility.excludeTicketKeywords(sysConfigService)));
         }
         else
         {

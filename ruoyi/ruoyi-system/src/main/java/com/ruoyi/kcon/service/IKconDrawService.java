@@ -47,9 +47,20 @@ public interface IKconDrawService
     int voidLastBatch(String sessionCode, String operator);
 
     /**
-     * 计算抽奖池端口号（已签到 ∩ 未中奖；下午场再剔除上午场已中奖）
+     * 计算抽奖池端口号（已签到 ∩ 未中奖 ∩ 真正买票者；下午场再剔除上午场已中奖）
+     *
+     * spec 006：资格判定 = 名单显式列 draw_eligible=1 且 渠道 ∉ 黑名单
+     * 且 票种不含黑名单关键字。黑名单走系统参数实时判定（改参数当场生效），
+     * 详见 DrawEligibility。本方法是池的唯一计算入口，改这里即同时覆盖
+     * 抽奖执行与大屏/控制台的 poolCount。
      */
     List<Integer> calcPool(String sessionCode);
+
+    /**
+     * 今日已签到但不参与抽奖的人数（spec 006 FR-A7 可观测性）。
+     * 控制台用于解释「今日已签到 300、可抽号数 180」的差值，避免被当成 bug。
+     */
+    int countExcludedToday();
 
     /**
      * 奖品档位 CRUD
