@@ -64,10 +64,7 @@
             <div class="text-brand text-xs tracking-widest">你的端口号</div>
             <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
             <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
-            <!-- spec 006：非买票者找回时同样提示，与签到成功页同口径 -->
-            <p v-if="lookupResult.drawEligible === false" class="text-amber-300 text-xs mt-2">
-              您的票种不参与本次抽奖，端口号仅用于领取胸牌
-            </p>
+            <!-- spec 006：与签到成功页同口径——不暴露抽奖资格，找回结果一律不区分 -->
           </div>
 
           <!-- 这里曾列出「后四位撞号」的候选让人自己认领。找回只认完整 11 位后，
@@ -152,18 +149,18 @@
         </div>
 
         <p class="mt-7 text-slate-400 text-sm">{{ result.name }}，您好</p>
-        <!-- spec 006 FR-A4/A5：非买票者照常签到拿端口号（胸牌凭证），但明确告知不参与抽奖，
-             避免散场后端着号码到兑奖台争执；判定由后端按导入列 + 系统参数黑名单给出 -->
-        <p v-if="result.drawEligible === false" class="mt-2 text-amber-300 text-sm">
-          您的票种不参与本次抽奖，端口号仅用于领取胸牌
-        </p>
-        <p v-else class="mt-3 text-slate-300 text-sm">您的抽奖端口号为</p>
+        <p class="mt-3 text-slate-300 text-sm">您的抽奖端口号为</p>
 
         <div class="port-no text-brand my-6 tabular-nums">{{ result.portNo }}</div>
 
         <!-- 核心引导：端口号 = 抽奖凭证 + 兑奖凭证（spec 005）。
-             胸牌提示降为次要信息，避免抢走「号码是抽奖用的」这个主认知 -->
-        <p v-if="result.drawEligible !== false" class="text-slate-300 text-sm leading-relaxed">
+             胸牌提示降为次要信息，避免抢走「号码是抽奖用的」这个主认知。
+
+             注意：非买票者（spec 006）在这里看到的内容与买票者**完全一致**。
+             不提示「您不参与抽奖」是刻意设计——筛选规则不对外暴露，
+             否则等于告诉对方「你的票是白来的」，既引发现场争执，也把口径送了出去。
+             判定结果只留在服务端，供抽奖池与统计使用。 -->
+        <p class="text-slate-300 text-sm leading-relaxed">
           请截屏保存此号码，凭它参与现场抽奖<br />
           中奖后凭此号码到礼品区兑换奖品
         </p>

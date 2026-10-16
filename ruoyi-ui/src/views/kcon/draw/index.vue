@@ -19,8 +19,9 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-label">可抽号数</div>
           <div class="stat-value" :class="poolEmpty ? 'danger' : 'primary'">{{ poolCount }}</div>
-          <!-- spec 006：口径小字，避免「已签到多、可抽少」被当成统计错误 -->
-          <div class="stat-sub">已剔除赠票 / 嘉宾等非买票者</div>
+          <!-- spec 006：口径小字，避免「已签到多、可抽少」被当成统计错误。
+               刻意不点明剔除依据（赠票/嘉宾/渠道等），只说明存在差额 -->
+          <div class="stat-sub">按资格规则过滤后的可抽人数</div>
         </el-card>
       </el-col>
       <el-col :span="8">
@@ -38,9 +39,10 @@
     </el-row>
 
     <!-- spec 006 FR-A7：排除提示行。差值可解释，操作员才不会以为统计出错了；
-         只有真的存在被排除者才显示，不常驻占位 -->
+         只有真的存在被排除者才显示，不常驻占位。
+         措辞保持中性：不列出具体被排除的票源/票种名称 -->
     <el-alert v-if="excludedCount > 0" type="info" :closable="false" show-icon
-              :title="`今日已签到的观众中有 ${excludedCount} 位非买票者（赠票 / 嘉宾），不参与本次抽奖`"
+              :title="`今日已签到的观众中有 ${excludedCount} 位不在本次抽奖范围内，抽奖池已自动过滤`"
               style="margin-bottom: 16px;" />
 
     <!-- 场次 + 抽奖操作 -->
@@ -300,7 +302,7 @@ export default {
     checkedInToday() {
       return this.status.checkedInToday || 0
     },
-    // spec 006 FR-A7：今日已签到但不参与抽奖的人数（赠票/嘉宾等）
+    // spec 006 FR-A7：今日已签到但不在抽奖范围内的人数（口径不对外说明）
     excludedCount() {
       return this.status.excludedCount || 0
     },
