@@ -26,6 +26,13 @@
           <el-option label="未签到" :value="0" />
         </el-select>
       </el-form-item>
+      <!-- spec 006：按「是否参与抽奖」筛选 -->
+      <el-form-item label="参与抽奖" prop="drawEligible">
+        <el-select v-model="queryParams.drawEligible" placeholder="全部" clearable>
+          <el-option label="参与" :value="1" />
+          <el-option label="不参与" :value="0" />
+        </el-select>
+      </el-form-item>
       <el-form-item>
         <el-button type="primary" icon="el-icon-search" size="mini" @click="handleQuery">搜索</el-button>
         <el-button icon="el-icon-refresh" size="mini" @click="resetQuery">重置</el-button>
@@ -77,6 +84,14 @@
         </template>
       </el-table-column>
       <el-table-column label="票种" prop="ticketType" width="110" />
+      <!-- spec 006：是否参与抽奖，名单页可展示 -->
+      <el-table-column label="参与抽奖" prop="drawEligible" width="90" align="center">
+        <template slot-scope="scope">
+          <el-tag size="mini" :type="scope.row.drawEligible === 1 ? 'success' : 'info'">
+            {{ scope.row.drawEligible === 1 ? '参与' : '不参与' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="公司" prop="company" show-overflow-tooltip />
       <el-table-column label="邮箱" prop="email" min-width="160" show-overflow-tooltip>
         <template slot-scope="scope">
@@ -134,6 +149,12 @@
         <el-form-item label="票种" prop="ticketType">
           <el-input v-model="form.ticketType" placeholder="如 散客票/早鸟票/合作渠道票" maxlength="32" />
         </el-form-item>
+        <!-- spec 006：是否参与抽奖，补录时可手工改单条；与导入列同口径 -->
+        <el-form-item label="是否参与抽奖" prop="drawEligible">
+          <el-switch v-model="form.drawEligible" :active-value="1" :inactive-value="0"
+                     active-text="参与" inactive-text="不参与" />
+          <span class="tip">不参与者照常签到领胸牌，仅不进抽奖池</span>
+        </el-form-item>
         <el-form-item label="公司" prop="company">
           <el-input v-model="form.company" placeholder="选填，可后补" maxlength="128" />
         </el-form-item>
@@ -159,8 +180,9 @@
       <el-alert type="info" :closable="false" show-icon>
         <div slot="title" style="line-height: 1.8;">
           支持 .xlsx / .xls / .csv。<b>按表头名识别列，顺序不限</b>。<br />
-          <b>必填 4 列</b>：姓名、手机号、渠道标识、票种<br />
+          <b>必填 5 列</b>：姓名、手机号、渠道标识、票种、是否参与抽奖<br />
           <b>选填 4 列</b>：公司、邮箱、第几次参加KCon、职务/年级（可导入后在管理端补录）<br />
+          「是否参与抽奖」只有填<b>「是」</b>才进抽奖池；留空或无法识别一律按<b>「否」</b>处理（不参与者照常签到领胸牌）。<br />
           多余的列（购票时间、金额等）会自动忽略。<br />
           <b>第一次整理名单？点下方「下载模板」按表头填好再导入，不会出错。</b>
         </div>
@@ -243,7 +265,8 @@ export default {
         ticketType: null,
         company: null,
         position: null,
-        signed: null
+        signed: null,
+        drawEligible: null
       },
       form: {},
       rules: {
@@ -319,7 +342,7 @@ export default {
     },
     // 只比对会因「别人签到」或「本页编辑」而变化的字段
     rowFingerprint(r) {
-      return [r.name, r.phone, r.channel, r.ticketType, r.company, r.email,
+      return [r.name, r.phone, r.channel, r.ticketType, r.drawEligible, r.company, r.email,
               r.attendCount, r.position, r.signed, r.portNo, r.checkinTime].join("|")
     },
     // 变化的行短暂高亮，让操作员注意到「刚才这一行更新了」，而不是数字悄悄变
@@ -360,7 +383,7 @@ export default {
     reset() {
       this.form = {
         id: null, name: null, phone: null, channel: null,
-        ticketType: null, company: null, email: null,
+        ticketType: null, drawEligible: 1, company: null, email: null,
         attendCount: null, position: null
       }
       this.resetForm("form")

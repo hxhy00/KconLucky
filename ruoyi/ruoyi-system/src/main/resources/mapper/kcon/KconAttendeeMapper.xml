@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="phone"        column="phone"         />
         <result property="channel"      column="channel"       />
         <result property="ticketType"   column="ticket_type"   />
+        <result property="drawEligible" column="draw_eligible" />
         <result property="company"      column="company"       />
         <result property="email"        column="email"         />
         <result property="attendCount"  column="attend_count"  />
@@ -28,7 +29,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 基础列 -->
     <sql id="selectAttendeeVo">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
                a.attend_count, a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark
         from kcon_attendee a
@@ -36,7 +37,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 含签到状态的列（管理端列表 / 详情用） -->
     <sql id="selectAttendeeWithSignVo">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
                a.attend_count, a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark,
                c.port_no as port_no,
@@ -59,7 +60,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByTail4" parameterType="String" resultMap="KconAttendeeResult">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
                a.attend_count, a.position, a.phone_tail4,
                c.port_no as port_no,
                c.checkin_time as checkin_time,
@@ -91,6 +92,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="position != null and position != ''">
                 and a.position like concat('%', #{position}, '%')
             </if>
+            <!-- spec 006：按「是否参与抽奖」筛选（名单页可展示、可筛选） -->
+            <if test="drawEligible != null">
+                and a.draw_eligible = #{drawEligible}
+            </if>
             <if test="signed != null">
                 <choose>
                     <when test="signed == 1">and c.id is not null</when>
@@ -109,27 +114,29 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_attendee
-        (name, phone, channel, ticket_type, company, email, attend_count, position,
+        (name, phone, channel, ticket_type, draw_eligible, company, email, attend_count, position,
          phone_tail4, import_batch, create_by, create_time, remark)
         values
-        (#{name}, #{phone}, #{channel}, #{ticketType}, #{company}, #{email},
+        (#{name}, #{phone}, #{channel}, #{ticketType}, #{drawEligible}, #{company}, #{email},
          #{attendCount}, #{position}, #{phoneTail4}, #{importBatch},
          #{createBy}, now(), #{remark})
     </insert>
 
-    <!-- 追加导入：按手机号去重，存在则更新（选填字段为空时不覆盖已有值） -->
+    <!-- 追加导入：按手机号去重，存在则更新（选填字段为空时不覆盖已有值；
+         draw_eligible 是第 5 必填列、始终显式写，以最新导入为准直接覆盖） -->
     <insert id="upsertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_attendee
-        (name, phone, channel, ticket_type, company, email, attend_count, position,
+        (name, phone, channel, ticket_type, draw_eligible, company, email, attend_count, position,
          phone_tail4, import_batch, create_by, create_time)
         values
-        (#{name}, #{phone}, #{channel}, #{ticketType}, #{company}, #{email},
+        (#{name}, #{phone}, #{channel}, #{ticketType}, #{drawEligible}, #{company}, #{email},
          #{attendCount}, #{position}, #{phoneTail4}, #{importBatch}, #{createBy}, now())
         on duplicate key update
-            name         = values(name),
-            channel      = values(channel),
-            ticket_type  = values(ticket_type),
-            company      = coalesce(values(company), company),
+            name          = values(name),
+            channel       = values(channel),
+            ticket_type   = values(ticket_type),
+            draw_eligible = values(draw_eligible),
+            company       = coalesce(values(company), company),
             email        = coalesce(values(email), email),
             attend_count = coalesce(values(attend_count), attend_count),
             position     = coalesce(values(position), position),
@@ -145,6 +152,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="phone != null and phone != ''">phone = #{phone},</if>
             <if test="channel != null">channel = #{channel},</if>
             <if test="ticketType != null">ticket_type = #{ticketType},</if>
+            <if test="drawEligible != null">draw_eligible = #{drawEligible},</if>
             <if test="company != null">company = #{company},</if>
             <if test="email != null">email = #{email},</if>
             <if test="attendCount != null">attend_count = #{attendCount},</if>

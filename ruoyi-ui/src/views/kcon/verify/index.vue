@@ -53,6 +53,17 @@
           <p class="verify-info">领取时间：{{ verifyData.receiveTime }}</p>
           <p class="verify-info" v-if="verifyData.receiveOperator">领取操作人：{{ verifyData.receiveOperator }}</p>
         </div>
+        <!-- spec 006 FR-A9：未中奖者常以「我怎么没被抽中」为由纠缠。
+             这里预先给出统一话术方向，避免工作人员临场自创解释——
+             任何关于「抽取范围」的解释都会泄露筛选口径。
+
+             必须用 issued 区分：NOT_ISSUED 同时覆盖「已签到未中奖」（issued=true）
+             与「号码压根没发出去 = 伪造截图」（issued=false）。对伪造截图的人讲
+             「运气问题」等于承认这个号是本场的，反而坐实了假截图的可信度。 -->
+        <div slot="extra" v-if="verifyResult === 'NOT_ISSUED' && verifyData.issued">
+          <p class="verify-hint">回应口径：抽奖是从当天现场签到的观众里随机抽取的，没有中奖是运气问题。</p>
+          <p class="verify-hint">不要解释抽取范围或票种差异。</p>
+        </div>
       </el-result>
     </el-card>
   </div>
@@ -173,5 +184,14 @@ export default {
   text-align: center;
   color: #606266;
   line-height: 1.8;
+}
+
+/* spec 006 FR-A9：话术提示，弱化但可读——工作人员需要看到，观众看不到（后台页面） */
+.verify-hint {
+  text-align: center;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 4px 0;
 }
 </style>

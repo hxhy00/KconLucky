@@ -54,6 +54,9 @@ Thumbs.db
 # 该目录同样不入库；团队成员各自用 `specify init` 就地生成即可（见
 # .specify/README 说明）。
 .codebuddy/
+# .serena/ 是 Serena MCP 代码分析工具的本地配置（project.yml 含绝对路径），
+# 同样属「本机状态」：换台机器路径就不同，入库只会制造无意义冲突。
+.serena/
 
 # ---- 临时文件 ----
 *.tmp

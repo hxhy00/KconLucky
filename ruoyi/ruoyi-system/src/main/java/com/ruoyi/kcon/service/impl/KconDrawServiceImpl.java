@@ -109,6 +109,11 @@ public class KconDrawServiceImpl implements IKconDrawService
         data.put("sessionName", current != null ? current.getName() : "");
         data.put("checkedInToday", checkinMapper.countToday());
         data.put("poolCount", calcPool(sessionCode).size());
+        // 注意：此方法**同时服务免登录的大屏接口**（DrawScreenController /app/screen/status），
+        // 因此这里只放「观众可见也不构成泄露」的字段。
+        // spec 006 的 excludedCount 刻意不在此处返回——它会让
+        // checkedInToday - poolCount 的差额含义被匿名请求读到，等于对外公布筛选口径。
+        // 该字段由管理端 DrawAdminController#buildStatus 自行附加（FR-A7/FR-A8）。
         data.put("winnerCount", winnerMapper.countWinners(null));
         data.put("sessions", sessions);
 
@@ -256,27 +261,56 @@ public class KconDrawServiceImpl implements IKconDrawService
     @Override
     public List<Integer> calcPool(String sessionCode)
     {
-        // 1. 已签到的端口号
-        Set<Integer> signedPorts = new HashSet<>();
-        for (KconCheckin c : checkinMapper.selectAllPorts())
-        {
-            signedPorts.add(c.getPortNo());
-        }
+        // spec 006：资格判定参数优先（系统参数实时生效，改参数当场拦截），
+        // 名单显式列 draw_eligible 作基础资格；口径详见 DrawEligibility。
+        // 过滤是池计算的一部分而非只在抽奖执行时校验（FR-A2），
+        // 否则控制台与大屏的「可抽号数」会虚高，操作员会按错误人数判断节奏。
+        Set<String> exclChannels = DrawEligibility.excludeChannels(sysConfigService);
+        List<String> exclKeywords = DrawEligibility.excludeTicketKeywords(sysConfigService);
+
+        // 1. 已签到（当日）+ 联表带出渠道/票种/参与标记（selectAllPorts 已 join，
+        //    避免对每个端口号逐条回查参会人——千人池 = 千次查询的 N+1）
+        List<KconCheckin> todayCheckins = checkinMapper.selectAllPorts();
 
         // 2. 已中奖端口号（全场，含上午场）
         Set<Integer> wonPorts = new HashSet<>(winnerMapper.selectAllWonPorts());
 
         // 下午场额外剔除上午场已中奖（其实全场已中奖已包含，这里保持语义清晰）
         List<Integer> pool = new ArrayList<>();
-        for (Integer p : signedPorts)
+        for (KconCheckin c : todayCheckins)
         {
-            if (!wonPorts.contains(p))
+            if (wonPorts.contains(c.getPortNo()))
             {
-                pool.add(p);
+                continue;
+            }
+            if (DrawEligibility.isEligible(c.getDrawEligible(), c.getChannel(),
+                    c.getTicketType(), exclChannels, exclKeywords))
+            {
+                pool.add(c.getPortNo());
             }
         }
         Collections.sort(pool);
         return pool;
+    }
+
+    @Override
+    public int countExcludedToday()
+    {
+        // FR-A7 可观测性：控制台解释「今日已签到 N、可抽号数 M」的差值。
+        // 与 calcPool 用同一份联表查询 + 同一套判定，保证两个数字口径一致。
+        Set<String> exclChannels = DrawEligibility.excludeChannels(sysConfigService);
+        List<String> exclKeywords = DrawEligibility.excludeTicketKeywords(sysConfigService);
+
+        int excluded = 0;
+        for (KconCheckin c : checkinMapper.selectAllPorts())
+        {
+            if (!DrawEligibility.isEligible(c.getDrawEligible(), c.getChannel(),
+                    c.getTicketType(), exclChannels, exclKeywords))
+            {
+                excluded++;
+            }
+        }
+        return excluded;
     }
 
     @Override

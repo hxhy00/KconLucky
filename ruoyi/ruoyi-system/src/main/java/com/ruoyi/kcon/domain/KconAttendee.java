@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 /**
  * 参会人名单对象 kcon_attendee
  *
- * 导入必填 4 列：姓名 / 手机号 / 渠道标识 / 票种
+ * 导入必填 5 列：姓名 / 手机号 / 渠道标识 / 票种 / 是否参与抽奖
  * 选填 4 列：公司 / 邮箱 / 第几次参加 KCon / 职务·年级
  *
  * @author kcon
@@ -40,6 +40,17 @@ public class KconAttendee extends BaseEntity
     /** 票种 */
     @Excel(name = "票种")
     private String ticketType;
+
+    /**
+     * 是否参与抽奖：1=是 0=否（spec 006 补充，2026-10-16 用户确认）
+     *
+     * 导入为第 5 必填列：这是票务侧的显式事实，不由票种/渠道推导；
+     * 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
+     * （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
+     * 池计算时系统参数黑名单参数优先、实时生效，见 DrawEligibility。
+     */
+    @Excel(name = "是否参与抽奖", readConverterExp = "1=是,0=否")
+    private Integer drawEligible;
 
     /** 公司（选填） */
     @Excel(name = "公司")
@@ -106,6 +117,9 @@ public class KconAttendee extends BaseEntity
 
     public String getTicketType() { return ticketType; }
     public void setTicketType(String ticketType) { this.ticketType = ticketType; }
+
+    public Integer getDrawEligible() { return drawEligible; }
+    public void setDrawEligible(Integer drawEligible) { this.drawEligible = drawEligible; }
 
     public String getCompany() { return company; }
     public void setCompany(String company) { this.company = company; }

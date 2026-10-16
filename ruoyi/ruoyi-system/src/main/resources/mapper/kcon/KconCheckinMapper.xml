@@ -73,12 +73,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
       若不限日期，联调后未清场直接开场、或第二天再开一场时，
       上一场的端口号会混进池子里。
       排序规则不变：按签到时间先后。
+      spec 006：join kcon_attendee 一次性带出 channel / ticket_type / draw_eligible，
+      池过滤在 Java 层做（依赖可配置的系统参数黑名单 + 名单显式列），
+      避免对每个端口号逐条回查参会人（千人池 = 千次查询，N+1）。
+      inner join：签到不可删、名单替换前有签到拦截，正常不存在孤儿签到；
+      万一出现（如人工改库），孤儿行 channel/ticket_type 为 null 也会被资格判定拦下。
     -->
     <select id="selectAllPorts" resultMap="KconCheckinResult">
-        select id, attendee_id, phone, port_no, checkin_date, checkin_time, create_time
-        from kcon_checkin
-        where checkin_date = curdate()
-        order by checkin_time asc, id asc
+        select c.id, c.attendee_id, c.phone, c.port_no, c.checkin_date, c.checkin_time, c.create_time,
+               a.channel, a.ticket_type, a.draw_eligible
+        from kcon_checkin c
+        join kcon_attendee a on a.id = c.attendee_id
+        where c.checkin_date = curdate()
+        order by c.checkin_time asc, c.id asc
     </select>
 
     <!-- 导出：名单 + 端口号 + 签到 + 中奖情况 -->
@@ -88,6 +95,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             a.phone                                      as `手机号`,
             a.channel                                    as `渠道标识`,
             a.ticket_type                                as `票种`,
+            case when a.draw_eligible = 1 then '是' else '否' end as `是否参与抽奖`,
             a.company                                    as `公司`,
             a.email                                      as `邮箱`,
             a.attend_count                               as `第几次参加KCon`,

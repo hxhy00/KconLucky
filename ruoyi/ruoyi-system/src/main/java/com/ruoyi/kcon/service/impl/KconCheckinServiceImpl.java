@@ -177,6 +177,11 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         data.put("checkinTime", format(checkinTime));
         data.put("repeat", repeat);
         data.put("name", attendee.getName());
+
+        // spec 006 FR-A4：非买票者照常签到、照常拿端口号，不拦截。
+        // 刻意**不**在此返回抽奖资格：签到端是免登录接口，一旦回传该标记，
+        // 任何人都能自查「我在不在池里」，等于把筛选口径对外开放。
+        // 判定结果只留在服务端，供抽奖池与统计使用。
         data.put("tip", "您的抽奖端口号为 " + portNo + "，请您截屏保存，用于兑换抽奖礼品；请向工作人员出示此截图领取胸牌");
         return data;
     }
@@ -237,6 +242,7 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             data.put("portNo", checkin.getPortNo());
             data.put("checkinTime", format(checkin.getCheckinTime()));
             data.put("name", attendee.getName());
+            // 同 submit：不回传 drawEligible，避免免登录接口暴露抽奖筛选口径
         }
         else
         {

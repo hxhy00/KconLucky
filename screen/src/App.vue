@@ -36,10 +36,8 @@
           {{ displayNo }}
         </div>
 
-        <div v-if="revealSettled" class="mt-10 text-center fade-up">
-          <!-- 只展示端口号：姓名按需求不上大屏（观众隐私，避免号码对应到真人） -->
-        </div>
-        <div v-else class="mt-10 text-2xl text-slate-700 tracking-[0.3em]">滚 动 中</div>
+        <!-- 未定格时提示在滚动；定格后不再额外渲染（姓名已按需求不上大屏，号码本身即结果） -->
+        <div v-if="!revealSettled" class="mt-10 text-2xl text-slate-700 tracking-[0.3em]">滚 动 中</div>
       </template>
 
       <!-- 汇总：这一档抽出的全部人，主持人照着一屏念完 -->
@@ -572,9 +570,6 @@ async function revealAll(winners, tierName, gap) {
     }
   }
 }
-
-/** 当前正在揭晓的那一位 */
-const currentReveal = computed(() => revealList.value[revealIndex.value] || {})
 
 function randomNo() {
   return String(Math.floor(Math.random() * 65535) + 1).padStart(5, '0')

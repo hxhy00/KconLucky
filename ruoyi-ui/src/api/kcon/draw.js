@@ -11,11 +11,6 @@ export function doDraw(data) {
   return request({ url: '/admin/draw/draw', method: 'post', data })
 }
 
-// 作废上一次中奖 { winnerId }，端口号回池可重抽
-export function voidDrawWinner(data) {
-  return request({ url: '/admin/draw/void', method: 'post', data })
-}
-
 // 撤回最近一档 { sessionCode }：把该场次最后一次抽出的整批全部作废，号码回池
 // 返回：刷新后的抽奖池状态 + voidedCount（实际撤回人数）
 export function voidDrawBatch(data) {
