@@ -26,9 +26,14 @@ public interface IKconCheckinService
      * 确认签到（重复签到返回原端口号，不变号）。
      * 返回结构对应接口文档 2.2。
      *
+     * 公网版加固：submit 免登录且会真实落库，仅凭自增 attendeeId 可被批量代签，
+     * 因此要求同时提交完整 11 位手机号，由服务端与名单等值比对。
+     * 后四位只用于 query 定位，不作为提交凭证——尾号只有 10^4 种，不构成秘密。
+     *
      * @param attendeeId 参会人ID
+     * @param phone      完整 11 位手机号，用于二次校验
      */
-    Map<String, Object> submitCheckin(Long attendeeId);
+    Map<String, Object> submitCheckin(Long attendeeId, String phone);
 
     /**
      * 按手机号回查签到状态与端口号（接口文档 2.3）
@@ -55,6 +60,10 @@ public interface IKconCheckinService
 
     /**
      * 把实体转成签到端要展示的脱敏信息
+     *
+     * 刻意不返回 ticketType：它是票种黑名单的直接输入，按 spec 006 的黑箱口径
+     * （判据是报文里有没有这个字段，而不是前端渲不渲染）只留在服务端。
+     * channel 仍保留，用于同名候选人的现场辨认。
      */
     default Map<String, Object> toPublicView(KconAttendee a)
     {
@@ -63,7 +72,6 @@ public interface IKconCheckinService
         m.put("name", a.getName());
         m.put("phoneMask", maskPhone(a.getPhone()));
         m.put("channel", a.getChannel());
-        m.put("ticketType", a.getTicketType());
         m.put("company", a.getCompany());
         m.put("attendCount", a.getAttendCount());
         m.put("position", a.getPosition());
