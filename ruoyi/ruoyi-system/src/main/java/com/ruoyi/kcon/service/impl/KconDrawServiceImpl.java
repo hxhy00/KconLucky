@@ -94,14 +94,13 @@ public class KconDrawServiceImpl implements IKconDrawService
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("sessionCode", sessionCode);
         data.put("sessionName", current != null ? current.getName() : "");
-        data.put("checkedInToday", checkinMapper.countToday());
         data.put("poolCount", calcPool(sessionCode).size());
         // 注意：此方法**同时服务免登录的大屏接口**（DrawScreenController /app/screen/status），
         // 因此这里只放「观众可见也不构成泄露」的字段。
-        // spec 006 的 excludedCount 刻意不在此处返回——它会让
-        // checkedInToday - poolCount 的差额含义被匿名请求读到，等于对外公布筛选口径。
-        // 该字段由管理端 DrawAdminController#buildStatus 自行附加（FR-A7/FR-A8）。
-        data.put("winnerCount", winnerMapper.countWinners(null));
+        // 以下字段刻意不在此处返回，由管理端 DrawAdminController#buildStatus 自行附加：
+        //   excludedCount  —— 被排除人数，直接公布筛选口径（FR-A8）
+        //   checkedInToday —— 与 poolCount 的差额 = 被排除 + 已中奖，同样可反推口径
+        //   winnerCount    —— 大屏前端不使用，没必要随匿名响应下发
         data.put("sessions", sessions);
 
         // 当前应抽档位
@@ -198,9 +197,7 @@ public class KconDrawServiceImpl implements IKconDrawService
         //（投屏中整份重渲染会打断中奖动画）。
         data.put("version", String.join("|",
                 sessionCode,
-                String.valueOf(data.get("checkedInToday")),
                 String.valueOf(data.get("poolCount")),
-                String.valueOf(data.get("winnerCount")),
                 String.valueOf(totalDrawn),
                 tier != null ? String.valueOf(tier.getId()) : "-",
                 tier != null ? String.valueOf(tier.getDrawnCount()) : "-",
@@ -319,6 +316,18 @@ public class KconDrawServiceImpl implements IKconDrawService
             }
         }
         return excluded;
+    }
+
+    @Override
+    public int countCheckedInToday()
+    {
+        return checkinMapper.countToday();
+    }
+
+    @Override
+    public int countWinnersAll()
+    {
+        return winnerMapper.countWinners(null);
     }
 
     @Override

@@ -1,6 +1,6 @@
 # 006 仅真正买票者参与抽奖
 
-**状态**：已实现（阶段 1–6 已落地；2026-10-19 复核：代码与四个构建通过，现场数据验收待执行）
+**状态**：已实现（阶段 1–6 已落地；2026-10-19 复核：代码与四个构建通过，现场数据验收待执行；同日完成匿名报文最终收口）
 **基准**：修订 `01-需求规格.md` FR-37 / AC-05；关闭 `01-需求规格.md` §10 待确认项 3
 **日期**：2026-10-16
 
@@ -107,7 +107,7 @@ drawEligible = (名单显式列「是否参与抽奖」= 「是」)          ←
   2. 明示「您不参与抽奖」等于当面告知「您的票是白来的」，是引发现场争执的直接来源；
   3. 争执处理放在兑奖台，由工作人员按核验结果（未中奖）依既定话术回应，不在自助端预留话题。
 
-  **实现约束**：`POST /app/checkin/submit` 与 `GET /app/checkin/lookup` 的响应体**均不含** `drawEligible`；`KconCheckinServiceImpl` 不引用 `DrawEligibility`。2026-10-19 复核补充：`GET /app/checkin/query` 也不再返回 `ticketType`——它是票种黑名单的直接输入，按「报文里有没有这个字段」的判据同样属于泄露面；`channel` 保留用于同名候选人的现场辨认。判定结果只存在于服务端，供抽奖池与统计使用。
+  **实现约束**：`POST /app/checkin/submit` 与 `GET /app/checkin/lookup` 的响应体**均不含** `drawEligible`；`KconCheckinServiceImpl` 不引用 `DrawEligibility`。2026-10-19 最终收口：`GET /app/checkin/query` 不再返回 `ticketType` 与 `channel`——两者分别是票种/渠道黑名单的直接输入，按「报文里有没有这个字段」的判据都属于泄露面。判定结果只存在于服务端，供抽奖池与统计使用。
 
 ### 4.3 兑奖核验（**不新增校验**）
 
@@ -146,6 +146,8 @@ drawEligible = (名单显式列「是否参与抽奖」= 「是」)          ←
 | 仅管理端调用 | 可自由返回 |
 
 判断标准是**报文里有没有这个字段**，不是**前端渲不渲染它**。这与 FR-A5 是同一类错误，只是位置从 service 换到了共享方法。
+
+**同类收口（2026-10-19）**：`screenStatus()` 原先还返回 `checkedInToday` 与 `winnerCount`。`checkedInToday − poolCount` = 被排除 + 已中奖，匿名请求同样能反推口径。两者已移出 `screenStatus()`，改由 `DrawAdminController#buildStatus` 附加；匿名大屏只剩 `poolCount` 等展示字段。
 
 ### 4.5 不做清单
 
@@ -215,7 +217,7 @@ drawEligible = (名单显式列「是否参与抽奖」= 「是」)          ←
 | 资格判定 | `DrawEligibility`（`ruoyi-system/.../service/impl/`，新增） | 三层判定 + 系统参数读取降级，**仅被抽奖池与统计引用**（签到服务不依赖它） |
 | 池计算 | `KconDrawServiceImpl.calcPool` | 加入 `DrawEligibility` 过滤；新增 `countExcludedToday` |
 | 池来源 SQL | `KconCheckinMapper.xml` `selectAllPorts` | `join kcon_attendee`，一次带出 `channel` / `ticket_type` / `draw_eligible`，避免 Java 层逐条回查（N+1） |
-| 控制台接口 | `DrawAdminController#buildStatus` | 附加 `excludedCount`（中性口径）；**不放进 `screenStatus()`**，见 §4.6 |
+| 控制台接口 | `DrawAdminController#buildStatus` | 附加 `excludedCount` / `checkedInToday` / `winnerCount`（均为管理端字段）；**不放进 `screenStatus()`**，见 §4.6 |
 | 签到返回体 | `KconCheckinServiceImpl` | **不改**：`buildSuccess` / `fillLookup` 均不带 `drawEligible`（FR-A5） |
 | 名单导入 | `KconAttendeeServiceImpl` | 第 5 必填列解析（「是」→1，空/无法识别→0 并单独计数 `drawFlagMissing`）；模板与导出同步 |
 | 数据模型 | `kcon_attendee.draw_eligible` + `sql/kcon_migrate_v3.sql` | 新增 `TINYINT` 列（2026-10-16 用户确认），迁移脚本幂等、存量按回退口径回填 |
@@ -248,11 +250,16 @@ drawEligible = (名单显式列「是否参与抽奖」= 「是」)          ←
 ```
 GET /admin/draw/status  → data 增加（管理端，需登录）
   excludedCount: number    // 今日已签到但不在抽奖范围内的人数
+  checkedInToday: number   // 今日已签到总数（仅管理端）
+  winnerCount: number      // 全部有效中奖人数（仅管理端）
+
+GET /app/screen/status   → 移除 checkedInToday / winnerCount
+  // 匿名响应只保留 poolCount 等展示字段；否则 checkedInToday - poolCount 可反推口径
 
 POST /app/checkin/submit  → 请求新增必填 phone（完整 11 位，2026-10-19 公网加固）
                             响应仍不含 drawEligible
 GET  /app/checkin/lookup  → 不变
-GET  /app/checkin/query   → 响应移除 ticketType（票种黑名单输入，2026-10-19）
+GET  /app/checkin/query   → 响应移除 ticketType / channel（票种/渠道黑名单输入，2026-10-19）
   // 均为免登录接口，**不返回** drawEligible 等资格字段（FR-A5）
 
 POST /admin/attendee/import  → data 增加（管理端，需登录）
@@ -284,11 +291,11 @@ POST /admin/attendee/import  → data 增加（管理端，需登录）
 - [ ] AC-A6 渠道与票种均为空 → 视为付费（不被票种规则排除），但显式列为「否」时仍不进池
 - [ ] AC-A7 抽奖控制台「可抽号数」与池实际人数一致；`excludedCount` 只统计「无资格」人数，`checkedInToday − poolCount` 的剩余差额由已中奖人数构成
 - [ ] AC-A8 非买票者签到**成功**并正常获得端口号
-- [ ] AC-A9 签到端**不泄露资格**：非买票者与买票者的成功页、已签到页、找回结果文案完全一致；`submit` / `lookup` 响应体经抓包确认**无** `drawEligible` 等资格字段
+- [ ] AC-A9 签到端**不泄露资格**：非买票者与买票者的成功页、已签到页、找回结果文案完全一致；`submit` / `lookup` 响应体经抓包确认**无** `drawEligible` 等资格字段；`query` 响应不含 `ticketType` / `channel`
 - [x] AC-A9.1 控制台排除提示与「可抽号数」副说明均为中性措辞，不含「赠票 / 嘉宾 / VIP」等具体票源名（2026-10-19 代码核对）
 - [x] AC-A10 兑奖核验流程**未受影响**（核验不校验票种，2026-10-19 代码核对）
 - [ ] AC-A11 修改系统参数 `kcon.draw.excludeTicketKeyword` 后**无需重启**即生效
-- [x] AC-A12 大屏不出现被排除人数（沿用 spec 005 口径，2026-10-19 代码核对）
+- [x] AC-A12 大屏不出现被排除人数，且匿名 `/app/screen/status` 不返回 `checkedInToday` / `winnerCount`（沿用 spec 005 口径，2026-10-19 代码核对）
 - [x] AC-A13 `mvn -q compile` 与 `npm run build`（checkin-h5 / ruoyi-ui / screen）通过（2026-10-19 实测）
 - [ ] AC-A14 导入缺「是否参与抽奖」列 → 报缺列错误；列存在但某行留空 → 该行按「否」入库并计入 `drawFlagMissing`
 - [ ] AC-A15 名单页可展示/筛选「参与抽奖」，补录弹窗可改单条；导出含「是否参与抽奖」列（是/否）
@@ -296,8 +303,8 @@ POST /admin/attendee/import  → data 增加（管理端，需登录）
 
 ### 7.1 2026-10-19 复核记录
 
-- 代码核对通过：`DrawEligibility` 三层判定、`calcPool` 唯一入口、`buildStatus` 附加 `excludedCount`、`screenStatus` 不含该字段、导入五列、迁移 v3、H5 无资格分支。
-- 报文核对：`submit` / `lookup` 无 `drawEligible`；`query` 已移除 `ticketType`（`channel` 保留用于同名候选人辨认）。
+- 代码核对通过：`DrawEligibility` 三层判定、`calcPool` 唯一入口、`buildStatus` 附加 `excludedCount` / `checkedInToday` / `winnerCount`、`screenStatus` 不含这三项、导入五列、迁移 v3、H5 无资格分支。
+- 报文核对：`submit` / `lookup` 无 `drawEligible`；`query` 已移除 `ticketType` 与 `channel`；匿名 `/app/screen/status` 已移除 `checkedInToday` / `winnerCount`。
 - 构建通过：`mvn -q -DskipTests compile`、checkin-h5 `npm run build`、ruoyi-ui `npm run build:prod`、screen `npm run build`。
 - 待现场验收：AC-A1～A8、AC-A9 抓包、AC-A11 参数热更新、AC-A14～A16 真名单导入。
 
