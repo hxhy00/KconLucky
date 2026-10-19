@@ -1,11 +1,17 @@
 # Branch Convention — KconLucky
 #
-# 项目采用「轻量分支流」：不设 develop，feature 分支直接从 main 切出，完成后合回 main。
+# 项目采用 Git Flow：main 只存放已发布版本，develop 为日常集成分支，
+# feature/bugfix/hotfix 从各自基线切出（feature 从 develop，hotfix 从 main）。
 # 本配置只约束「分支命名」，不改动 specs/ 目录结构（保持扁平 001-xxx）。
 #
 # 参考：.specify/memory/constitution.md 的分支策略章节
 
 convention:
+  # 基线分支不参与 {type}/{seq}-{kebab} 命名校验
+  base_branches: ["main", "develop"]
+  # release 分支按版本命名，不使用 seq-kebab
+  release_pattern: "release/{version}"
+
   # 分支带类型前缀，目录保持扁平
   branch_pattern: "{type}/{seq}-{kebab}"
   folder_pattern: "{seq}-{kebab}"

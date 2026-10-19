@@ -1,8 +1,8 @@
 # KConLucky 项目章程（Constitution）
 
-**版本**：1.0.1
+**版本**：1.1.0
 **批准日期**：2026-10-15
-**最近修订**：2026-10-15（订正第六条：确定采用轻量分支流 —— `main` 为主干、feature 分支从 main 切出并合回，配套 `.specify/branch-convention.yml` 命名规约；同时说明项目当前无 commit 校验工具）
+**最近修订**：2026-10-19（订正第六条：由轻量分支流改为 Git Flow，与 `git规范.mdc` 及仓库现有 `develop` 分支对齐；feature 从 develop 切出、`--no-ff` 合回，release/hotfix 按 Git Flow 合入 main 与 develop）
 
 > 本章程是 Spec Kit 工作流的最高约束。`/speckit.plan` 的 Constitution Check 按此逐条判定，
 > 与章程 MUST 条款冲突的方案一律判定为 CRITICAL，必须修改方案而非稀释章程。
@@ -86,15 +86,18 @@
 
 **MUST**：
 
-1. 本项目采用 **轻量分支流（不设 `develop`）**：`main` 为唯一主干，feature 分支从 `main` 切出，完成后合回 `main`。
-   - **分支命名**遵循 `.specify/branch-convention.yml`：`{type}/{seq}-{kebab}`，其中 `{type}` 取 `feature`/`bugfix`/`hotfix`/`refactor`/`docs`。
-     例：`feature/001-remove-ruoyi-branding`。
+1. 本项目采用 **Git Flow**：
+   - `main`：只存放已发布版本，**禁止直接开发**。
+   - `develop`：日常集成分支。
+   - `feature/<seq>-<kebab>`：从 `develop` 切出，完成后以 `--no-ff` 合回 `develop`。
+   - `release/<版本>`：从 `develop` 切出，合入 `main` 与 `develop`。
+   - `hotfix/<seq>-<kebab>`：从 `main` 切出，合入 `main` 与 `develop`。
+   - **分支命名**遵循 `.specify/branch-convention.yml`：`{type}/{seq}-{kebab}`，其中 `{type}` 取 `feature`/`bugfix`/`hotfix`/`refactor`/`docs`；`main` 与 `develop` 是基线分支，不参与命名校验。
+     例：`feature/007-public-net-hardening`。
    - `specs/` 目录保持**扁平** `{seq}-{kebab}`（如 `specs/001-remove-ruoyi-branding/`），**不随分支加前缀**；分支与目录的 `{seq}-{kebab}` 部分必须同源。
-   - 主干分支（`main`）不参与命名校验。
-   - 若将来要引入 `develop`/`release` 等完整 Git Flow，须先在本文件与 `docs/04-部署运行.md` 中更新约定。
 2. Commit message **遵循 Conventional Commits 格式**（`<type>(<scope>): <subject>`）。
    注意：项目当前**没有** commit 钩子或 lint 工具强制校验，属团队约定而非工具强制，因此提交前须自行核对格式。
-3. 可自行 `commit`，**不准直接 `push`**；推送前向用户说明分支与范围，由用户手动执行。
+3. 可自行 `commit`，**不准直接 `push`**。推送按 **spec 粒度**：一个 spec 完成（代码 + 文档 + 验证通过）后合并到 `develop`，由 agent 说明分支与范围并给出命令，由用户手动执行推送。
 4. 禁止 `git commit --amend`、`git reset --hard`、`git push --force`，除非用户明确要求。
 
 ---
