@@ -116,7 +116,9 @@ public class DrawAdminController extends BaseController
     @PostMapping("/void-batch")
     public AjaxResult doVoidBatch(@RequestBody Map<String, Object> body)
     {
-        String sessionCode = body == null ? null : (String) body.get("sessionCode");
+        // 与 draw 一致用 String.valueOf：前端误传数字时不会 ClassCastException
+        String sessionCode = body == null || body.get("sessionCode") == null
+                ? null : String.valueOf(body.get("sessionCode"));
         int voided = drawService.voidLastBatch(sessionCode, getUsername());
         if (voided == 0)
         {

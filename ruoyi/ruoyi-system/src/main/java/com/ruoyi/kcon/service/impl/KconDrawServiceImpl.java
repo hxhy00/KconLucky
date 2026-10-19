@@ -88,20 +88,7 @@ public class KconDrawServiceImpl implements IKconDrawService
     public Map<String, Object> screenStatus()
     {
         List<KconSession> sessions = sessionMapper.selectSessionList();
-        KconSession current = null;
-        for (KconSession s : sessions)
-        {
-            if (s.getStatus() != null && s.getStatus() == 1)
-            {
-                current = s;
-                break;
-            }
-        }
-        if (current == null && !sessions.isEmpty())
-        {
-            current = sessions.get(0);
-        }
-
+        KconSession current = resolveCurrentSession(sessions);
         String sessionCode = current != null ? current.getCode() : "AM";
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -220,6 +207,27 @@ public class KconDrawServiceImpl implements IKconDrawService
                 last != null ? String.valueOf(last.getId()) : "-",
                 String.join(",", sponsorList)));
         return data;
+    }
+
+    /**
+     * 当前场次：优先取 status=1 的进行中场次；都没激活时退回排序第一的场次。
+     * 大屏展示与「未指定场次时抽奖」共用这一口径，避免后者写死 AM 导致
+     * 下午场抽中上午场的档位。
+     */
+    private KconSession resolveCurrentSession(List<KconSession> sessions)
+    {
+        if (sessions == null || sessions.isEmpty())
+        {
+            return null;
+        }
+        for (KconSession s : sessions)
+        {
+            if (s.getStatus() != null && s.getStatus() == 1)
+            {
+                return s;
+            }
+        }
+        return sessions.get(0);
     }
 
     /**
@@ -343,7 +351,9 @@ public class KconDrawServiceImpl implements IKconDrawService
     {
         if (sessionCode == null || sessionCode.trim().isEmpty())
         {
-            KconSession cur = sessionMapper.selectByCode("AM");
+            // 未指定场次时取当前激活场次（与大屏同一口径），不能写死 AM：
+            // 否则下午场已激活、调用方漏传 sessionCode 时会抽到上午场的档位。
+            KconSession cur = resolveCurrentSession(sessionMapper.selectSessionList());
             sessionCode = cur != null ? cur.getCode() : "AM";
         }
 

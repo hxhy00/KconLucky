@@ -103,13 +103,17 @@ public class KconCheckinServiceImpl implements IKconCheckinService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> submitCheckin(Long attendeeId)
+    public Map<String, Object> submitCheckin(Long attendeeId, String phone)
     {
         KconAttendee attendee = attendeeMapper.selectAttendeeById(attendeeId);
         if (attendee == null)
         {
             throw new ServiceException("查无此人，请联系现场工作人员");
         }
+
+        // 公网版加固：submit 免登录，仅凭自增 attendeeId 就能替他人签到、耗尽端口池。
+        // 要求提交完整 11 位手机号并与名单等值比对，把「猜 ID」和「枚举尾号」都挡在落库之前。
+        verifyPhone(attendee, phone);
 
         // 已签到 → 返回原端口号，不变号
         KconCheckin exist = checkinMapper.selectByPhone(attendee.getPhone());
@@ -135,13 +139,40 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         catch (Exception e)
         {
             // 极少数并发场景：同一手机号同时提交，唯一索引拦截。
-            // 此时回滚（端口号归还由事务保证），重新读一次已有记录返回。
-            log.warn("并发签到冲突，phone={}，尝试返回已有记录", attendee.getPhone());
+            // 事务会整体回滚（端口号占用一并归还），这里只能提示重试：
+            // 在当前事务已标记 rollback-only 的情况下无法再读库返回已有记录，
+            // 且调用方重试后必然命中上面的「已签到 → 返回原端口号」分支。
+            log.warn("并发签到冲突，phone={}，提示调用方重试", attendee.getPhone());
             throw new ServiceException("签到处理中，请稍后重试");
         }
 
         log.info("签到成功 name={} portNo={}", attendee.getName(), portNo);
         return buildSuccess(attendee, portNo, now, false);
+    }
+
+    /**
+     * 二次校验：提交的手机号必须与该参会人一致。
+     *
+     * 只接受完整 11 位。后四位不构成秘密（10^4 可枚举），若允许它作为提交凭证，
+     * 等于把「查得到尾号就能替人签到」写进接口，和没有校验一样。
+     * 查询入口仍保留后四位，是为了现场快速定位；确认签到这一步必须补全。
+     */
+    private void verifyPhone(KconAttendee attendee, String phone)
+    {
+        if (phone == null || phone.trim().isEmpty())
+        {
+            throw new ServiceException("请输入完整 11 位手机号");
+        }
+        String input = phone.trim();
+        if (!input.matches("1[3-9]\\d{9}"))
+        {
+            throw new ServiceException("请输入完整 11 位手机号");
+        }
+        String registered = attendee.getPhone();
+        if (registered == null || !registered.equals(input))
+        {
+            throw new ServiceException("手机号与参会人信息不匹配，请重新查询");
+        }
     }
 
     /**
