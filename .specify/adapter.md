@@ -1,6 +1,6 @@
 # Spec Kit ↔ 本项目规约体系 适配说明
 
-本文件说明 Spec Kit（`.specify/` + `specs/` + `.codebuddy/commands/`）如何与本项目既有的
+本文件说明 Spec Kit（`.specify/` + `specs/` + `.trae/skills/speckit-*`）如何与本项目既有的
 `docs/01~05` 规约体系协同工作。**冲突的裁决顺序以 `.specify/memory/constitution.md` 为准。**
 
 ---

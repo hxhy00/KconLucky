@@ -2,14 +2,14 @@
   "version": "1.2.0",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "codebuddy"
+    "trae"
   ],
   "integration_settings": {
-    "codebuddy": {
+    "trae": {
       "script": "sh",
-      "invoke_separator": "."
+      "invoke_separator": "-"
     }
   },
-  "integration": "codebuddy",
-  "default_integration": "codebuddy"
+  "integration": "trae",
+  "default_integration": "trae"
 }
