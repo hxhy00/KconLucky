@@ -21,7 +21,7 @@ specify self check
 specify self upgrade
 ```
 
-> **重要**：CLI 是全局的，但 `.specify/`（本目录）和 `.codebuddy/commands/` 是**每个项目各一份**。
+> **重要**：CLI 是全局的，但 `.specify/`（本目录）和 `.trae/skills/` 是**每个项目各一份**。
 > 这是 Spec Kit 的设计——它靠向上查找 `.specify/` 来判定"当前是不是一个 Spec Kit 项目"，
 > 缺了它所有命令都会报 `Not a Spec Kit project`。因此不存在"全局 `.specify/`"这种用法。
 
@@ -77,32 +77,32 @@ Spec Kit 的模板解析优先级（`resolve_template`）是：
 | `scripts/bash/` | `extensions/*/local-config.yml` |
 | `workflows/`、`integration*.json`、`init-options.json` | — |
 
-**`.codebuddy/` 不入版本库**（已在根 `.gitignore` 忽略）。
-spec-kit 生成的 slash 命令落在 `.codebuddy/commands/`，属于本机 IDE 数据，团队成员各自生成即可（见下）。
+**`.trae/` 不入版本库**（已在根 `.gitignore` 忽略）。
+spec-kit 生成的 skills 落在 `.trae/skills/speckit-*/`，属于本机 IDE 数据，团队成员各自生成即可（见下）。
 
 ---
 
 ## 四、团队协作：克隆后怎么用
 
-新克隆仓库的成员只需两步（`.codebuddy/commands/` 不会随仓库带过来）：
+新克隆仓库的成员只需两步（`.trae/skills/` 不会随仓库带过来）：
 
 ```bash
 cd <项目根>
 export PATH="$HOME/.local/bin:$PATH"
-specify init --here --integration codebuddy    # 就地生成 .codebuddy/commands/，已存在的 .specify/ 不受影响
+specify integration install trae    # 就地生成 .trae/skills/speckit-*，已存在的 .specify/ 不受影响
 ```
 
-随后在 CodeBuddy 中即可使用 slash 命令：
+随后在 Trae 中即可使用以下 skills：
 
-| 命令 | 作用 |
+| Skill | 作用 |
 |---|---|
-| `/speckit.constitution` | 查看 / 修订项目章程 |
-| `/speckit.specify` | 从自然语言描述创建 `specs/<NNN>-<slug>/spec.md` |
-| `/speckit.plan` | 生成 `plan.md` 及设计产物（含 Constitution Check 关卡） |
-| `/speckit.tasks` | 生成 `tasks.md` |
-| `/speckit.implement` | 执行任务 |
-| `/speckit.analyze` | 跨产物一致性检查（章程 MUST 违反判 CRITICAL） |
-| `/speckit.clarify` / `/speckit.checklist` | 可选：澄清需求 / 生成检查清单 |
+| `speckit-constitution` | 查看 / 修订项目章程 |
+| `speckit-specify` | 从自然语言描述创建 `specs/<NNN>-<slug>/spec.md` |
+| `speckit-plan` | 生成 `plan.md` 及设计产物（含 Constitution Check 关卡） |
+| `speckit-tasks` | 生成 `tasks.md` |
+| `speckit-implement` | 执行任务 |
+| `speckit-analyze` | 跨产物一致性检查（章程 MUST 违反判 CRITICAL） |
+| `speckit-clarify` / `speckit-checklist` | 可选：澄清需求 / 生成检查清单 |
 
 ---
 
@@ -111,9 +111,9 @@ specify init --here --integration codebuddy    # 就地生成 .codebuddy/command
 若新项目也要同一套"`docs/` 为基线 + 章程约束"的工作流，按下面顺序做：
 
 ```bash
-# 1. 初始化（生成 .specify/ 骨架与本机 .codebuddy/commands/）
+# 1. 初始化（生成 .specify/ 骨架与本机 .trae/skills/）
 cd <新项目根>
-specify init --here --integration codebuddy
+specify init --here --integration trae
 
 # 2. 用官方 preset 机制复用本项目的定制模板与章程
 #    以本项目作为 preset 源目录（--dev 从本地目录安装，属官方支持）
