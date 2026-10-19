@@ -85,13 +85,7 @@
                  active:border-brand transition"
           @click="pick(c)"
         >
-          <div class="flex items-center justify-between">
-            <span class="text-lg font-semibold">{{ c.name }}</span>
-            <span v-if="c.channel"
-                  class="px-2 py-0.5 rounded text-xs bg-brand/15 text-brand border border-brand/30">
-              {{ c.channel }}
-            </span>
-          </div>
+          <div class="text-lg font-semibold">{{ c.name }}</div>
           <div class="text-slate-400 text-sm mt-1">{{ c.phoneMask }}</div>
           <div class="text-slate-400 text-sm" v-if="c.company">{{ c.company }}</div>
           <div class="text-slate-500 text-xs mt-1" v-if="c.position">{{ c.position }}</div>
@@ -106,9 +100,6 @@
           <div class="text-center text-3xl font-bold">{{ person.name }}</div>
           <div class="text-center text-slate-400 mt-2">{{ person.phoneMask }}</div>
           <dl class="mt-5 space-y-2 text-sm">
-            <div v-if="person.channel" class="flex justify-between">
-              <dt class="text-slate-500">票源渠道</dt><dd>{{ person.channel }}</dd>
-            </div>
             <div v-if="person.company" class="flex justify-between">
               <dt class="text-slate-500">公司</dt><dd>{{ person.company }}</dd>
             </div>

@@ -156,10 +156,11 @@ public class DrawAdminController extends BaseController
         Object code = data.get("sessionCode");
         String sessionCode = code == null ? "AM" : String.valueOf(code);
 
-        // 0. spec 006 FR-A7：被排除人数，解释「今日已签到 N、可抽号数 M」的差值。
-        //    刻意在此附加而**不是**放进 screenStatus()——后者同时服务免登录的大屏接口，
-        //    把差额含义暴露给匿名请求就等于公布筛选口径（FR-A8）。
+        // 0. spec 006 FR-A7/A8：以下三项只在管理端返回，**不放进 screenStatus()**。
+        //    checkedInToday 与 poolCount 的差额 = 被排除 + 已中奖，匿名请求同样能反推口径。
         data.put("excludedCount", drawService.countExcludedToday());
+        data.put("checkedInToday", drawService.countCheckedInToday());
+        data.put("winnerCount", drawService.countWinnersAll());
 
         // 1. 各档位奖池进度：直接复用奖品档位查询，mapper 已按 draw_order 升序
         KconPrize tierQuery = new KconPrize();

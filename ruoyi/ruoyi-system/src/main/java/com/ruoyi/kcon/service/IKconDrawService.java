@@ -66,6 +66,16 @@ public interface IKconDrawService
     int countExcludedToday();
 
     /**
+     * 今日已签到人数。仅供管理端控制台使用，不得随匿名大屏响应下发。
+     */
+    int countCheckedInToday();
+
+    /**
+     * 全部有效中奖人数（status != 2）。仅供管理端控制台使用，不得随匿名大屏响应下发。
+     */
+    int countWinnersAll();
+
+    /**
      * 奖品档位 CRUD
      */
     List<KconPrize> selectPrizeList(KconPrize query);

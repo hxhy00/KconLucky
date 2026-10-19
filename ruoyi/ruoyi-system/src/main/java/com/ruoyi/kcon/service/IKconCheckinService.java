@@ -61,9 +61,9 @@ public interface IKconCheckinService
     /**
      * 把实体转成签到端要展示的脱敏信息
      *
-     * 刻意不返回 ticketType：它是票种黑名单的直接输入，按 spec 006 的黑箱口径
+     * 刻意不返回 ticketType 与 channel：两者都是抽奖筛选规则的直接输入
+     * （票种关键字黑名单 / 渠道黑名单），按 spec 006 的黑箱口径
      * （判据是报文里有没有这个字段，而不是前端渲不渲染）只留在服务端。
-     * channel 仍保留，用于同名候选人的现场辨认。
      */
     default Map<String, Object> toPublicView(KconAttendee a)
     {
@@ -71,7 +71,6 @@ public interface IKconCheckinService
         m.put("id", a.getId());
         m.put("name", a.getName());
         m.put("phoneMask", maskPhone(a.getPhone()));
-        m.put("channel", a.getChannel());
         m.put("company", a.getCompany());
         m.put("attendCount", a.getAttendCount());
         m.put("position", a.getPosition());
