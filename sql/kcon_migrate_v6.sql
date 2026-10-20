@@ -10,7 +10,8 @@
 --   - 菜单 3009 由「字典管理」改为「渠道来源映射」独立页面
 --   - 补齐按钮权限（list/add/edit/remove）
 --
--- 幂等：可重复执行；已有映射不会被覆盖。
+-- 幂等：可重复执行；数据迁移与默认值只在「首次建表」时执行，
+--       用户后续删除的映射不会被重新灌回。
 -- 执行：docker compose exec -T mysql mysql -uroot -p<pwd> kcon_lucky < sql/kcon_migrate_v6.sql
 -- =============================================================
 
@@ -19,6 +20,14 @@ USE `kcon_lucky`;
 -- -------------------------------------------------------------
 -- 1. 映射表
 -- -------------------------------------------------------------
+-- 先记下建表前是否已存在：deploy.sh 每次部署都会重跑全部迁移，
+-- 若只看「表里有没有行」，用户删光映射后会被重新灌回默认值。
+SET @mapping_table_existed = (
+  SELECT COUNT(*) FROM information_schema.TABLES
+   WHERE TABLE_SCHEMA = DATABASE()
+     AND TABLE_NAME = 'kcon_channel_mapping'
+);
+
 CREATE TABLE IF NOT EXISTS `kcon_channel_mapping` (
   `id`             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   `channel_source` VARCHAR(64)  NOT NULL                COMMENT '渠道来源（与导入表同名，唯一）',
@@ -34,23 +43,20 @@ CREATE TABLE IF NOT EXISTS `kcon_channel_mapping` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='渠道来源映射';
 
 -- -------------------------------------------------------------
--- 2. 迁移 v5 字典数据（仅当新表为空时执行，避免覆盖用户已编辑的映射）
+-- 2. 迁移 v5 字典数据（仅首次建表时执行）
 --    dict_label = 渠道来源 / dict_value = 权益类型 / remark = 是|否
 -- -------------------------------------------------------------
 INSERT INTO `kcon_channel_mapping`
   (`channel_source`, `benefit_type`, `draw_eligible`, `sort`, `create_by`, `create_time`)
 SELECT d.`dict_label`, NULLIF(d.`dict_value`, ''), IF(d.`remark` = '是', 1, 0), d.`dict_sort`, 'admin', NOW()
   FROM `sys_dict_data` d
- WHERE d.`dict_type` = 'kcon_channel_mapping'
+ WHERE @mapping_table_existed = 0
+   AND d.`dict_type` = 'kcon_channel_mapping'
    AND d.`status` = '0'
    AND NOT EXISTS (SELECT 1 FROM `kcon_channel_mapping` m WHERE m.`channel_source` = d.`dict_label`)
  ORDER BY d.`dict_sort` ASC;
 
--- v5 未执行过时，补一份现场默认映射
--- 用会话变量先取一次行数：若字典迁移已写入数据，则不再补默认值，
--- 避免重复执行时把用户主动删掉的默认映射又插回来。
-SET @mapping_count = (SELECT COUNT(*) FROM `kcon_channel_mapping`);
-
+-- v5 未执行过时，补一份现场默认映射（同样只在首次建表时执行）
 INSERT INTO `kcon_channel_mapping` (`channel_source`, `benefit_type`, `draw_eligible`, `sort`, `create_by`, `create_time`)
 SELECT t.`channel_source`, t.`benefit_type`, t.`draw_eligible`, t.`sort`, 'admin', NOW()
   FROM (
@@ -62,7 +68,7 @@ SELECT t.`channel_source`, t.`benefit_type`, t.`draw_eligible`, t.`sort`, 'admin
     UNION ALL SELECT '海凤卖票', '含自助午餐、帽衫、伴手礼', 1, 6
     UNION ALL SELECT 'IT资讯平台卖票', '含自助午餐、帽衫、伴手礼', 1, 7
   ) t
- WHERE @mapping_count = 0;
+ WHERE @mapping_table_existed = 0;
 
 -- -------------------------------------------------------------
 -- 3. 删除字典类型与字典数据

@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Size;
  *
  * 导入必填 3 列：姓名 / 手机号 / 渠道来源
  * 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
- * 权益类型与参与抽奖留空时，按渠道来源查字典 kcon_channel_mapping 自动带出。
+ * 权益类型与参与抽奖留空时，按渠道来源查映射表 kcon_channel_mapping 自动带出。
  *
  * 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级。
  *
