@@ -9,6 +9,7 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.kcon.domain.KconAttendee;
+import com.ruoyi.kcon.domain.KconAttendeeImportTemplateVo;
 import com.ruoyi.kcon.domain.KconSignSheetVo;
 import com.ruoyi.kcon.service.IKconAttendeeService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -140,16 +141,14 @@ public class AttendeeController extends BaseController
         }
     }
 
-    /** 下载导入模板（含 8 列表头） */
+    /** 下载导入模板（8 列：姓名/手机号/公司/职位/邮箱/渠道来源/权益类型/参与抽奖） */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:import')")
     @Log(title = "名单模板下载", businessType = BusinessType.EXPORT)
     @PostMapping("/template")
     public void template(HttpServletResponse response) throws IOException
     {
-        ExcelUtil<KconAttendee> util = new ExcelUtil<>(KconAttendee.class);
-        // 模板排除「端口号」列：导入时不解析该列，端口号在签到时才随机分配，
-        // 留着只会误导用户以为可以预填（2026-10-15 测试报告问题 5）。
-        util.hideColumn("portNo");
+        ExcelUtil<KconAttendeeImportTemplateVo> util = new ExcelUtil<>(KconAttendeeImportTemplateVo.class);
+        // 模板与名单实体解耦：不包含端口号、第几次参加 KCon 等导入不解析或非模板字段
         util.exportExcel(response, new ArrayList<>(), "参会名单导入模板");
     }
 
@@ -170,7 +169,7 @@ public class AttendeeController extends BaseController
     @PostMapping("/signsheet")
     public void signSheet(HttpServletResponse response)
     {
-        // 需求 FR-25.1：姓名 / 手机号 / 渠道标识 / 票种 / 打钩列，按姓名排序。
+        // 需求 FR-25.1：姓名 / 手机号 / 渠道来源 / 权益类型 / 打钩列，按姓名排序。
         // 不复用 KconAttendee 的通用导出列（含公司/邮箱/端口号等 9 列，缺打钩列，打印宽度也被撑开）
         List<KconAttendee> rows = attendeeService.selectSignSheet();
         List<KconSignSheetVo> list = new ArrayList<>(rows.size());
