@@ -8,17 +8,17 @@
       <el-form-item label="手机号" prop="phone">
         <el-input v-model="queryParams.phone" placeholder="手机号（支持模糊）" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
-      <el-form-item label="渠道标识" prop="channel">
-        <el-input v-model="queryParams.channel" placeholder="如 S / T / C" clearable @keyup.enter.native="handleQuery" />
+      <el-form-item label="渠道来源" prop="channel">
+        <el-input v-model="queryParams.channel" placeholder="如 重要嘉宾赠票" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
-      <el-form-item label="票种" prop="ticketType">
-        <el-input v-model="queryParams.ticketType" placeholder="如 早鸟票" clearable @keyup.enter.native="handleQuery" />
+      <el-form-item label="权益类型" prop="ticketType">
+        <el-input v-model="queryParams.ticketType" placeholder="如 含自助午餐" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
       <el-form-item label="公司" prop="company">
         <el-input v-model="queryParams.company" placeholder="公司" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
-      <el-form-item label="职务/年级" prop="position">
-        <el-input v-model="queryParams.position" placeholder="职务/年级" clearable @keyup.enter.native="handleQuery" />
+      <el-form-item label="职位" prop="position">
+        <el-input v-model="queryParams.position" placeholder="职位" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
       <el-form-item label="签到状态" prop="signed">
         <el-select v-model="queryParams.signed" placeholder="全部" clearable>
@@ -26,7 +26,7 @@
           <el-option label="未签到" :value="0" />
         </el-select>
       </el-form-item>
-      <!-- spec 006：按「是否参与抽奖」筛选 -->
+      <!-- spec 006：按「参与抽奖」筛选 -->
       <el-form-item label="参与抽奖" prop="drawEligible">
         <el-select v-model="queryParams.drawEligible" placeholder="全部" clearable>
           <el-option label="参与" :value="1" />
@@ -78,13 +78,9 @@
       <el-table-column type="selection" width="55" align="center" :reserve-selection="true" />
       <el-table-column label="姓名" prop="name" width="100" />
       <el-table-column label="手机号" prop="phoneMask" width="130" />
-      <el-table-column label="渠道" prop="channel" width="70" align="center">
-        <template slot-scope="scope">
-          <el-tag size="mini" v-if="scope.row.channel">{{ scope.row.channel }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="票种" prop="ticketType" width="110" />
-      <!-- spec 006：是否参与抽奖，名单页可展示 -->
+      <el-table-column label="渠道来源" prop="channel" width="140" show-overflow-tooltip />
+      <el-table-column label="权益类型" prop="ticketType" width="140" show-overflow-tooltip />
+      <!-- spec 006：参与抽奖，名单页可展示 -->
       <el-table-column label="参与抽奖" prop="drawEligible" width="90" align="center">
         <template slot-scope="scope">
           <el-tag size="mini" :type="scope.row.drawEligible === 1 ? 'success' : 'info'">
@@ -99,7 +95,7 @@
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="职务/年级" prop="position" width="110" />
+      <el-table-column label="职位" prop="position" width="110" />
       <el-table-column label="参加次数" prop="attendCount" width="90" align="center">
         <template slot-scope="scope">
           <span v-if="scope.row.attendCount === 1">首次</span>
@@ -143,14 +139,14 @@
         <el-form-item label="手机号" prop="phone">
           <el-input v-model="form.phone" placeholder="11 位手机号" maxlength="11" />
         </el-form-item>
-        <el-form-item label="渠道标识" prop="channel">
-          <el-input v-model="form.channel" placeholder="单字母，如 S/T/C/H/D/G/V" maxlength="8" />
+        <el-form-item label="渠道来源" prop="channel">
+          <el-input v-model="form.channel" placeholder="如 重要嘉宾赠票 / TGO会员（会员权益）" maxlength="64" />
         </el-form-item>
-        <el-form-item label="票种" prop="ticketType">
-          <el-input v-model="form.ticketType" placeholder="如 散客票/早鸟票/合作渠道票" maxlength="32" />
+        <el-form-item label="权益类型" prop="ticketType">
+          <el-input v-model="form.ticketType" placeholder="如 含自助午餐、伴手礼 / 无" maxlength="128" />
         </el-form-item>
-        <!-- spec 006：是否参与抽奖，补录时可手工改单条；与导入列同口径 -->
-        <el-form-item label="是否参与抽奖" prop="drawEligible">
+        <!-- spec 006：参与抽奖，补录时可手工改单条；与导入列同口径 -->
+        <el-form-item label="参与抽奖" prop="drawEligible">
           <el-switch v-model="form.drawEligible" :active-value="1" :inactive-value="0"
                      active-text="参与" inactive-text="不参与" />
           <span class="tip">不参与者照常签到领胸牌，仅不进抽奖池</span>
@@ -165,7 +161,7 @@
           <el-input-number v-model="form.attendCount" :min="1" :max="99" controls-position="right" />
           <span class="tip">留空表示未知</span>
         </el-form-item>
-        <el-form-item label="职务/年级" prop="position">
+        <el-form-item label="职位" prop="position">
           <el-input v-model="form.position" placeholder="选填，如 CTO / 大二" maxlength="64" />
         </el-form-item>
       </el-form>
@@ -180,9 +176,11 @@
       <el-alert type="info" :closable="false" show-icon>
         <div slot="title" style="line-height: 1.8;">
           支持 .xlsx / .xls / .csv。<b>按表头名识别列，顺序不限</b>。<br />
-          <b>必填 5 列</b>：姓名、手机号、渠道标识、票种、是否参与抽奖<br />
-          <b>选填 4 列</b>：公司、邮箱、第几次参加KCon、职务/年级（可导入后在管理端补录）<br />
-          「是否参与抽奖」只有填<b>「是」</b>才进抽奖池；留空或无法识别一律按<b>「否」</b>处理（不参与者照常签到领胸牌）。<br />
+          <b>必填 3 列</b>：姓名、手机号、渠道来源<br />
+          <b>选填 5 列</b>：权益类型、参与抽奖、公司、职位、邮箱<br />
+          权益类型 / 参与抽奖留空时，按渠道来源从「设置 → 渠道来源映射」自动带出；命中映射时以映射为准。<br />
+          未配置映射时会回退到行内填写的值；行内也为空时按「否」处理，并在导入结果中提示。<br />
+          旧表头（渠道标识 / 票种 / 是否参与抽奖 / 职务年级）仍然兼容，旧文件可直接导入。<br />
           多余的列（购票时间、金额等）会自动忽略。<br />
           <b>第一次整理名单？点下方「下载模板」按表头填好再导入，不会出错。</b>
         </div>
@@ -275,8 +273,8 @@ export default {
           { required: true, message: "手机号不能为空", trigger: "blur" },
           { pattern: /^1[3-9]\d{9}$/, message: "手机号格式不正确", trigger: "blur" }
         ],
-        channel: [{ required: true, message: "渠道标识不能为空", trigger: "blur" }],
-        ticketType: [{ required: true, message: "票种不能为空", trigger: "blur" }]
+        channel: [{ required: true, message: "渠道来源不能为空", trigger: "blur" }],
+        ticketType: [{ required: true, message: "权益类型不能为空", trigger: "blur" }]
       }
     }
   },
@@ -496,9 +494,12 @@ export default {
         this.importing = false
         this.importOpen = false
         const s = res.data || {}
+        const mappingTip = s.mappingMissing > 0
+          ? `<br/><span style="color:#d4342a">其中 ${s.mappingMissing} 条渠道来源未配置映射，已回退到行内填写的值，可到「设置 → 渠道来源映射」补充。</span>`
+          : ""
         this.$alert(
           `新增 ${s.inserted || 0} 条，更新 ${s.updated || 0} 条，跳过 ${s.skipped || 0} 条。<br/>
-           当前有效名单共 <b>${s.total || 0}</b> 人。`,
+           当前有效名单共 <b>${s.total || 0}</b> 人。${mappingTip}`,
           "导入完成",
           { dangerouslyUseHTMLString: true }
         )

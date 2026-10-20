@@ -53,12 +53,11 @@ public class CheckinAppController extends BaseController
 
     /**
      * 2.2 确认签到
-     * POST /app/checkin/submit  { "attendeeId": 12 }
+     * POST /app/checkin/submit  { "attendeeId": 12, "phone": "13800138000" }
      *
-     * 限流 60 次/分钟（IP）：本接口免登录且会真正落库分配端口号，
-     * 不限流则可被脚本枚举 attendeeId 批量替人签到、耗尽端口池。
-     * 阈值为 query（200）与 lookup（30）之间：现场多人共用同一 WiFi 出口 IP，
-     * 取 60/分钟（约 1 次/秒）既不误伤排队签到，又让批量攻击不划算。
+     * 公网版加固：必须同时提交完整 11 位手机号，服务端与名单等值比对后才落库。
+     * 后四位只用于 query 定位，不能作为提交凭证——尾号空间只有 10^4，不构成秘密。
+     * 限流 60 次/分钟（IP）是第二道闸。
      */
     @RateLimiter(time = 60, count = 60, limitType = LimitType.IP)
     @PostMapping("/submit")
@@ -77,7 +76,8 @@ public class CheckinAppController extends BaseController
         {
             return error("attendeeId 格式错误");
         }
-        return success(checkinService.submitCheckin(attendeeId));
+        String phone = body.get("phone") == null ? null : String.valueOf(body.get("phone"));
+        return success(checkinService.submitCheckin(attendeeId, phone));
     }
 
     /**

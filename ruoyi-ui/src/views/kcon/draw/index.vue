@@ -40,7 +40,7 @@
 
     <!-- spec 006 FR-A7：排除提示行。差值可解释，操作员才不会以为统计出错了；
          只有真的存在被排除者才显示，不常驻占位。
-         措辞保持中性：不列出具体被排除的票源/票种名称 -->
+         措辞保持中性：不列出具体被排除的票源/权益类型名称 -->
     <el-alert v-if="excludedCount > 0" type="info" :closable="false" show-icon
               :title="`今日已签到的观众中有 ${excludedCount} 位不在本次抽奖范围内，抽奖池已自动过滤`"
               style="margin-bottom: 16px;" />

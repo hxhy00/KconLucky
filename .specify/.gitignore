@@ -16,3 +16,6 @@ extensions/.cache/
 # Execution consent is stored separately in the user's local trust registry.
 integrations/packages/
 integrations/packages.json
+
+# Regenerable machine-local integration catalog cache (not meant to be shared).
+integrations/.cache/

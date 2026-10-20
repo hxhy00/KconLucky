@@ -62,7 +62,7 @@
              「运气问题」等于承认这个号是本场的，反而坐实了假截图的可信度。 -->
         <div slot="extra" v-if="verifyResult === 'NOT_ISSUED' && verifyData.issued">
           <p class="verify-hint">回应口径：抽奖是从当天现场签到的观众里随机抽取的，没有中奖是运气问题。</p>
-          <p class="verify-hint">不要解释抽取范围或票种差异。</p>
+          <p class="verify-hint">不要解释抽取范围或权益类型差异。</p>
         </div>
       </el-result>
     </el-card>

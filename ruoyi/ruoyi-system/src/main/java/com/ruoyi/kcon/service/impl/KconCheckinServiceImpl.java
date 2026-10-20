@@ -14,10 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,63 +51,43 @@ public class KconCheckinServiceImpl implements IKconCheckinService
     {
         if (keyword == null || keyword.trim().isEmpty())
         {
-            throw new ServiceException("请输入手机号或后四位");
+            throw new ServiceException("请输入完整 11 位手机号");
         }
-        String kw = keyword.trim();
-        if (!kw.matches("\\d{4}|\\d{11}"))
+        String phone = keyword.trim();
+        // 2026-10-19 起签到端只认完整 11 位手机号：
+        // 尾号空间只有 10^4，免登录接口上可被枚举，既能把人找出来，
+        // 也会连带削弱兑奖核验「本人知道完整号码」这层防冒领判定。
+        if (!phone.matches("1[3-9]\\d{9}"))
         {
-            throw new ServiceException("请输入 11 位手机号或 4 位尾号");
+            throw new ServiceException("请输入完整 11 位手机号");
         }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-
-        if (kw.length() == 11)
-        {
-            KconAttendee a = attendeeMapper.selectAttendeeByPhone(kw);
-            if (a == null)
-            {
-                throw new ServiceException("查无此人，请联系现场工作人员");
-            }
-            result.put("matchType", "single");
-            result.put("signed", a.getSigned() != null && a.getSigned() == 1);
-            result.put("attendee", toPublicView(a));
-            return result;
-        }
-
-        // 后四位：可能命中多人
-        List<KconAttendee> list = attendeeMapper.selectByTail4(kw);
-        if (list == null || list.isEmpty())
+        KconAttendee a = attendeeMapper.selectAttendeeByPhone(phone);
+        if (a == null)
         {
             throw new ServiceException("查无此人，请联系现场工作人员");
         }
-        if (list.size() == 1)
-        {
-            KconAttendee a = list.get(0);
-            result.put("matchType", "single");
-            result.put("signed", a.getSigned() != null && a.getSigned() == 1);
-            result.put("attendee", toPublicView(a));
-            return result;
-        }
 
-        List<Map<String, Object>> candidates = new ArrayList<>();
-        for (KconAttendee a : list)
-        {
-            candidates.add(toPublicView(a));
-        }
-        result.put("matchType", "multiple");
-        result.put("candidates", candidates);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("matchType", "single");
+        result.put("signed", a.getSigned() != null && a.getSigned() == 1);
+        result.put("attendee", toPublicView(a));
         return result;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> submitCheckin(Long attendeeId)
+    public Map<String, Object> submitCheckin(Long attendeeId, String phone)
     {
         KconAttendee attendee = attendeeMapper.selectAttendeeById(attendeeId);
         if (attendee == null)
         {
             throw new ServiceException("查无此人，请联系现场工作人员");
         }
+
+        // 公网版加固：submit 免登录，仅凭自增 attendeeId 就能替他人签到、耗尽端口池。
+        // 要求提交完整 11 位手机号并与名单等值比对，把「猜 ID」和「枚举尾号」都挡在落库之前。
+        verifyPhone(attendee, phone);
 
         // 已签到 → 返回原端口号，不变号
         KconCheckin exist = checkinMapper.selectByPhone(attendee.getPhone());
@@ -135,13 +113,40 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         catch (Exception e)
         {
             // 极少数并发场景：同一手机号同时提交，唯一索引拦截。
-            // 此时回滚（端口号归还由事务保证），重新读一次已有记录返回。
-            log.warn("并发签到冲突，phone={}，尝试返回已有记录", attendee.getPhone());
+            // 事务会整体回滚（端口号占用一并归还），这里只能提示重试：
+            // 在当前事务已标记 rollback-only 的情况下无法再读库返回已有记录，
+            // 且调用方重试后必然命中上面的「已签到 → 返回原端口号」分支。
+            log.warn("并发签到冲突，phone={}，提示调用方重试", attendee.getPhone());
             throw new ServiceException("签到处理中，请稍后重试");
         }
 
         log.info("签到成功 name={} portNo={}", attendee.getName(), portNo);
         return buildSuccess(attendee, portNo, now, false);
+    }
+
+    /**
+     * 二次校验：提交的手机号必须与该参会人一致。
+     *
+     * 只接受完整 11 位。后四位不构成秘密（10^4 可枚举），若允许它作为提交凭证，
+     * 等于把「查得到尾号就能替人签到」写进接口，和没有校验一样。
+     * 查询入口仍保留后四位，是为了现场快速定位；确认签到这一步必须补全。
+     */
+    private void verifyPhone(KconAttendee attendee, String phone)
+    {
+        if (phone == null || phone.trim().isEmpty())
+        {
+            throw new ServiceException("请输入完整 11 位手机号");
+        }
+        String input = phone.trim();
+        if (!input.matches("1[3-9]\\d{9}"))
+        {
+            throw new ServiceException("请输入完整 11 位手机号");
+        }
+        String registered = attendee.getPhone();
+        if (registered == null || !registered.equals(input))
+        {
+            throw new ServiceException("手机号与参会人信息不匹配，请重新查询");
+        }
     }
 
     /**
@@ -177,6 +182,9 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         data.put("checkinTime", format(checkinTime));
         data.put("repeat", repeat);
         data.put("name", attendee.getName());
+        // 新语义：ticket_type 已改为「权益类型」（午餐/周边），不是抽奖筛选输入；
+        // 签到成功页需要展示给观众。抽奖资格 drawEligible 仍然不下发。
+        data.put("ticketType", attendee.getTicketType());
 
         // spec 006 FR-A4：非买票者照常签到、照常拿端口号，不拦截。
         // 刻意**不**在此返回抽奖资格：签到端是免登录接口，一旦回传该标记，
@@ -242,6 +250,8 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             data.put("portNo", checkin.getPortNo());
             data.put("checkinTime", format(checkin.getCheckinTime()));
             data.put("name", attendee.getName());
+            // 与成功页同口径：返回权益类型供展示，但不返回 drawEligible
+            data.put("ticketType", attendee.getTicketType());
             // 同 submit：不回传 drawEligible，避免免登录接口暴露抽奖筛选口径
         }
         else

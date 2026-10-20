@@ -8,7 +8,7 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
-        "codebuddy": [
+        "trae": [
           "speckit.branch-convention.configure",
           "speckit.branch-convention.validate",
           "speckit.branch-convention.rename"

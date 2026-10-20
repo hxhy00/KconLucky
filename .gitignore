@@ -48,11 +48,11 @@ Thumbs.db
 *.swp
 
 # ---- AI 编码助手本地数据 ----
-# .codebuddy/ 是 CodeBuddy IDE 的本地工作数据（含会话、索引、本地偏好），
-# 属于「本机状态」而非团队资产，不入版本库。
-# 注意：spec-kit 生成的 slash 命令正是落在 .codebuddy/commands/，
-# 该目录同样不入库；团队成员各自用 `specify init` 就地生成即可（见
-# .specify/README 说明）。
+# .trae/ 是 Trae IDE 的本地工作数据：spec-kit 生成的 skills 落在
+# .trae/skills/speckit-*/，属于「本机状态」而非团队资产，不入版本库。
+# 团队成员各自用 `specify integration install trae` 就地生成（见 .specify/README）。
+.trae/
+# .codebuddy/ 为 CodeBuddy IDE 的本地工作数据（历史集成，当前项目已切换到 Trae）。
 .codebuddy/
 # .serena/ 是 Serena MCP 代码分析工具的本地配置（project.yml 含绝对路径），
 # 同样属「本机状态」：换台机器路径就不同，入库只会制造无意义冲突。

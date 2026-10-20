@@ -1,9 +1,10 @@
 {
-  "ai": "codebuddy",
+  "ai": "trae",
+  "ai_skills": true,
   "allow_symlinks": false,
   "feature_numbering": "sequential",
   "here": true,
-  "integration": "codebuddy",
+  "integration": "trae",
   "script": "sh",
   "speckit_version": "1.2.0"
 }

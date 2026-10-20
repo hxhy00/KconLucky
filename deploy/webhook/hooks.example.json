@@ -1,0 +1,24 @@
+[
+  {
+    "id": "kcon-deploy",
+    "execute-command": "/root/Code/kcon-lucky/scripts/deploy.sh",
+    "command-working-directory": "/root/Code/kcon-lucky",
+    "http-methods": ["POST"],
+    "pass-arguments-to-command": [
+      {
+        "source": "payload",
+        "name": "ref"
+      }
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "value",
+        "value": "<WEBHOOK_SECRET>",
+        "parameter": {
+          "source": "header",
+          "name": "X-Gitee-Token"
+        }
+      }
+    }
+  }
+]

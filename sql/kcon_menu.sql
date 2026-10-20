@@ -100,7 +100,8 @@ VALUES
   (3008, '核验日志',   3100, 2, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query', 'list',  'admin', NOW(), '核验操作追溯'),
   -- 设置子菜单
   (3003, '奖品设置',   3200, 1, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',   'star',  'admin', NOW(), '场次奖项档位'),
-  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
+  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）'),
+  (3009, '渠道来源映射', 3200, 3, 'channel-mapping', 'kcon/channel/index', '', '', 1, 0, 'C', '0', '0', 'kcon:channel:list', 'dict', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖');
 
 -- -------------------------------------------------------------
 -- 按钮权限
@@ -125,9 +126,13 @@ VALUES
   (3040, '中奖作废', 3004, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:winner:void', '#', 'admin', NOW(), ''),
   -- 抽奖控制台（FR-16/19/20）
   (3050, '场次查询', 3007, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:session:list', '#', 'admin', NOW(), ''),
-  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次');
-  -- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
-  -- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
+  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次'),
+  -- 渠道来源映射（spec 010）
+  (3060, '映射新增', 3009, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:add',    '#', 'admin', NOW(), ''),
+  (3061, '映射修改', 3009, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:edit',   '#', 'admin', NOW(), ''),
+  (3062, '映射删除', 3009, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:remove', '#', 'admin', NOW(), '');
+-- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
+-- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
 
 -- -------------------------------------------------------------
 -- 授权给超级管理员（role_id=1）与普通角色（role_id=2）
@@ -148,6 +153,11 @@ SELECT 2, `menu_id` FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
    AND `menu_id` = 3006;
+
+-- 渠道来源映射属于低频配置（spec 010），只留给超管
+DELETE FROM `sys_role_menu`
+ WHERE `role_id` = 2
+   AND `menu_id` IN (3009, 3060, 3061, 3062);
 
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;

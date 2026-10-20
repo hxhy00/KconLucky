@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconChannelMappingMapper">
+
+    <resultMap type="KconChannelMapping" id="KconChannelMappingResult">
+        <id     property="id"            column="id"             />
+        <result property="channelSource" column="channel_source" />
+        <result property="benefitType"   column="benefit_type"   />
+        <result property="drawEligible"  column="draw_eligible"  />
+        <result property="sort"          column="sort"           />
+        <result property="createBy"      column="create_by"      />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateBy"      column="update_by"      />
+        <result property="updateTime"    column="update_time"    />
+    </resultMap>
+
+    <sql id="selectChannelMappingVo">
+        select id, channel_source, benefit_type, draw_eligible, sort,
+               create_by, create_time, update_by, update_time
+        from kcon_channel_mapping
+    </sql>
+
+    <select id="selectList" parameterType="KconChannelMapping" resultMap="KconChannelMappingResult">
+        <include refid="selectChannelMappingVo"/>
+        <where>
+            <if test="channelSource != null and channelSource != ''">
+                and channel_source like concat('%', #{channelSource}, '%')
+            </if>
+            <if test="drawEligible != null">
+                and draw_eligible = #{drawEligible}
+            </if>
+        </where>
+        order by sort asc, id asc
+    </select>
+
+    <select id="selectAll" resultMap="KconChannelMappingResult">
+        <include refid="selectChannelMappingVo"/>
+        order by sort asc, id asc
+    </select>
+
+    <select id="selectById" parameterType="Long" resultMap="KconChannelMappingResult">
+        <include refid="selectChannelMappingVo"/>
+        where id = #{id}
+    </select>
+
+    <select id="countByChannelSource" resultType="int">
+        select count(*)
+          from kcon_channel_mapping
+         where channel_source = #{channelSource}
+        <if test="excludeId != null">
+           and id != #{excludeId}
+        </if>
+    </select>
+
+    <insert id="insert" parameterType="KconChannelMapping" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_channel_mapping
+        (channel_source, benefit_type, draw_eligible, sort, create_by, create_time)
+        values
+        (#{channelSource}, #{benefitType}, #{drawEligible}, #{sort}, #{createBy}, now())
+    </insert>
+
+    <update id="update" parameterType="KconChannelMapping">
+        update kcon_channel_mapping
+        <set>
+            <if test="channelSource != null and channelSource != ''">channel_source = #{channelSource},</if>
+            <if test="benefitType != null">benefit_type = #{benefitType},</if>
+            <if test="drawEligible != null">draw_eligible = #{drawEligible},</if>
+            <if test="sort != null">sort = #{sort},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            update_time = now()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="Long">
+        delete from kcon_channel_mapping where id = #{id}
+    </delete>
+
+</mapper>

@@ -9,8 +9,11 @@ import jakarta.validation.constraints.Size;
 /**
  * 参会人名单对象 kcon_attendee
  *
- * 导入必填 5 列：姓名 / 手机号 / 渠道标识 / 票种 / 是否参与抽奖
- * 选填 4 列：公司 / 邮箱 / 第几次参加 KCon / 职务·年级
+ * 导入必填 3 列：姓名 / 手机号 / 渠道来源
+ * 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
+ * 权益类型与参与抽奖留空时，按渠道来源查映射表 kcon_channel_mapping 自动带出。
+ *
+ * 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级。
  *
  * @author kcon
  */
@@ -33,23 +36,23 @@ public class KconAttendee extends BaseEntity
     @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")
     private String phone;
 
-    /** 渠道标识：S/T/C/H/D/G/V */
-    @Excel(name = "渠道标识")
+    /** 渠道来源：自由文本（旧数据可能为 S/T/C/H/D/G/V 单字母） */
+    @Excel(name = "渠道来源")
     private String channel;
 
-    /** 票种 */
-    @Excel(name = "票种")
+    /** 权益类型：自由文本（旧数据为票种） */
+    @Excel(name = "权益类型")
     private String ticketType;
 
     /**
      * 是否参与抽奖：1=是 0=否（spec 006 补充，2026-10-16 用户确认）
      *
-     * 导入为第 5 必填列：这是票务侧的显式事实，不由票种/渠道推导；
+     * 导入为选填列：留空时按渠道来源映射带出；无映射且未填时按「否」入库。
      * 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
      * （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
      * 池计算时系统参数黑名单参数优先、实时生效，见 DrawEligibility。
      */
-    @Excel(name = "是否参与抽奖", readConverterExp = "1=是,0=否")
+    @Excel(name = "参与抽奖", readConverterExp = "1=是,0=否")
     private Integer drawEligible;
 
     /** 公司（选填） */
@@ -66,9 +69,9 @@ public class KconAttendee extends BaseEntity
     @Excel(name = "第几次参加KCon")
     private Integer attendCount;
 
-    /** 职务/年级（选填） */
-    @Excel(name = "职务/年级")
-    @Size(max = 64, message = "职务/年级长度不能超过 64")
+    /** 职位（选填） */
+    @Excel(name = "职位")
+    @Size(max = 64, message = "职位长度不能超过 64")
     private String position;
 
     /** 手机号后四位（冗余） */
