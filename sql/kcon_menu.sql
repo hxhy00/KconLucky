@@ -101,7 +101,7 @@ VALUES
   -- 设置子菜单
   (3003, '奖品设置',   3200, 1, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',   'star',  'admin', NOW(), '场次奖项档位'),
   (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）'),
-  (3009, '渠道来源映射', 3200, 3, 'channel-mapping', 'system/dict/index', '', '', 1, 0, 'C', '0', '0', 'system:dict:list', 'dict', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖');
+  (3009, '渠道来源映射', 3200, 3, 'channel-mapping', 'kcon/channel/index', '', '', 1, 0, 'C', '0', '0', 'kcon:channel:list', 'dict', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖');
 
 -- -------------------------------------------------------------
 -- 按钮权限
@@ -126,9 +126,13 @@ VALUES
   (3040, '中奖作废', 3004, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:winner:void', '#', 'admin', NOW(), ''),
   -- 抽奖控制台（FR-16/19/20）
   (3050, '场次查询', 3007, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:session:list', '#', 'admin', NOW(), ''),
-  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次');
-  -- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
-  -- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
+  (3051, '抽奖操作', 3007, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:draw:operate', '#', 'admin', NOW(), '抽奖/作废/切换场次'),
+  -- 渠道来源映射（spec 010）
+  (3060, '映射新增', 3009, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:add',    '#', 'admin', NOW(), ''),
+  (3061, '映射修改', 3009, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:edit',   '#', 'admin', NOW(), ''),
+  (3062, '映射删除', 3009, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:remove', '#', 'admin', NOW(), '');
+-- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
+-- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
 
 -- -------------------------------------------------------------
 -- 授权给超级管理员（role_id=1）与普通角色（role_id=2）
@@ -150,49 +154,10 @@ DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
    AND `menu_id` = 3006;
 
--- 渠道来源映射使用 RuoYi 原生字典页面，普通角色没有 system:dict:* 权限，只留给超管
+-- 渠道来源映射属于低频配置（spec 010），只留给超管
 DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
-   AND `menu_id` = 3009;
-
--- -------------------------------------------------------------
--- 渠道来源映射字典（spec 009）
---   dict_label = 渠道来源
---   dict_value = 权益类型
---   remark     = 是 / 否（参与抽奖）
--- 只补缺失项，不覆盖现场已修改的值
--- -------------------------------------------------------------
-INSERT INTO `sys_dict_type` (`dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 'KCon 渠道来源映射', 'kcon_channel_mapping', '0', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_type` WHERE `dict_type` = 'kcon_channel_mapping');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 1, '重要嘉宾赠票', '含自助午餐、伴手礼', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '否'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = '重要嘉宾赠票');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 2, '其他（赠票）', '无', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '否'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = '其他（赠票）');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 3, 'TGO会员（会员权益）', '含自助午餐', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '是'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = 'TGO会员（会员权益）');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 4, '嘶吼平台卖票', '含自助午餐、帽衫、伴手礼', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '是'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = '嘶吼平台卖票');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 5, 'TGO卖票', '含自助午餐、帽衫、伴手礼', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '是'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = 'TGO卖票');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 6, '海凤卖票', '含自助午餐、帽衫、伴手礼', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '是'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = '海凤卖票');
-
-INSERT INTO `sys_dict_data` (`dict_sort`, `dict_label`, `dict_value`, `dict_type`, `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`)
-SELECT 7, 'IT资讯平台卖票', '含自助午餐、帽衫、伴手礼', 'kcon_channel_mapping', NULL, NULL, 'N', '0', 'admin', NOW(), '是'
- WHERE NOT EXISTS (SELECT 1 FROM `sys_dict_data` WHERE `dict_type` = 'kcon_channel_mapping' AND `dict_label` = 'IT资讯平台卖票');
+   AND `menu_id` IN (3009, 3060, 3061, 3062);
 
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
