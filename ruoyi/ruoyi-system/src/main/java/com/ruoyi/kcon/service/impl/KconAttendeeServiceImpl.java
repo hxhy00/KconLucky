@@ -1,11 +1,13 @@
 package com.ruoyi.kcon.service.impl;
 
+import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.kcon.domain.KconAttendee;
 import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.service.IKconAttendeeService;
 import com.ruoyi.kcon.service.IKconCheckinService;
+import com.ruoyi.system.service.ISysDictTypeService;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -34,8 +36,10 @@ import java.util.Map;
  *
  * 导入容错设计：
  *   - 按表头名匹配列，顺序任意
- *   - 必填：姓名 / 手机号 / 渠道来源 / 权益类型 / 参与抽奖（spec 006 补充）
- *   - 选填：公司 / 邮箱 / 第几次参加 KCon / 职位
+ *   - 必填 3 列：姓名 / 手机号 / 渠道来源
+ *   - 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
+ *   - 权益类型与参与抽奖留空时，按渠道来源查字典 kcon_channel_mapping 自动带出；
+ *     命中映射时映射优先，未命中时回退到行内值
  *   - 未识别的列直接忽略（例如票务总表带来的 购票时间/金额/发票需求）
  *   - 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级
  *
@@ -74,21 +78,25 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         HEADER_ALIAS.put("参与抽奖", "drawEligible");
     }
 
-    /** 必填列（标准字段名） */
-    private static final List<String> REQUIRED = List.of("name", "phone", "channel", "ticketType", "drawEligible");
+    /** 必填列（标准字段名）：只保留身份与来源，权益/资格由映射带出 */
+    private static final List<String> REQUIRED = List.of("name", "phone", "channel");
 
     /** 必填列的中文名（报错用） */
     private static final Map<String, String> FIELD_CN = Map.of(
-            "name", "姓名", "phone", "手机号",
-            "channel", "渠道来源", "ticketType", "权益类型",
-            "drawEligible", "参与抽奖"
+            "name", "姓名", "phone", "手机号", "channel", "渠道来源"
     );
+
+    /** 渠道来源映射字典类型 */
+    private static final String DICT_CHANNEL_MAPPING = "kcon_channel_mapping";
 
     @Autowired
     private KconAttendeeMapper attendeeMapper;
 
     @Autowired
     private KconCheckinMapper checkinMapper;
+
+    @Autowired
+    private ISysDictTypeService dictTypeService;
 
     @Override
     public List<KconAttendee> selectAttendeeList(KconAttendee query)
@@ -232,7 +240,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         if (!missing.isEmpty())
         {
             throw new ServiceException("缺少必填列：" + String.join("、", missing)
-                    + "。正确表头应包含：姓名、手机号、渠道来源、权益类型、参与抽奖（公司/邮箱/职位/第几次参加KCon为选填）");
+                    + "。正确表头应包含：姓名、手机号、渠道来源（权益类型/参与抽奖/公司/职位/邮箱为选填）");
         }
 
         // 3. replace 模式先清空
@@ -259,13 +267,19 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
 
         String batch = "B" + System.currentTimeMillis();
         int inserted = 0, updated = 0, skipped = 0;
-        // 漏填「参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
+        // 未命中映射且未填「参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
         int drawFlagMissing = 0;
+        int mappingMissing = 0;
         int phoneIdx = colIndex.get("phone");
+        Integer ticketIdx = colIndex.get("ticketType");
+        Integer drawIdx = colIndex.get("drawEligible");
+        Map<String, ChannelMapping> channelMappings = loadChannelMappings();
         // 记录被跳过行的行号与原因：只返回一个「跳过 N 条」，现场拿着 Excel 不知道要改哪几行
         List<Map<String, Object>> skipDetails = new ArrayList<>();
         // 记录漏填「参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
         List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
+        // 记录未配置映射的渠道来源：提示到字典管理补充，而不是让整批人静默失去资格
+        List<Map<String, Object>> mappingMissingDetails = new ArrayList<>();
 
         for (int r = 1; r < rows.size(); r++)
         {
@@ -287,8 +301,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             }
 
             // 「必填列存在」不等于「值必填」：列缺失已在上面统一拦截，
-            // 这里必须逐行校验取值，否则空姓名/空渠道/空权益类型照样入库，
-            // 之后按渠道、按权益类型统计时就会出现无标签的脏数据
+            // 这里必须逐行校验取值，否则空姓名/空渠道照样入库，
+            // 之后按渠道统计时就会出现无标签的脏数据
             String name = cell(row, colIndex.get("name")).trim();
             if (name.isEmpty())
             {
@@ -303,34 +317,42 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 addSkipDetail(skipDetails, lineNo, "渠道来源为空");
                 continue;
             }
-            String ticketType = cell(row, colIndex.get("ticketType")).trim();
-            if (ticketType.isEmpty())
-            {
-                skipped++;
-                addSkipDetail(skipDetails, lineNo, "权益类型为空");
-                continue;
-            }
 
-            // spec 006 补充（2026-10-16 确认）：参与抽奖为必填列（新模板第 8 列），
-            // 是票务侧的显式事实，不由渠道/权益类型推导。口径「必须显式填，空即视为否」：
-            // 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
-            // （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
-            String drawFlag = cell(row, colIndex.get("drawEligible")).trim();
-            int drawEligible = "是".equals(drawFlag) ? 1 : 0;
-            if (drawFlag.isEmpty())
+            // 权益类型 / 参与抽奖为选填：先取行内值，再按渠道来源查映射。
+            // 映射优先（2026-10-19 用户确认）：命中映射时忽略行内填写。
+            String explicitTicket = ticketIdx == null ? "" : cell(row, ticketIdx).trim();
+            String explicitDraw = drawIdx == null ? "" : cell(row, drawIdx).trim();
+
+            ChannelMapping mapping = channelMappings.get(channel);
+            String ticketType;
+            int drawEligible;
+            if (mapping != null)
             {
-                // 该行照常入库（按「否」），只做单独计数提示：漏填行名单缺失会
-                // 让持有人失去抽奖资格，现场需要知道具体行号去补。不并入 skipped——
-                // skipped 表示「没导入」，这行导入了，混在一起统计会对不上。
-                drawFlagMissing++;
-                addFlagMissingDetail(flagMissingDetails, lineNo);
+                ticketType = mapping.benefitType;
+                drawEligible = mapping.drawEligible;
+            }
+            else
+            {
+                // 未配置映射：回退到行内值；都为空时按「否」入库并提示补映射
+                ticketType = explicitTicket;
+                drawEligible = "是".equals(explicitDraw) ? 1 : 0;
+                mappingMissing++;
+                addMappingMissingDetail(mappingMissingDetails, lineNo, channel);
+                if (explicitDraw.isEmpty())
+                {
+                    // 该行照常入库（按「否」），只做单独计数提示：漏填行名单缺失会
+                    // 让持有人失去抽奖资格，现场需要知道具体行号去补。不并入 skipped——
+                    // skipped 表示「没导入」，这行导入了，混在一起统计会对不上。
+                    drawFlagMissing++;
+                    addFlagMissingDetail(flagMissingDetails, lineNo);
+                }
             }
 
             KconAttendee a = new KconAttendee();
             a.setName(name);
             a.setPhone(phone);
             a.setChannel(channel);
-            a.setTicketType(ticketType);
+            a.setTicketType(emptyToNull(ticketType));
             a.setDrawEligible(drawEligible);
             a.setPhoneTail4(tail4(phone));
             a.setImportBatch(batch);
@@ -369,8 +391,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             }
         }
 
-        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 漏填参与标记={} 明细条数={}",
-                mode, inserted, updated, skipped, drawFlagMissing, skipDetails.size());
+        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 未配置映射={} 漏填参与标记={} 明细条数={}",
+                mode, inserted, updated, skipped, mappingMissing, drawFlagMissing, skipDetails.size());
 
         Map<String, Object> stat = new LinkedHashMap<>();
         stat.put("total", attendeeMapper.countAll());
@@ -378,10 +400,81 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         stat.put("updated", updated);
         stat.put("skipped", skipped);
         stat.put("skipDetails", skipDetails);
+        stat.put("mappingMissing", mappingMissing);
+        stat.put("mappingMissingDetails", mappingMissingDetails);
         stat.put("drawFlagMissing", drawFlagMissing);
         stat.put("flagMissingDetails", flagMissingDetails);
         stat.put("batch", batch);
         return stat;
+    }
+
+    /** 渠道来源映射条目 */
+    private static final class ChannelMapping
+    {
+        final String benefitType;
+        final int drawEligible;
+
+        ChannelMapping(String benefitType, int drawEligible)
+        {
+            this.benefitType = benefitType;
+            this.drawEligible = drawEligible;
+        }
+    }
+
+    /**
+     * 读取字典 kcon_channel_mapping。
+     *
+     * 字典口径：dict_label=渠道来源，dict_value=权益类型，remark=是/否。
+     * 读取失败或字典未配置时返回空映射，导入回退到行内值。
+     */
+    private Map<String, ChannelMapping> loadChannelMappings()
+    {
+        Map<String, ChannelMapping> map = new HashMap<>();
+        try
+        {
+            List<SysDictData> list = dictTypeService.selectDictDataByType(DICT_CHANNEL_MAPPING);
+            if (list == null)
+            {
+                return map;
+            }
+            for (SysDictData d : list)
+            {
+                // 只使用正常状态的字典项
+                if (!"0".equals(d.getStatus()))
+                {
+                    continue;
+                }
+                String label = d.getDictLabel() == null ? "" : d.getDictLabel().trim();
+                if (label.isEmpty())
+                {
+                    continue;
+                }
+                String benefit = d.getDictValue() == null ? "" : d.getDictValue().trim();
+                String flag = d.getRemark() == null ? "" : d.getRemark().trim();
+                map.put(label, new ChannelMapping(benefit, "是".equals(flag) ? 1 : 0));
+            }
+        }
+        catch (Exception e)
+        {
+            log.warn("读取渠道来源映射失败，导入将回退到行内值", e);
+        }
+        return map;
+    }
+
+    /** 未配置映射明细上限 */
+    private static final int MAPPING_MISSING_DETAIL_LIMIT = 20;
+
+    private void addMappingMissingDetail(List<Map<String, Object>> details, int lineNo, String channel)
+    {
+        if (details.size() >= MAPPING_MISSING_DETAIL_LIMIT)
+        {
+            return;
+        }
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("row", lineNo);
+        d.put("channel", channel);
+        d.put("reason", "渠道来源未配置映射，按不参与处理");
+        details.add(d);
     }
 
     /** 漏填「参与抽奖」明细上限：与失败行明细一致，够现场定位即可 */
@@ -395,7 +488,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("row", lineNo);
-        d.put("reason", "参与抽奖为空（按「否」处理）");
+        d.put("reason", "未配置映射且参与抽奖为空（按「否」处理）");
         details.add(d);
     }
 

@@ -8,8 +8,9 @@ import com.ruoyi.common.annotation.Excel;
  * 列顺序固定为：
  *   姓名 / 手机号 / 渠道来源 / 权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
  *
- * 前 5 列为必填，后 3 列为选填。
- * 导入解析仍按表头名匹配，见 KconAttendeeServiceImpl.HEADER_ALIAS。
+ * 前 3 列为必填（姓名 / 手机号 / 渠道来源）；
+ * 权益类型与参与抽奖为选填，留空时按渠道来源查字典 kcon_channel_mapping 自动带出；
+ * 公司 / 职位 / 邮箱为选填。
  *
  * @author kcon
  */

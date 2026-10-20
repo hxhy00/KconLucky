@@ -176,9 +176,10 @@
       <el-alert type="info" :closable="false" show-icon>
         <div slot="title" style="line-height: 1.8;">
           支持 .xlsx / .xls / .csv。<b>按表头名识别列，顺序不限</b>。<br />
-          <b>必填 5 列</b>：姓名、手机号、渠道来源、权益类型、参与抽奖<br />
-          <b>选填 3 列</b>：公司、职位、邮箱（可导入后在管理端补录）<br />
-          「参与抽奖」只有填<b>「是」</b>才进抽奖池；留空或无法识别一律按<b>「否」</b>处理（不参与者照常签到领胸牌）。<br />
+          <b>必填 3 列</b>：姓名、手机号、渠道来源<br />
+          <b>选填 5 列</b>：权益类型、参与抽奖、公司、职位、邮箱<br />
+          权益类型 / 参与抽奖留空时，按渠道来源从字典 <b>kcon_channel_mapping</b> 自动带出；命中映射时以映射为准。<br />
+          未配置映射的渠道来源会按「不参与」处理，并在导入结果中提示到字典管理补充。<br />
           旧表头（渠道标识 / 票种 / 是否参与抽奖 / 职务年级）仍然兼容，旧文件可直接导入。<br />
           多余的列（购票时间、金额等）会自动忽略。<br />
           <b>第一次整理名单？点下方「下载模板」按表头填好再导入，不会出错。</b>
@@ -493,9 +494,12 @@ export default {
         this.importing = false
         this.importOpen = false
         const s = res.data || {}
+        const mappingTip = s.mappingMissing > 0
+          ? `<br/><span style="color:#d4342a">其中 ${s.mappingMissing} 条渠道来源未配置映射，已按「不参与」处理，请到字典管理补充。</span>`
+          : ""
         this.$alert(
           `新增 ${s.inserted || 0} 条，更新 ${s.updated || 0} 条，跳过 ${s.skipped || 0} 条。<br/>
-           当前有效名单共 <b>${s.total || 0}</b> 人。`,
+           当前有效名单共 <b>${s.total || 0}</b> 人。${mappingTip}`,
           "导入完成",
           { dangerouslyUseHTMLString: true }
         )

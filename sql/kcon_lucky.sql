@@ -25,7 +25,7 @@ CREATE TABLE `kcon_attendee` (
   `phone`        VARCHAR(20)  NOT NULL                COMMENT '手机号（业务主键，唯一）',
   `channel`      VARCHAR(64)  DEFAULT NULL            COMMENT '渠道来源：自由文本（旧数据可能为 S/T/C/H/D/G/V 单字母）',
   `ticket_type`  VARCHAR(128) DEFAULT NULL            COMMENT '权益类型：自由文本（旧数据为票种）',
-  `draw_eligible` TINYINT    NOT NULL DEFAULT 0       COMMENT '是否参与抽奖：1=是 0=否（导入必填列，新模板第 8 列，留空/无法识别按「否」入库）',
+  `draw_eligible` TINYINT    NOT NULL DEFAULT 0       COMMENT '是否参与抽奖：1=是 0=否（选填列，留空按渠道来源映射带出；无映射按 0）',
   `company`      VARCHAR(128) DEFAULT NULL            COMMENT '公司',
   `email`        VARCHAR(128) DEFAULT NULL            COMMENT '邮箱',
   `attend_count` INT          DEFAULT NULL            COMMENT '第几次参加 KCon（1=首次，空=未知）',
