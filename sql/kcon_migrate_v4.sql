@@ -12,6 +12,8 @@
 -- MODIFY COLUMN 幂等，可重复执行。
 -- =============================================================
 
+USE `kcon_lucky`;
+
 ALTER TABLE `kcon_attendee`
   MODIFY COLUMN `channel` VARCHAR(64) DEFAULT NULL
     COMMENT '渠道来源：自由文本（旧数据可能为 S/T/C/H/D/G/V 单字母）',
