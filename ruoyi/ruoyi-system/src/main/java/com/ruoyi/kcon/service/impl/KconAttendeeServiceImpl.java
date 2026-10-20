@@ -34,9 +34,10 @@ import java.util.Map;
  *
  * 导入容错设计：
  *   - 按表头名匹配列，顺序任意
- *   - 必填：姓名 / 手机号 / 渠道标识 / 票种 / 是否参与抽奖（spec 006 补充）
- *   - 选填：公司 / 邮箱 / 第几次参加 KCon / 职务·年级
+ *   - 必填：姓名 / 手机号 / 渠道来源 / 权益类型 / 参与抽奖（spec 006 补充）
+ *   - 选填：公司 / 邮箱 / 第几次参加 KCon / 职位
  *   - 未识别的列直接忽略（例如票务总表带来的 购票时间/金额/发票需求）
+ *   - 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级
  *
  * @author kcon
  */
@@ -56,7 +57,10 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         HEADER_ALIAS.put("电话", "phone");
         HEADER_ALIAS.put("渠道标识", "channel");
         HEADER_ALIAS.put("渠道", "channel");
+        HEADER_ALIAS.put("渠道来源", "channel");
         HEADER_ALIAS.put("票种", "ticketType");
+        HEADER_ALIAS.put("票务类型", "ticketType");
+        HEADER_ALIAS.put("权益类型", "ticketType");
         HEADER_ALIAS.put("公司", "company");
         HEADER_ALIAS.put("邮箱", "email");
         HEADER_ALIAS.put("第几次参加kcon", "attendCount");
@@ -65,6 +69,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         HEADER_ALIAS.put("职务/年级", "position");
         HEADER_ALIAS.put("职务", "position");
         HEADER_ALIAS.put("年级", "position");
+        HEADER_ALIAS.put("职位", "position");
         HEADER_ALIAS.put("是否参与抽奖", "drawEligible");
         HEADER_ALIAS.put("参与抽奖", "drawEligible");
     }
@@ -75,8 +80,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     /** 必填列的中文名（报错用） */
     private static final Map<String, String> FIELD_CN = Map.of(
             "name", "姓名", "phone", "手机号",
-            "channel", "渠道标识", "ticketType", "票种",
-            "drawEligible", "是否参与抽奖"
+            "channel", "渠道来源", "ticketType", "权益类型",
+            "drawEligible", "参与抽奖"
     );
 
     @Autowired
@@ -227,7 +232,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         if (!missing.isEmpty())
         {
             throw new ServiceException("缺少必填列：" + String.join("、", missing)
-                    + "。正确表头应包含：姓名、手机号、渠道标识、票种、是否参与抽奖（公司/邮箱/第几次参加KCon/职务年级为选填）");
+                    + "。正确表头应包含：姓名、手机号、渠道来源、权益类型、参与抽奖（公司/邮箱/职位/第几次参加KCon为选填）");
         }
 
         // 3. replace 模式先清空
@@ -254,12 +259,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
 
         String batch = "B" + System.currentTimeMillis();
         int inserted = 0, updated = 0, skipped = 0;
-        // 漏填「是否参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
+        // 漏填「参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
         int drawFlagMissing = 0;
         int phoneIdx = colIndex.get("phone");
         // 记录被跳过行的行号与原因：只返回一个「跳过 N 条」，现场拿着 Excel 不知道要改哪几行
         List<Map<String, Object>> skipDetails = new ArrayList<>();
-        // 记录漏填「是否参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
+        // 记录漏填「参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
         List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
 
         for (int r = 1; r < rows.size(); r++)
@@ -282,8 +287,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             }
 
             // 「必填列存在」不等于「值必填」：列缺失已在上面统一拦截，
-            // 这里必须逐行校验取值，否则空姓名/空渠道/空票种照样入库，
-            // 之后按渠道、按票种统计时就会出现无标签的脏数据
+            // 这里必须逐行校验取值，否则空姓名/空渠道/空权益类型照样入库，
+            // 之后按渠道、按权益类型统计时就会出现无标签的脏数据
             String name = cell(row, colIndex.get("name")).trim();
             if (name.isEmpty())
             {
@@ -295,19 +300,19 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             if (channel.isEmpty())
             {
                 skipped++;
-                addSkipDetail(skipDetails, lineNo, "渠道标识为空");
+                addSkipDetail(skipDetails, lineNo, "渠道来源为空");
                 continue;
             }
             String ticketType = cell(row, colIndex.get("ticketType")).trim();
             if (ticketType.isEmpty())
             {
                 skipped++;
-                addSkipDetail(skipDetails, lineNo, "票种为空");
+                addSkipDetail(skipDetails, lineNo, "权益类型为空");
                 continue;
             }
 
-            // spec 006 补充（2026-10-16 确认）：是否参与抽奖为第 5 必填列，
-            // 是票务侧的显式事实，不由票种/渠道推导。口径「必须显式填，空即视为否」：
+            // spec 006 补充（2026-10-16 确认）：参与抽奖为必填列（新模板第 8 列），
+            // 是票务侧的显式事实，不由渠道/权益类型推导。口径「必须显式填，空即视为否」：
             // 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
             // （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
             String drawFlag = cell(row, colIndex.get("drawEligible")).trim();
@@ -379,7 +384,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         return stat;
     }
 
-    /** 漏填「是否参与抽奖」明细上限：与失败行明细一致，够现场定位即可 */
+    /** 漏填「参与抽奖」明细上限：与失败行明细一致，够现场定位即可 */
     private static final int FLAG_MISSING_DETAIL_LIMIT = 20;
 
     private void addFlagMissingDetail(List<Map<String, Object>> details, int lineNo)
@@ -390,7 +395,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("row", lineNo);
-        d.put("reason", "是否参与抽奖为空（按「否」处理）");
+        d.put("reason", "参与抽奖为空（按「否」处理）");
         details.add(d);
     }
 

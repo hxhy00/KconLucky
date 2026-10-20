@@ -5,7 +5,7 @@ import com.ruoyi.common.annotation.Excel;
 /**
  * 统一签到表导出对象（供签到台打印后手工打钩）
  *
- * 需求 FR-25.1：姓名 / 手机号 / 渠道标识 / 票种 / 打钩列，按姓名排序。
+ * 需求 FR-25.1：姓名 / 手机号 / 渠道来源 / 权益类型 / 打钩列，按姓名排序。
  *
  * 为什么不复用 KconAttendee：
  *   名单实体带公司、邮箱、参加次数、职务、端口号等 9 列，与签到台无关，
@@ -21,10 +21,10 @@ public class KconSignSheetVo
     @Excel(name = "手机号")
     private String phone;
 
-    @Excel(name = "渠道标识")
+    @Excel(name = "渠道来源")
     private String channel;
 
-    @Excel(name = "票种")
+    @Excel(name = "权益类型")
     private String ticketType;
 
     /** 打钩列：留空给签到台人工打钩，导出时全为空 */
