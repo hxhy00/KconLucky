@@ -1,232 +1,280 @@
 <template>
   <div class="min-h-[100dvh] flex flex-col">
-    <!-- 顶部标题 -->
-    <header class="px-5 pt-6 pb-3 text-center">
-      <!-- 图形与文字分离：图形用透明 PNG（深色底不再出现白方块），文字用真实文本 -->
-      <div class="flex items-center justify-center gap-2">
-        <img :src="logo" class="h-8" alt="KCon" />
-        <span class="text-base font-bold tracking-wide">KCon 2026</span>
+    <!-- 顶部品牌线：细窄的一条，替代大面积红色渐变 -->
+    <div class="h-[3px] bg-brand"></div>
+
+    <header class="px-5 pt-7">
+      <div class="mx-auto w-full max-w-md">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <img :src="logo" class="h-7 w-7 object-contain" alt="KCon" />
+            <span class="text-sm font-semibold tracking-wide text-slate-200">KCon 2026</span>
+          </div>
+          <span class="text-xs text-slate-500">现场签到</span>
+        </div>
+
+        <div class="mt-7">
+          <h1 class="text-xl font-semibold text-slate-100">观众签到</h1>
+          <p class="mt-1.5 text-sm text-slate-400">请使用报名时填写的手机号完成签到</p>
+        </div>
+        <div class="mt-5 h-px bg-white/10"></div>
       </div>
-      <h1 class="text-2xl font-semibold mt-3">现场自助签到</h1>
-      <p class="mt-1.5 text-sm text-slate-400">用报名手机号签到，领取现场抽奖端口号</p>
     </header>
 
-    <main class="flex-1 px-5 pb-8 pt-1">
-      <!-- P1 输入手机号 -->
-      <section v-if="step === 'input'" class="animate-[fadeIn_.2s_ease]">
-        <!-- 三步预期：让第一次扫码的人知道接下来会发生什么 -->
-        <ol class="mb-5 grid grid-cols-3 gap-2 text-center text-[11px] text-slate-400">
-          <li class="rounded-lg bg-slate-800/60 py-2"><span class="text-brand font-bold mr-1">1</span>输入手机号</li>
-          <li class="rounded-lg bg-slate-800/60 py-2"><span class="text-brand font-bold mr-1">2</span>核对姓名</li>
-          <li class="rounded-lg bg-slate-800/60 py-2"><span class="text-brand font-bold mr-1">3</span>保存端口号</li>
-        </ol>
-
-        <label for="phone" class="block text-sm text-slate-300 mb-2">报名手机号</label>
-        <div class="relative">
-          <input
-            id="phone"
-            ref="phoneEl"
-            v-model="keyword"
-            type="tel"
-            inputmode="numeric"
-            autocomplete="tel"
-            maxlength="11"
-            placeholder="请输入 11 位手机号"
-            aria-describedby="phone-status"
-            class="w-full h-14 pl-4 pr-12 rounded-xl bg-slate-800/80 border
-                   text-center text-2xl tracking-widest outline-none transition"
-            :class="inputInvalid
-              ? 'border-rose-500/70 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20'
-              : 'border-slate-700 focus:border-brand focus:ring-2 focus:ring-brand/30'"
-            @input="onKeywordInput"
-            @keyup.enter="doQuery"
-          />
-          <button
-            v-if="keyword"
-            type="button"
-            class="absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full
-                   text-slate-400 text-lg active:bg-slate-700/60"
-            aria-label="清空手机号"
-            @click="clearKeyword"
-          >✕</button>
-        </div>
-
-        <!-- 提示与报错共用一行：位置固定，不会因为出现红字把按钮往下顶 -->
-        <p
-          id="phone-status"
-          class="mt-2 min-h-[20px] text-center text-xs"
-          :class="error ? 'text-rose-400' : 'text-slate-400'"
-          :role="error ? 'alert' : null"
-          :aria-live="error ? 'assertive' : 'off'"
-        >{{ error || phoneHint }}</p>
-
-        <button
-          class="w-full h-14 mt-3 rounded-xl bg-brand text-slate-900 font-bold text-lg
-                 active:scale-[.99] transition disabled:opacity-40"
-          :disabled="!canSubmit || loading"
-          @click="doQuery"
-        >
-          {{ loading ? '查询中…' : '查 询' }}
-        </button>
-
-        <!-- 签到与找回都只认完整 11 位手机号；尾号空间只有 10^4，
-             免登录接口上可被枚举，会连带削弱兑奖核验「本人知道完整号码」这层防冒领判定。 -->
-        <div class="mt-7 pt-5 border-t border-white/5">
-          <button
-            type="button"
-            class="w-full h-12 rounded-xl border border-slate-700 text-slate-300 text-sm
-                   active:scale-[.99] transition disabled:opacity-40"
-            :disabled="!canLookup || loading"
-            @click="doLookup"
-          >
-            {{ loading ? '查询中…' : '截图丢了？找回端口号' }}
-          </button>
-          <p v-if="!canLookup && !lookupResult" class="mt-2 text-center text-xs text-slate-500">
-            输入完整 11 位手机号后可找回
-          </p>
-
-          <!-- 找回结果 -->
-          <div
-            v-if="lookupResult"
-            ref="lookupEl"
-            class="mt-4 p-4 rounded-xl bg-brand/10 border border-brand/30 text-center"
-          >
-            <div class="text-brand text-xs tracking-widest">你的端口号</div>
-            <div class="port-no my-2 tabular-nums">{{ lookupResult.portNo }}</div>
-            <p class="text-amber-300 text-sm font-medium">请截屏保存</p>
-            <p class="text-slate-400 text-xs mt-2">
-              {{ lookupResult.name }} · {{ lookupResult.checkinTime }}
-            </p>
-            <p v-if="lookupResult.ticketType" class="text-slate-300 text-sm mt-2">
-              权益类型：{{ lookupResult.ticketType }}
-            </p>
-            <!-- spec 006：与签到成功页同口径——不暴露抽奖资格，找回结果一律不区分 -->
+    <main class="flex-1 px-5 pt-6 pb-10">
+      <div class="mx-auto w-full max-w-md">
+        <!-- P1 输入手机号 -->
+        <section v-if="step === 'input'">
+          <label for="phone" class="block text-xs font-medium text-slate-400 mb-2">手机号</label>
+          <div class="relative">
+            <input
+              id="phone"
+              ref="phoneEl"
+              v-model="keyword"
+              type="tel"
+              inputmode="numeric"
+              autocomplete="tel"
+              autocapitalize="off"
+              spellcheck="false"
+              maxlength="11"
+              placeholder="请输入报名手机号"
+              aria-describedby="phone-status"
+              class="w-full h-14 pl-4 pr-11 rounded-lg bg-[#0E0E11] border text-lg
+                     tracking-[0.08em] text-slate-100 placeholder:text-slate-600
+                     outline-none transition-colors tabular-nums"
+              :class="inputInvalid
+                ? 'border-rose-500/60 focus:border-rose-400'
+                : 'border-white/10 focus:border-brand'"
+              @input="onKeywordInput"
+              @keyup.enter="doQuery"
+            />
+            <button
+              v-if="keyword"
+              type="button"
+              class="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-md
+                     text-slate-500 text-base active:bg-white/5"
+              aria-label="清空手机号"
+              @click="clearKeyword"
+            >✕</button>
           </div>
 
-          <!-- 这里曾列出「后四位撞号」的候选让人自己认领。找回只认完整 11 位后，
-               后端不再返回 ambiguous / candidates，该分支已无来源。 -->
+          <!-- 提示与报错共用一行：位置固定，不会因为出现红字把按钮往下顶 -->
           <p
-            v-if="lookupError"
-            class="mt-3 text-center text-rose-400 text-sm"
+            id="phone-status"
+            class="mt-2 min-h-[18px] text-xs"
+            :class="error ? 'text-rose-400' : 'text-slate-500'"
+            :role="error ? 'alert' : null"
+            :aria-live="error ? 'assertive' : 'off'"
+          >{{ error || phoneHint }}</p>
+
+          <button
+            class="w-full h-12 mt-4 rounded-lg bg-[#C1332A] text-white text-base font-medium
+                   active:bg-[#A82B23] transition-colors disabled:opacity-40"
+            :disabled="!canSubmit || loading"
+            @click="doQuery"
+          >
+            {{ loading ? '查询中…' : '查询参会信息' }}
+          </button>
+
+          <p class="mt-3 text-xs text-slate-500">
+            签到成功后将生成抽奖端口号，请提前准备截屏
+          </p>
+
+          <!-- 签到与找回都只认完整 11 位手机号；尾号空间只有 10^4，
+               免登录接口上可被枚举，会连带削弱兑奖核验「本人知道完整号码」这层防冒领判定。 -->
+          <div class="mt-8 pt-4 border-t border-white/10">
+            <div class="flex items-center justify-between gap-4">
+              <span class="text-xs text-slate-500">已签到但没保存端口号？</span>
+              <button
+                type="button"
+                class="text-sm text-slate-300 underline underline-offset-4 decoration-slate-600
+                       disabled:opacity-40 disabled:no-underline"
+                :disabled="!canLookup || loading"
+                @click="doLookup"
+              >找回端口号</button>
+            </div>
+
+            <!-- 找回结果 -->
+            <div
+              v-if="lookupResult"
+              ref="lookupEl"
+              class="mt-4 rounded-lg border border-white/10 bg-[#141418] overflow-hidden"
+            >
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+                <span class="text-xs text-slate-400">签到凭证</span>
+                <span class="text-xs text-amber-300">请截屏保存</span>
+              </div>
+              <div class="px-4 py-5 text-center">
+                <div class="text-xs text-slate-500">抽奖端口号</div>
+                <div class="mt-2 text-5xl font-bold text-brand tabular-nums">{{ lookupResult.portNo }}</div>
+              </div>
+              <dl class="px-4 py-2 text-sm border-t border-white/10">
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-slate-500">姓名</dt>
+                  <dd class="text-slate-200">{{ lookupResult.name }}</dd>
+                </div>
+                <div v-if="lookupResult.ticketType" class="flex justify-between gap-4 py-1.5">
+                  <dt class="text-slate-500 shrink-0">权益类型</dt>
+                  <dd class="text-right text-slate-200">{{ lookupResult.ticketType }}</dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                  <dt class="text-slate-500">签到时间</dt>
+                  <dd class="text-slate-300 tabular-nums">{{ lookupResult.checkinTime }}</dd>
+                </div>
+              </dl>
+              <!-- spec 006：与签到成功页同口径——不暴露抽奖资格，找回结果一律不区分 -->
+            </div>
+
+            <!-- 这里曾列出「后四位撞号」的候选让人自己认领。找回只认完整 11 位后，
+                 后端不再返回 ambiguous / candidates，该分支已无来源。 -->
+            <p
+              v-if="lookupError"
+              class="mt-3 text-sm text-rose-400"
+              role="alert"
+              aria-live="assertive"
+            >{{ lookupError }}</p>
+          </div>
+
+          <p class="mt-8 text-xs text-slate-600">
+            如遇问题，请向现场工作人员出示本页面。
+          </p>
+        </section>
+
+        <!-- P2 身份确认 -->
+        <section v-else-if="step === 'confirm'">
+          <div class="flex items-baseline justify-between">
+            <h2 class="text-lg font-semibold text-slate-100">核对参会信息</h2>
+            <span class="text-xs text-slate-500">步骤 2 / 2</span>
+          </div>
+          <p class="mt-1 text-sm text-slate-400">请确认以下信息为本人，再完成签到</p>
+
+          <div class="mt-5 rounded-lg border border-white/10 bg-[#141418] overflow-hidden">
+            <div class="px-5 py-4 border-b border-white/10">
+              <div class="text-xl font-semibold text-slate-100">{{ person.name }}</div>
+              <!-- 只展示一次手机号：此前卡片里是掩码、下面又放一个只读完整号码，
+                   观众会疑惑「到底要核对哪一个」 -->
+              <div class="mt-1 text-sm text-slate-400 tabular-nums">{{ person.phoneMask }}</div>
+            </div>
+            <dl class="px-5 py-1 text-sm divide-y divide-white/5">
+              <div v-if="person.company" class="flex justify-between gap-4 py-3">
+                <dt class="text-slate-500 shrink-0">公司</dt>
+                <dd class="text-right text-slate-200">{{ person.company }}</dd>
+              </div>
+              <div v-if="person.position" class="flex justify-between gap-4 py-3">
+                <dt class="text-slate-500 shrink-0">职务 / 年级</dt>
+                <dd class="text-right text-slate-200">{{ person.position }}</dd>
+              </div>
+              <div class="flex justify-between gap-4 py-3">
+                <dt class="text-slate-500 shrink-0">参加次数</dt>
+                <dd class="text-right text-slate-200">{{ attendText(person.attendCount) }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <button
+            class="w-full h-12 mt-5 rounded-lg bg-[#C1332A] text-white text-base font-medium
+                   active:bg-[#A82B23] transition-colors disabled:opacity-40"
+            :disabled="loading || !canConfirm"
+            @click="doCheckin"
+          >
+            {{ loading ? '签到中…' : '确认签到' }}
+          </button>
+          <button
+            class="w-full h-11 mt-3 rounded-lg border border-white/10 text-sm text-slate-300
+                   active:bg-white/5 transition-colors"
+            :disabled="loading"
+            @click="reset"
+          >信息有误，重新输入</button>
+
+          <p
+            v-if="error"
+            class="mt-4 text-sm text-rose-400"
             role="alert"
             aria-live="assertive"
-          >{{ lookupError }}</p>
-        </div>
+          >{{ error }}</p>
+        </section>
 
-        <p class="mt-6 text-center text-xs text-slate-500">
-          遇到问题？请向现场工作人员出示本页面
-        </p>
-      </section>
-
-      <!-- P2 身份确认 -->
-      <section v-else-if="step === 'confirm'" class="animate-[fadeIn_.2s_ease]">
-        <p class="text-center text-sm text-slate-400 mb-4">请确认是您本人</p>
-
-        <div class="p-5 rounded-2xl bg-slate-800/80 border border-slate-700">
-          <div class="text-center text-3xl font-bold">{{ person.name }}</div>
-          <!-- 只展示一次手机号：此前卡片里是掩码、下面又放一个只读完整号码，
-               观众会疑惑「到底要核对哪一个」 -->
-          <div class="text-center text-slate-400 mt-2 tabular-nums">{{ person.phoneMask }}</div>
-          <dl class="mt-5 space-y-2.5 text-sm">
-            <div v-if="person.company" class="flex justify-between gap-4">
-              <dt class="text-slate-500 shrink-0">公司</dt><dd class="text-right">{{ person.company }}</dd>
-            </div>
-            <div v-if="person.position" class="flex justify-between gap-4">
-              <dt class="text-slate-500 shrink-0">职务/年级</dt><dd class="text-right">{{ person.position }}</dd>
-            </div>
-            <div class="flex justify-between gap-4">
-              <dt class="text-slate-500 shrink-0">参加次数</dt>
-              <dd class="text-right">{{ attendText(person.attendCount) }}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <p class="mt-4 text-center text-xs text-slate-400">
-          签到后会生成专属端口号，请提前准备好截屏
-        </p>
-
-        <button
-          class="w-full h-14 mt-4 rounded-xl bg-brand text-slate-900 font-bold text-lg
-                 active:scale-[.99] transition disabled:opacity-40"
-          :disabled="loading || !canConfirm"
-          @click="doCheckin"
-        >
-          {{ loading ? '签到中…' : '确认签到，获取端口号' }}
-        </button>
-        <button
-          class="w-full h-12 mt-3 rounded-xl border border-slate-700 text-slate-400"
-          :disabled="loading"
-          @click="reset"
-        >不是我，重新输入</button>
-        <p
-          v-if="error"
-          class="mt-4 text-center text-rose-400 text-sm"
-          role="alert"
-          aria-live="assertive"
-        >{{ error }}</p>
-      </section>
-
-      <!-- P4/P5 签到成功（含重复签到） -->
-      <section v-else-if="step === 'success'" class="text-center animate-[fadeIn_.2s_ease]">
-        <div v-if="result.repeat"
-             class="inline-block px-3 py-1 rounded-full text-xs
-                    bg-amber-400/15 text-amber-300 border border-amber-400/30">
-          您已签过到，无需重复操作
-        </div>
-        <div v-else
-             class="inline-block px-3 py-1 rounded-full text-xs
-                    bg-emerald-400/15 text-emerald-300 border border-emerald-400/30">
-          ✓ 签到成功
-        </div>
-
-        <p class="mt-5 text-slate-300">{{ result.name }}，您好</p>
-
-        <!-- 把端口号收进「待截屏」卡片：视觉上明确告诉观众截哪一块 -->
-        <div class="mt-4 rounded-2xl border border-brand/40 bg-brand/[0.07] px-4 py-5">
-          <p class="text-sm text-slate-300">您的抽奖端口号</p>
-          <div class="port-no my-3 tabular-nums">{{ result.portNo }}</div>
-          <p class="text-sm font-medium text-amber-300">请立即截屏保存</p>
-        </div>
-
-        <!-- 核心引导：端口号 = 抽奖凭证 + 兑奖凭证（spec 005）。
-             注意：非买票者（spec 006）在这里看到的内容与买票者**完全一致**，
-             不提示「您不参与抽奖」是刻意设计——筛选规则不对外暴露。 -->
-        <div class="mt-5 space-y-2.5 text-left text-sm text-slate-300">
-          <p class="flex items-start gap-2">
-            <span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">1</span>
-            <span>截屏保存本页，端口号是抽奖与兑奖的唯一凭证</span>
+        <!-- P4/P5 签到成功（含重复签到） -->
+        <section v-else-if="step === 'success'">
+          <div class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full"
+                  :class="result.repeat ? 'bg-amber-400' : 'bg-emerald-400'"></span>
+            <span class="text-sm font-medium"
+                  :class="result.repeat ? 'text-amber-300' : 'text-emerald-300'">
+              {{ result.repeat ? '已完成签到' : '签到成功' }}
+            </span>
+          </div>
+          <p class="mt-3 text-sm text-slate-400">
+            {{ result.name }}，您好{{ result.repeat ? '。以下是您首次签到获得的端口号' : '' }}
           </p>
-          <p class="flex items-start gap-2">
-            <span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">2</span>
-            <span>凭端口号参与现场抽奖</span>
-          </p>
-          <p class="flex items-start gap-2">
-            <span class="mt-0.5 w-5 h-5 shrink-0 rounded-full bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">3</span>
-            <span>中奖后凭端口号到礼品区兑换奖品</span>
-          </p>
-        </div>
 
-        <div class="mt-5 p-4 rounded-xl bg-slate-800/60 border border-slate-700 text-slate-300 text-sm">
-          请向工作人员出示此截图领取胸牌
-        </div>
+          <!-- 签到凭证：视觉上明确告诉观众截哪一块 -->
+          <div class="mt-4 rounded-lg border border-white/10 bg-[#141418] overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
+              <span class="text-xs tracking-wide text-slate-400">KCon 2026 · 签到凭证</span>
+              <span class="text-xs text-amber-300">请截屏保存</span>
+            </div>
 
-        <p v-if="result.ticketType" class="mt-4 text-slate-300 text-sm">
-          权益类型：{{ result.ticketType }}
-        </p>
-        <p class="mt-3 text-slate-500 text-xs">签到时间：{{ result.checkinTime }}</p>
+            <div class="px-4 py-6 text-center">
+              <div class="text-xs text-slate-500">抽奖端口号</div>
+              <div class="port-no mt-2">{{ result.portNo }}</div>
+            </div>
 
-        <!-- 成功页需要明确出口：共用设备时，下一位观众不必靠下拉刷新或后退才能重新开始。
-             按钮做成次要样式，避免和「请立即截屏」抢注意力。 -->
-        <button
-          class="mt-6 w-full h-12 rounded-xl border border-slate-700 text-slate-300 text-sm
-                 active:scale-[.99] transition"
-          @click="reset"
-        >完成，返回签到首页</button>
-      </section>
+            <dl class="px-4 py-2 text-sm border-t border-white/10 divide-y divide-white/5">
+              <div class="flex justify-between py-1.5">
+                <dt class="text-slate-500">姓名</dt>
+                <dd class="text-slate-200">{{ result.name }}</dd>
+              </div>
+              <div v-if="result.ticketType" class="flex justify-between gap-4 py-1.5">
+                <dt class="text-slate-500 shrink-0">权益类型</dt>
+                <dd class="text-right text-slate-200">{{ result.ticketType }}</dd>
+              </div>
+              <div class="flex justify-between py-1.5">
+                <dt class="text-slate-500">签到时间</dt>
+                <dd class="text-slate-300 tabular-nums">{{ result.checkinTime }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <!-- 核心引导：端口号 = 抽奖凭证 + 兑奖凭证（spec 005）。
+               注意：非买票者（spec 006）在这里看到的内容与买票者**完全一致**，
+               不提示「您不参与抽奖」是刻意设计——筛选规则不对外暴露。 -->
+          <ol class="mt-6 space-y-3 text-sm text-slate-300">
+            <li class="flex gap-3">
+              <span class="font-num text-xs text-slate-500 pt-0.5">01</span>
+              <span>截屏保存本页，端口号是抽奖与兑奖的唯一凭证</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="font-num text-xs text-slate-500 pt-0.5">02</span>
+              <span>凭端口号参与现场抽奖</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="font-num text-xs text-slate-500 pt-0.5">03</span>
+              <span>中奖后凭端口号到礼品区兑换奖品</span>
+            </li>
+          </ol>
+
+          <div class="mt-6 border-l-2 border-brand bg-brand/5 px-4 py-3 text-sm text-slate-300">
+            请向工作人员出示本凭证，领取胸牌。
+          </div>
+
+          <!-- 成功页需要明确出口：共用设备时，下一位观众不必靠下拉刷新或后退才能重新开始。
+               按钮做成次要样式，避免和「请截屏保存」抢注意力。 -->
+          <button
+            class="mt-8 w-full h-11 rounded-lg border border-white/10 text-sm text-slate-300
+                   active:bg-white/5 transition-colors"
+            @click="reset"
+          >完成，返回签到首页</button>
+        </section>
+      </div>
     </main>
 
-    <footer class="pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-slate-600 text-xs">
-      KCon 2026 · 中关村展示中心
+    <footer class="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <div class="mx-auto w-full max-w-md flex items-center justify-between gap-4
+                  border-t border-white/5 pt-4 text-xs text-slate-600">
+        <span>KCon 2026</span>
+        <span>中关村展示中心</span>
+      </div>
     </footer>
   </div>
 </template>
@@ -275,7 +323,7 @@ const phoneHint = computed(() => {
   if (n === 0) return '请输入报名时填写的 11 位手机号'
   if (n < 11) return `还需输入 ${11 - n} 位`
   if (!/^1[3-9]/.test(keywordDigits.value)) return '手机号格式好像不对，请检查'
-  return '手机号已完整，点击查询'
+  return '手机号已完整，可以查询'
 })
 
 // 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
@@ -309,6 +357,11 @@ function attendText(n) {
   return n === 1 ? '首次参加' : `第 ${n} 次参加`
 }
 
+// 切换步骤后回到页首：成功页与确认页都从顶部开始读，避免沿用上一页的滚动位置
+function scrollTop() {
+  nextTick(() => window.scrollTo(0, 0))
+}
+
 function reset() {
   step.value = 'input'
   person.value = null
@@ -320,6 +373,7 @@ function reset() {
   lookupResult.value = null
   lookupError.value = ''
   nextTick(() => {
+    window.scrollTo(0, 0)
     phoneEl.value && phoneEl.value.focus()
   })
 }
@@ -398,6 +452,7 @@ async function doQuery() {
     }
     person.value = data.attendee
     step.value = 'confirm'
+    scrollTop()
   } catch (e) {
     error.value = '网络异常，请重试或联系现场工作人员'
   } finally {
@@ -425,6 +480,7 @@ async function doCheckinById(id, phone) {
     if (res.code === 200) {
       result.value = res.data
       step.value = 'success'
+      scrollTop()
     } else {
       error.value = res.msg || '签到失败，请联系现场工作人员'
     }
