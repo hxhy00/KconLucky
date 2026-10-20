@@ -25,7 +25,7 @@ async function request(path, options = {}) {
   }
 }
 
-// 查询参会人（全号或后四位）
+// 查询参会人（完整 11 位手机号）
 export function queryAttendee(keyword) {
   return request('/app/checkin/query', {
     method: 'POST',
@@ -35,7 +35,6 @@ export function queryAttendee(keyword) {
 
 // 确认签到
 // phone 必传（完整 11 位）：公网版用它做二次校验，只凭 attendeeId 无法替他人签到。
-// 后四位只用于查询定位，不能作为提交凭证。
 export function submitCheckin(attendeeId, phone) {
   return request('/app/checkin/submit', {
     method: 'POST',

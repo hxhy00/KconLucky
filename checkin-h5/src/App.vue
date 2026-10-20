@@ -14,8 +14,7 @@
       <!-- P1 输入手机号 -->
       <section v-if="step === 'input'" class="animate-[fadeIn_.2s_ease]">
         <p class="text-slate-400 text-sm text-center mb-6">
-          请输入报名时的手机号<br />
-          或用手机号后四位快速签到
+          请输入报名时的完整 11 位手机号
         </p>
 
         <input
@@ -23,7 +22,7 @@
           type="tel"
           inputmode="numeric"
           maxlength="11"
-          placeholder="手机号 / 后四位"
+          placeholder="请输入 11 位手机号"
           class="w-full h-14 px-4 rounded-xl bg-slate-800/80 border border-slate-700
                  text-center text-2xl tracking-widest outline-none
                  focus:border-brand focus:ring-2 focus:ring-brand/30 transition"
@@ -41,10 +40,7 @@
 
         <p v-if="error" class="mt-4 text-center text-rose-400 text-sm">{{ error }}</p>
 
-        <!-- 找回端口号：放在签到页，而不是「签到完成页」——
-             截图丢了的人根本走不到完成页，入口放那儿等于不存在。
-             复用上面同一个输入框，走只读的 /app/checkin/lookup，不会产生新签到记录。
-             注意：找回只认完整 11 位手机号，不支持后四位——尾号只有 10^4 种，
+        <!-- 签到与找回都只认完整 11 位手机号；尾号空间只有 10^4，
              免登录接口上可被枚举，会连带削弱兑奖核验「本人知道完整号码」这层防冒领判定。 -->
         <div class="mt-6 pt-5 border-t border-white/5">
           <button
@@ -56,7 +52,7 @@
             {{ loading ? '查询中...' : '截图丢了？找回我的端口号' }}
           </button>
           <p class="mt-2 text-center text-slate-500 text-xs">
-            需输入完整 11 位手机号，后四位不支持找回
+            需输入完整 11 位手机号
           </p>
 
           <!-- 找回结果 -->
@@ -64,6 +60,9 @@
             <div class="text-brand text-xs tracking-widest">你的端口号</div>
             <div class="text-4xl font-black text-brand mt-1 tabular-nums">{{ lookupResult.portNo }}</div>
             <p class="text-slate-400 text-xs mt-2">{{ lookupResult.name }} · {{ lookupResult.checkinTime }}</p>
+            <p v-if="lookupResult.ticketType" class="text-slate-300 text-sm mt-2">
+              权益类型：{{ lookupResult.ticketType }}
+            </p>
             <!-- spec 006：与签到成功页同口径——不暴露抽奖资格，找回结果一律不区分 -->
           </div>
 
@@ -71,27 +70,6 @@
                后端不再返回 ambiguous / candidates，该分支已无来源。 -->
           <p v-if="lookupError" class="mt-3 text-center text-rose-400 text-sm">{{ lookupError }}</p>
         </div>
-      </section>
-
-      <!-- P3 候选选择 -->
-      <section v-else-if="step === 'candidates'">
-        <p class="text-slate-400 text-sm text-center mb-4">
-          找到 {{ candidates.length }} 位，请点击您的名字
-        </p>
-        <button
-          v-for="c in candidates"
-          :key="c.id"
-          class="w-full text-left p-4 mb-3 rounded-xl bg-slate-800/80 border border-slate-700
-                 active:border-brand transition"
-          @click="pick(c)"
-        >
-          <div class="text-lg font-semibold">{{ c.name }}</div>
-          <div class="text-slate-400 text-sm mt-1">{{ c.phoneMask }}</div>
-          <div class="text-slate-400 text-sm" v-if="c.company">{{ c.company }}</div>
-          <div class="text-slate-500 text-xs mt-1" v-if="c.position">{{ c.position }}</div>
-        </button>
-        <button class="w-full h-12 mt-2 rounded-xl border border-slate-700 text-slate-400"
-                @click="reset">重新输入</button>
       </section>
 
       <!-- P2 身份确认 -->
@@ -113,23 +91,19 @@
           </dl>
         </div>
 
-        <!-- 公网版加固：查询可以用后四位，但提交必须补全完整手机号。
-             后四位只有 10^4 种，不构成秘密；用它当提交凭证等于没有校验。 -->
+        <!-- 签到端只使用完整 11 位手机号：查询后直接带入，确认页不再让观众改位数 -->
         <div class="mt-4">
           <input
             v-model="phoneInput"
             type="tel"
             inputmode="numeric"
             maxlength="11"
-            placeholder="请输入完整 11 位手机号"
+            readonly
             class="w-full h-12 px-4 rounded-xl bg-slate-800/80 border border-slate-700
-                   text-center text-lg tracking-widest outline-none
-                   focus:border-brand focus:ring-2 focus:ring-brand/30 transition"
+                   text-center text-lg tracking-widest outline-none"
           />
-          <p class="mt-2 text-center text-slate-500 text-xs">确认签到需核对完整手机号</p>
+          <p class="mt-2 text-center text-slate-500 text-xs">请确认上方手机号无误</p>
         </div>
-
-        <p v-if="repeatHint" class="mt-3 text-center text-amber-300 text-sm">{{ repeatHint }}</p>
 
         <button
           class="w-full h-14 mt-5 rounded-xl bg-brand text-slate-900 font-bold text-lg
@@ -178,6 +152,9 @@
           请向工作人员出示此截图领取胸牌
         </div>
 
+        <p v-if="result.ticketType" class="mt-4 text-slate-300 text-sm">
+          权益类型：{{ result.ticketType }}
+        </p>
         <p class="mt-4 text-slate-500 text-xs">签到时间：{{ result.checkinTime }}</p>
 
         <!-- 这里曾有一个「不是我，重新输入」按钮。签到成功是终态，不该再给额外操作：
@@ -198,13 +175,11 @@ import { ref, computed, watch } from 'vue'
 import { queryAttendee, submitCheckin, lookup } from './api'
 import logo from './assets/kcon-mark.png'
 
-const step = ref('input')        // input | candidates | confirm | success
+const step = ref('input')        // input | confirm | success
 const keyword = ref('')
-const candidates = ref([])
 const person = ref(null)
 const result = ref(null)
-const phoneInput = ref('')       // 确认签到用的完整手机号
-const repeatHint = ref('')
+const phoneInput = ref('')       // 查询到的完整手机号，确认页只读展示
 const lookupResult = ref(null)
 const lookupError = ref('')
 const loading = ref(false)
@@ -216,11 +191,11 @@ function normalizeDigits(s) {
   return s.trim().replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
 }
 
-// 找回端口号只认完整 11 位手机号：后端已砍掉尾号分支，前端提前禁用按钮，
+// 签到与找回都只认完整 11 位手机号：后端已砍掉尾号分支，前端提前禁用按钮，
 // 避免观众输了 4 位后拿到一句「不支持」却不知道要找什么。
 const canLookup = computed(() => /^\d{11}$/.test(normalizeDigits(keyword.value)))
 
-// 提交必须补全完整手机号：后四位只用于查询定位，不构成提交凭证。
+// 提交携带查询到的完整 11 位手机号。
 const canConfirm = computed(() => /^1[3-9]\d{9}$/.test(normalizeDigits(phoneInput.value)))
 
 // 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」
@@ -236,14 +211,12 @@ function attendText(n) {
 
 function reset() {
   step.value = 'input'
-  candidates.value = []
   person.value = null
   result.value = null
   error.value = ''
   // 输入也一并清空：不然下一位看到的还是上一个人的手机号
   keyword.value = ''
   phoneInput.value = ''
-  repeatHint.value = ''
   lookupResult.value = null
   lookupError.value = ''
 }
@@ -258,7 +231,7 @@ async function doLookup() {
   const kw = normalizeDigits(keyword.value)
   if (!kw) return
   if (!canLookup.value) {
-    lookupError.value = '请输入完整 11 位手机号（后四位不支持找回，防止号码被冒领）'
+    lookupError.value = '请输入完整 11 位手机号'
     return
   }
   loading.value = true
@@ -285,13 +258,14 @@ async function doLookup() {
 
 async function doQuery() {
   error.value = ''
-  repeatHint.value = ''
   lookupResult.value = null
   lookupError.value = ''
   const kw = normalizeDigits(keyword.value)
-  if (!kw) return
-  // 11 位查询时把手机号带入确认页，省得再输一次；后四位查询则留空，必须补全
-  phoneInput.value = /^\d{11}$/.test(kw) ? kw : ''
+  if (!/^1[3-9]\d{9}$/.test(kw)) {
+    error.value = '请输入完整 11 位手机号'
+    return
+  }
+  phoneInput.value = kw
   loading.value = true
   try {
     const res = await queryAttendee(kw)
@@ -300,35 +274,22 @@ async function doQuery() {
       return
     }
     const data = res.data
-    if (data.signed && data.attendee) {
-      // 已签到：11 位查询可以直接回查原端口号；后四位查询缺少完整号码，
-      // 进确认页让本人补全后再提交，避免仅凭尾号替他人取号。
-      if (/^\d{11}$/.test(kw)) {
-        await doCheckinById(data.attendee.id, kw)
-      } else {
-        person.value = data.attendee
-        repeatHint.value = '该手机号已签到，请输入完整手机号查看原端口号'
-        step.value = 'confirm'
-      }
+    if (!data || !data.attendee) {
+      error.value = '查无此人，请联系现场工作人员'
       return
     }
-    if (data.matchType === 'single') {
-      person.value = data.attendee
-      step.value = 'confirm'
-    } else if (data.matchType === 'multiple') {
-      candidates.value = data.candidates || []
-      step.value = 'candidates'
+    if (data.signed && data.attendee) {
+      // 已签到：完整手机号已在手，直接回查原端口号，不再进确认页
+      await doCheckinById(data.attendee.id, kw)
+      return
     }
+    person.value = data.attendee
+    step.value = 'confirm'
   } catch (e) {
     error.value = '网络异常，请重试或联系现场工作人员'
   } finally {
     loading.value = false
   }
-}
-
-function pick(c) {
-  person.value = c
-  step.value = 'confirm'
 }
 
 async function doCheckin() {
@@ -346,7 +307,7 @@ async function doCheckinById(id, phone) {
   loading.value = true
   try {
     // 一并提交完整手机号：后端据此做二次校验，
-    // 防止有人只拿 attendeeId 或后四位就替他人签到（公网版加固）
+    // 防止有人只拿 attendeeId 替他人签到（公网版加固）
     const res = await submitCheckin(id, phone)
     if (res.code === 200) {
       result.value = res.data
