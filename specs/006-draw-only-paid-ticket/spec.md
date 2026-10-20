@@ -1,6 +1,6 @@
 # 006 仅真正买票者参与抽奖
 
-**状态**：已实现（阶段 1–6 已落地；2026-10-19 复核：代码与四个构建通过，现场数据验收待执行；同日完成匿名报文最终收口；导入模板改为 8 列，`ticket_type` 语义改为「权益类型」，`draw_eligible` 仍为唯一显式资格列，详见 spec 008）
+**状态**：已实现（阶段 1–6 已落地；2026-10-19 复核：代码与四个构建通过，现场数据验收待执行；同日完成匿名报文最终收口；导入模板改为 8 列，`ticket_type` 语义改为「权益类型」，`draw_eligible` 仍为唯一显式资格列，详见 spec 008；签到端只认完整 11 位手机号，submit/lookup 返回 `ticketType` 供成功页/找回页展示）
 **基准**：修订 `01-需求规格.md` FR-37 / AC-05；关闭 `01-需求规格.md` §10 待确认项 3
 **日期**：2026-10-16
 
@@ -107,7 +107,7 @@ drawEligible = (名单显式列「是否参与抽奖」= 「是」)          ←
   2. 明示「您不参与抽奖」等于当面告知「您的票是白来的」，是引发现场争执的直接来源；
   3. 争执处理放在兑奖台，由工作人员按核验结果（未中奖）依既定话术回应，不在自助端预留话题。
 
-  **实现约束**：`POST /app/checkin/submit` 与 `GET /app/checkin/lookup` 的响应体**均不含** `drawEligible`；`KconCheckinServiceImpl` 不引用 `DrawEligibility`。2026-10-19 最终收口：`GET /app/checkin/query` 不再返回 `ticketType` 与 `channel`——两者分别是票种/渠道黑名单的直接输入，按「报文里有没有这个字段」的判据都属于泄露面。判定结果只存在于服务端，供抽奖池与统计使用。
+  **实现约束**：`POST /app/checkin/submit` 与 `GET /app/checkin/lookup` 的响应体**均不含** `drawEligible`；`KconCheckinServiceImpl` 不引用 `DrawEligibility`。2026-10-19 最终收口：`GET /app/checkin/query` 不再返回 `ticketType` 与 `channel`——两者分别是票种/渠道黑名单的直接输入，按「报文里有没有这个字段」的判据都属于泄露面。判定结果只存在于服务端，供抽奖池与统计使用。同日 `ticket_type` 语义改为「权益类型」；`submit` / `lookup` 可返回 `ticketType` 供成功页/找回页展示，但 `query` 仍不返回，`drawEligible` 所有接口都不返回。
 
 ### 4.3 兑奖核验（**不新增校验**）
 
