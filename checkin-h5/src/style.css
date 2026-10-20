@@ -25,4 +25,7 @@ body {
   font-weight: 800;
   color: #E23B2E;
   text-shadow: 0 0 28px rgba(226, 59, 46, .45);
+  /* 长按整段选中，方便截屏失败时手动复制号码 */
+  -webkit-user-select: all;
+  user-select: all;
 }
