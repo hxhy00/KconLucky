@@ -275,7 +275,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         List<Map<String, Object>> skipDetails = new ArrayList<>();
         // 记录漏填「参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
         List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
-        // 记录未配置映射的渠道来源：提示到字典管理补充，而不是让整批人静默失去资格
+        // 记录未配置映射的渠道来源：提示到「渠道来源映射」补充，而不是让整批人静默失去资格
         List<Map<String, Object>> mappingMissingDetails = new ArrayList<>();
 
         for (int r = 1; r < rows.size(); r++)
@@ -464,7 +464,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("row", lineNo);
         d.put("channel", channel);
-        d.put("reason", "渠道来源未配置映射，按不参与处理");
+        d.put("reason", "渠道来源未配置映射，已回退到行内「参与抽奖」列");
         details.add(d);
     }
 
