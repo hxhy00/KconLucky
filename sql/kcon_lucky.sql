@@ -126,7 +126,35 @@ INSERT INTO `kcon_prize` (`session_code`, `tier_name`, `quantity`, `drawn_count`
   ('PM', '特等奖', 1, 0, 3, '最后抽特等', NOW());
 
 -- -------------------------------------------------------------
--- 3.6 kcon_winner 中奖记录
+-- 3.6 kcon_channel_mapping 渠道来源映射
+--   一条记录直接表达：渠道来源 / 权益类型 / 是否参与抽奖
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `kcon_channel_mapping`;
+CREATE TABLE `kcon_channel_mapping` (
+  `id`             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `channel_source` VARCHAR(64)  NOT NULL                COMMENT '渠道来源（与导入表同名，唯一）',
+  `benefit_type`   VARCHAR(128) DEFAULT NULL            COMMENT '权益类型，空表示无权益',
+  `draw_eligible`  TINYINT      NOT NULL DEFAULT 0      COMMENT '是否参与抽奖：1=是 0=否',
+  `sort`           INT          DEFAULT 0               COMMENT '排序（小的在前）',
+  `create_by`      VARCHAR(64)  DEFAULT ''              COMMENT '创建者',
+  `create_time`    DATETIME     DEFAULT NULL            COMMENT '创建时间',
+  `update_by`      VARCHAR(64)  DEFAULT ''              COMMENT '更新者',
+  `update_time`    DATETIME     DEFAULT NULL            COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_channel_source` (`channel_source`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='渠道来源映射';
+
+INSERT INTO `kcon_channel_mapping` (`channel_source`, `benefit_type`, `draw_eligible`, `sort`, `create_time`) VALUES
+  ('重要嘉宾赠票',         '含自助午餐、伴手礼',          0, 1, NOW()),
+  ('其他（赠票）',         '无',                          0, 2, NOW()),
+  ('TGO会员（会员权益）',  '含自助午餐',                  1, 3, NOW()),
+  ('嘶吼平台卖票',         '含自助午餐、帽衫、伴手礼',    1, 4, NOW()),
+  ('TGO卖票',              '含自助午餐、帽衫、伴手礼',    1, 5, NOW()),
+  ('海凤卖票',             '含自助午餐、帽衫、伴手礼',    1, 6, NOW()),
+  ('IT资讯平台卖票',       '含自助午餐、帽衫、伴手礼',    1, 7, NOW());
+
+-- -------------------------------------------------------------
+-- 3.7 kcon_winner 中奖记录
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `kcon_winner`;
 CREATE TABLE `kcon_winner` (
@@ -153,7 +181,7 @@ CREATE TABLE `kcon_winner` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='中奖记录';
 
 -- -------------------------------------------------------------
--- 3.7 kcon_verify_log 兑奖核验日志
+-- 3.8 kcon_verify_log 兑奖核验日志
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `kcon_verify_log`;
 CREATE TABLE `kcon_verify_log` (
@@ -193,4 +221,5 @@ DROP PROCEDURE IF EXISTS `sp_fill_port_pool`;
 -- -------------------------------------------------------------
 SELECT 'kcon_port_pool 行数' AS `检查项`, COUNT(*) AS `值` FROM `kcon_port_pool`
 UNION ALL SELECT 'kcon_session 行数', COUNT(*) FROM `kcon_session`
-UNION ALL SELECT 'kcon_prize 行数',   COUNT(*) FROM `kcon_prize`;
+UNION ALL SELECT 'kcon_prize 行数',   COUNT(*) FROM `kcon_prize`
+UNION ALL SELECT 'kcon_channel_mapping 行数', COUNT(*) FROM `kcon_channel_mapping`;

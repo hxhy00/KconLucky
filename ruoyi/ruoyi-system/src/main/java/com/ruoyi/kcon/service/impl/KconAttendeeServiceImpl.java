@@ -1,13 +1,13 @@
 package com.ruoyi.kcon.service.impl;
 
-import com.ruoyi.common.core.domain.entity.SysDictData;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.kcon.domain.KconAttendee;
+import com.ruoyi.kcon.domain.KconChannelMapping;
 import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.service.IKconAttendeeService;
+import com.ruoyi.kcon.service.IKconChannelMappingService;
 import com.ruoyi.kcon.service.IKconCheckinService;
-import com.ruoyi.system.service.ISysDictTypeService;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -38,7 +38,7 @@ import java.util.Map;
  *   - 按表头名匹配列，顺序任意
  *   - 必填 3 列：姓名 / 手机号 / 渠道来源
  *   - 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
- *   - 权益类型与参与抽奖留空时，按渠道来源查字典 kcon_channel_mapping 自动带出；
+ *   - 权益类型与参与抽奖留空时，按渠道来源查映射表 kcon_channel_mapping 自动带出；
  *     命中映射时映射优先，未命中时回退到行内值
  *   - 未识别的列直接忽略（例如票务总表带来的 购票时间/金额/发票需求）
  *   - 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级
@@ -86,9 +86,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             "name", "姓名", "phone", "手机号", "channel", "渠道来源"
     );
 
-    /** 渠道来源映射字典类型 */
-    private static final String DICT_CHANNEL_MAPPING = "kcon_channel_mapping";
-
     @Autowired
     private KconAttendeeMapper attendeeMapper;
 
@@ -96,7 +93,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     private KconCheckinMapper checkinMapper;
 
     @Autowired
-    private ISysDictTypeService dictTypeService;
+    private IKconChannelMappingService channelMappingService;
 
     @Override
     public List<KconAttendee> selectAttendeeList(KconAttendee query)
@@ -422,36 +419,30 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     }
 
     /**
-     * 读取字典 kcon_channel_mapping。
+     * 读取渠道来源映射表 kcon_channel_mapping。
      *
-     * 字典口径：dict_label=渠道来源，dict_value=权益类型，remark=是/否。
-     * 读取失败或字典未配置时返回空映射，导入回退到行内值。
+     * 读取失败或表为空时返回空映射，导入回退到行内值。
      */
     private Map<String, ChannelMapping> loadChannelMappings()
     {
         Map<String, ChannelMapping> map = new HashMap<>();
         try
         {
-            List<SysDictData> list = dictTypeService.selectDictDataByType(DICT_CHANNEL_MAPPING);
+            List<KconChannelMapping> list = channelMappingService.selectAll();
             if (list == null)
             {
                 return map;
             }
-            for (SysDictData d : list)
+            for (KconChannelMapping m : list)
             {
-                // 只使用正常状态的字典项
-                if (!"0".equals(d.getStatus()))
+                String channel = m.getChannelSource() == null ? "" : m.getChannelSource().trim();
+                if (channel.isEmpty())
                 {
                     continue;
                 }
-                String label = d.getDictLabel() == null ? "" : d.getDictLabel().trim();
-                if (label.isEmpty())
-                {
-                    continue;
-                }
-                String benefit = d.getDictValue() == null ? "" : d.getDictValue().trim();
-                String flag = d.getRemark() == null ? "" : d.getRemark().trim();
-                map.put(label, new ChannelMapping(benefit, "是".equals(flag) ? 1 : 0));
+                String benefit = m.getBenefitType() == null ? "" : m.getBenefitType().trim();
+                int eligible = Integer.valueOf(1).equals(m.getDrawEligible()) ? 1 : 0;
+                map.put(channel, new ChannelMapping(benefit, eligible));
             }
         }
         catch (Exception e)
