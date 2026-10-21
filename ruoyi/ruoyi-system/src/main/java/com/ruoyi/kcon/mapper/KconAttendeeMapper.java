@@ -89,4 +89,36 @@ public interface KconAttendeeMapper
      * 统一签到表数据（按姓名排序）
      */
     List<KconAttendee> selectSignSheet();
+
+    /**
+     * 按渠道重算存量名单的权益类型与抽奖资格（渠道映射变更后同步用）。
+     * 锁定规则：已签到或已有未作废中奖记录的人员不改，避免出现
+     * 「已中奖但资格变为否」或「人在奖池却被踢出」的矛盾状态。
+     *
+     * @param channel 渠道来源
+     * @return 实际更新行数
+     */
+    int resyncByChannel(String channel);
+
+    /**
+     * 全量重算：把所有渠道映射重新应用到存量名单（跳过已锁定人员）。
+     *
+     * @return 实际更新行数
+     */
+    int resyncAll();
+
+    /**
+     * 统计某渠道下被锁定（已签到/已中奖）因而未重算的人数
+     */
+    int countLockedByChannel(String channel);
+
+    /**
+     * 列出被锁定的人员（供人工核对）
+     */
+    List<Map<String, Object>> selectLockedByChannel(String channel);
+
+    /**
+     * 按手机号批量查询已存在的记录 id（预检区分「新增」与「更新」用）
+     */
+    List<String> selectExistingPhones(@org.apache.ibatis.annotations.Param("phones") List<String> phones);
 }

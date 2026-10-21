@@ -2,23 +2,45 @@ package com.ruoyi.kcon.service.impl;
 
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.kcon.domain.KconChannelMapping;
+import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconChannelMappingMapper;
 import com.ruoyi.kcon.service.IKconChannelMappingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 渠道来源映射实现
+ *
+ * 映射不只影响「导入那一刻」：映射增删改后必须把存量名单重算一遍，
+ * 否则先导入、后补映射的渠道，其人员会一直保留导入时的资格，
+ * 现场就会出现「明明配了嘉宾不参与抽奖，结果还是被抽中」。
+ *
+ * 重算只覆盖未锁定人员（未签到且未中奖）：锁定人员一旦改动，
+ * 会形成「已中奖但资格变为否」或「人在奖池却被踢出」的矛盾状态，
+ * 因此只列出清单交由人工核对。
  *
  * @author kcon
  */
 @Service
 public class KconChannelMappingServiceImpl implements IKconChannelMappingService
 {
+    private static final Logger log = LoggerFactory.getLogger(KconChannelMappingServiceImpl.class);
+
     @Autowired
     private KconChannelMappingMapper channelMappingMapper;
+
+    @Autowired
+    private KconAttendeeMapper attendeeMapper;
 
     @Override
     public List<KconChannelMapping> selectList(KconChannelMapping query)
@@ -39,6 +61,7 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int insert(KconChannelMapping mapping)
     {
         normalize(mapping);
@@ -47,10 +70,15 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
         {
             mapping.setSort(0);
         }
-        return channelMappingMapper.insert(mapping);
+        int rows = channelMappingMapper.insert(mapping);
+        // 新增映射往往是为了补齐以前漏配的渠道，此时库里已有一批人按旧规则入库。
+        // 不重算的话，这批人会一直保持「按行内值兜底」的资格。
+        resyncByChannel(mapping.getChannelSource());
+        return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int update(KconChannelMapping mapping)
     {
         if (mapping.getId() == null)
@@ -59,13 +87,94 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
         }
         normalize(mapping);
         ensureUnique(mapping.getChannelSource(), mapping.getId());
-        return channelMappingMapper.update(mapping);
+
+        // 取变更前的渠道名：渠道名本身被改时，旧渠道下的人也要重算
+        KconChannelMapping old = channelMappingMapper.selectById(mapping.getId());
+        int rows = channelMappingMapper.update(mapping);
+
+        Set<String> affected = new LinkedHashSet<>();
+        if (old != null && old.getChannelSource() != null)
+        {
+            affected.add(old.getChannelSource());
+        }
+        if (mapping.getChannelSource() != null)
+        {
+            affected.add(mapping.getChannelSource());
+        }
+        for (String ch : affected)
+        {
+            resyncByChannel(ch);
+        }
+        return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteById(Long id)
     {
-        return channelMappingMapper.deleteById(id);
+        // 删除前记录渠道名：删完之后该渠道不再有映射，
+        // 存量人员不会被重算（重算依赖 join 映射表），此处的记录只用于日志追溯
+        KconChannelMapping old = channelMappingMapper.selectById(id);
+        int rows = channelMappingMapper.deleteById(id);
+        if (old != null)
+        {
+            log.info("删除渠道映射 channel={}，该渠道存量名单保持原有权益与资格不变",
+                    old.getChannelSource());
+        }
+        return rows;
+    }
+
+    @Override
+    public Map<String, Object> resyncByChannel(String channel)
+    {
+        if (channel == null || channel.trim().isEmpty())
+        {
+            return emptyResult();
+        }
+        int synced = attendeeMapper.resyncByChannel(channel.trim());
+        List<Map<String, Object>> locked = attendeeMapper.selectLockedByChannel(channel.trim());
+        if (synced > 0 || !locked.isEmpty())
+        {
+            log.info("渠道映射重算 channel={} 已同步={} 未修改={}", channel, synced, locked.size());
+        }
+        return buildResult(synced, locked);
+    }
+
+    @Override
+    public Map<String, Object> resyncAll()
+    {
+        int synced = attendeeMapper.resyncAll();
+        // 全量重算时把各渠道的锁定人员汇总：用全部已配置渠道逐一查，避免漏
+        List<KconChannelMapping> all = channelMappingMapper.selectAll();
+        List<Map<String, Object>> locked = new ArrayList<>();
+        if (all != null)
+        {
+            for (KconChannelMapping m : all)
+            {
+                String ch = m.getChannelSource();
+                if (ch == null || ch.trim().isEmpty())
+                {
+                    continue;
+                }
+                locked.addAll(attendeeMapper.selectLockedByChannel(ch.trim()));
+            }
+        }
+        log.info("渠道映射全量重算 已同步={} 未修改={}", synced, locked.size());
+        return buildResult(synced, locked);
+    }
+
+    private Map<String, Object> buildResult(int synced, List<Map<String, Object>> locked)
+    {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("synced", synced);
+        data.put("locked", locked == null ? new ArrayList<>() : locked);
+        data.put("lockedCount", locked == null ? 0 : locked.size());
+        return data;
+    }
+
+    private Map<String, Object> emptyResult()
+    {
+        return buildResult(0, new ArrayList<>());
     }
 
     private void normalize(KconChannelMapping mapping)

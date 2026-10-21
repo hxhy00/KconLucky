@@ -26,9 +26,21 @@ export function delAttendee(ids) {
 }
 
 // 导入（FormData）
+// strict=true 时存在未配置映射等阻塞问题会整批拒绝；强制导入时前端传 strict=false
 export function importAttendee(formData) {
   return request({
     url: '/admin/attendee/import',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}
+
+// 导入预检：只解析不落库，返回阻塞问题与渠道映射解析结果
+export function previewImport(formData) {
+  return request({
+    url: '/admin/attendee/import/preview',
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' },

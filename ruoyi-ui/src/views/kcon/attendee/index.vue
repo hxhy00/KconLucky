@@ -172,7 +172,7 @@
     </el-dialog>
 
     <!-- 导入 -->
-    <el-dialog title="导入参会名单" :visible.sync="importOpen" width="600px" append-to-body>
+    <el-dialog title="导入参会名单" :visible.sync="importOpen" width="680px" append-to-body @closed="resetPreview">
       <el-alert type="info" :closable="false" show-icon>
         <div slot="title" style="line-height: 1.8;">
           支持 .xlsx / .xls / .csv。<b>按表头名识别列，顺序不限</b>。<br />
@@ -188,7 +188,7 @@
 
       <el-form label-width="100px" style="margin-top: 16px;">
         <el-form-item label="导入方式">
-          <el-radio-group v-model="importMode">
+          <el-radio-group v-model="importMode" :disabled="previewing || importing">
             <el-radio label="append">追加（按手机号去重更新）</el-radio>
             <el-radio label="replace">替换（先清空再导入）</el-radio>
           </el-radio-group>
@@ -211,10 +211,79 @@
         </el-form-item>
       </el-form>
 
+      <!-- 预检报告：解析后立刻展示，确认无误再落库 -->
+      <div v-if="preview" class="preview-box">
+        <div class="preview-head" :class="'lv-' + (preview.level || 'OK').toLowerCase()">
+          <i :class="previewIcon"></i>
+          <span>{{ previewTitle }}</span>
+        </div>
+
+        <div class="preview-stat">
+          共 <b>{{ preview.totalRows || 0 }}</b> 行数据：
+          新增 <b>{{ preview.willInsert || 0 }}</b>，
+          更新 <b>{{ preview.willUpdate || 0 }}</b>，
+          跳过 <b>{{ preview.willSkip || 0 }}</b>
+        </div>
+
+        <div v-if="preview.blockers && preview.blockers.length" class="preview-list">
+          <div class="preview-list-title">阻塞问题（补全后才能导入）</div>
+          <div v-for="(b, i) in preview.blockers" :key="'b' + i" class="preview-item err">
+            第 {{ b.row }} 行：{{ b.reason }}
+          </div>
+        </div>
+
+        <div v-if="preview.warnings && preview.warnings.length" class="preview-list">
+          <div class="preview-list-title">提示</div>
+          <div v-for="(w, i) in preview.warnings" :key="'w' + i" class="preview-item warn">
+            第 {{ w.row }} 行：{{ w.reason }}
+          </div>
+        </div>
+
+        <div v-if="preview.channelStats && preview.channelStats.length" class="preview-list">
+          <div class="preview-list-title">渠道 → 权益 / 抽奖资格</div>
+          <el-table :data="preview.channelStats" size="mini" border max-height="220">
+            <el-table-column prop="channel" label="渠道来源" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="count" label="人数" width="70" align="center" />
+            <el-table-column label="权益类型" min-width="150" show-overflow-tooltip>
+              <template slot-scope="scope">{{ scope.row.benefitType || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="参与抽奖" width="90" align="center">
+              <template slot-scope="scope">
+                <span :class="scope.row.drawEligible === 1 ? 'ok-text' : 'no-text'">
+                  {{ scope.row.drawEligible === 1 ? '是' : '否' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源" width="80" align="center">
+              <template slot-scope="scope">
+                <el-tag v-if="scope.row.mapped" type="success" size="mini">映射</el-tag>
+                <el-tag v-else type="danger" size="mini">未配</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div v-if="preview.skipDetails && preview.skipDetails.length" class="preview-list">
+          <div class="preview-list-title">将跳过的行</div>
+          <div v-for="(s, i) in preview.skipDetails" :key="'s' + i" class="preview-item err">
+            第 {{ s.row }} 行：{{ s.reason }}
+          </div>
+        </div>
+      </div>
+
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" :loading="importing" @click="submitImport">开始导入</el-button>
-        <el-button icon="el-icon-download" @click="handleTemplate" v-hasPermi="['kcon:attendee:import']">下载模板</el-button>
-        <el-button @click="importOpen = false">取 消</el-button>
+        <el-button :loading="previewing" :disabled="importing" @click="runPreview">
+          {{ preview ? '重新预检' : '预检' }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="importing"
+          :disabled="!preview || previewing"
+          :class="{ 'force-import': forceImport }"
+          @click="submitImport"
+        >{{ forceImport ? '强制导入' : '确认导入' }}</el-button>
+        <el-button icon="el-icon-download" :disabled="importing" @click="handleTemplate" v-hasPermi="['kcon:attendee:import']">下载模板</el-button>
+        <el-button :disabled="importing" @click="importOpen = false">取 消</el-button>
       </div>
     </el-dialog>
   </div>
@@ -223,7 +292,7 @@
 <script>
 import {
   listAttendee, getAttendee, addAttendee, updateAttendee, delAttendee,
-  importAttendee
+  importAttendee, previewImport
 } from "@/api/kcon/attendee"
 
 // 静默增量轮询间隔
@@ -244,8 +313,13 @@ export default {
       open: false,
       importOpen: false,
       importing: false,
+      previewing: false,
       importMode: "append",
       importFile: null,
+      // 预检结果为 null 时不允许导入：必须先看到解析报告再落库
+      preview: null,
+      // 预检有阻塞问题时的「强制导入」开关
+      forceImport: false,
       timer: null,
       // polling 防请求叠加；listError 是常驻的自动刷新失败提示
       polling: false,
@@ -276,6 +350,26 @@ export default {
         channel: [{ required: true, message: "渠道来源不能为空", trigger: "blur" }],
         ticketType: [{ required: true, message: "权益类型不能为空", trigger: "blur" }]
       }
+    }
+  },
+  computed: {
+    previewTitle() {
+      if (!this.preview) return ""
+      const lv = this.preview.level
+      if (lv === "BLOCK") {
+        return `预检未通过：${this.preview.blockers.length} 处阻塞问题，补全后才能导入`
+      }
+      if (lv === "WARN") {
+        return "预检通过，但有需要确认的提示"
+      }
+      return "预检通过，可以导入"
+    },
+    previewIcon() {
+      if (!this.preview) return "el-icon-info"
+      const lv = this.preview.level
+      if (lv === "BLOCK") return "el-icon-error"
+      if (lv === "WARN") return "el-icon-warning"
+      return "el-icon-success"
     }
   },
   created() {
@@ -470,17 +564,29 @@ export default {
       this.importFile = null
       this.importMode = "append"
       this.importOpen = true
+      this.resetPreview()
       this.$nextTick(() => {
         if (this.$refs.upload) this.$refs.upload.clearFiles()
       })
     },
+    // 文件或模式一变，旧报告立即作废：否则会拿上一次的结论给这一次背书
+    resetPreview() {
+      this.preview = null
+      this.forceImport = false
+      this.previewing = false
+    },
     onFileChange(file) {
       this.importFile = file.raw
+      this.resetPreview()
+      // 选完文件自动预检：让操作员第一眼就看到问题，而不是点导入才知道
+      if (this.importFile) this.runPreview()
     },
     onFileRemove() {
       this.importFile = null
+      this.resetPreview()
     },
-    submitImport() {
+    // 预检：只解析不落库
+    runPreview() {
       if (!this.importFile) {
         this.$modal.msgWarning("请先选择文件")
         return
@@ -488,6 +594,45 @@ export default {
       const fd = new FormData()
       fd.append("file", this.importFile)
       fd.append("mode", this.importMode)
+
+      this.previewing = true
+      previewImport(fd).then(res => {
+        const p = res.data || {}
+        this.preview = p
+        // 有阻塞问题时，允许「强制导入」但必须二次确认
+        this.forceImport = p.level === "BLOCK"
+      }).catch(() => {
+        this.preview = null
+        this.forceImport = false
+      }).finally(() => {
+        this.previewing = false
+      })
+    },
+    submitImport() {
+      if (!this.importFile) {
+        this.$modal.msgWarning("请先选择文件")
+        return
+      }
+      if (!this.preview) {
+        this.$modal.msgWarning("请先预检，确认解析结果无误")
+        return
+      }
+      if (this.forceImport) {
+        this.$confirm(
+          `当前有 ${this.preview.blockers.length} 处阻塞问题（如渠道未配置映射），` +
+          `继续导入会让这些人员按行内填写的值入库，可能失去抽奖资格。确定继续？`,
+          "强制导入确认",
+          { type: "warning" }
+        ).then(() => this.doImport(false)).catch(() => {})
+        return
+      }
+      this.doImport(true)
+    },
+    doImport(strict) {
+      const fd = new FormData()
+      fd.append("file", this.importFile)
+      fd.append("mode", this.importMode)
+      fd.append("strict", strict ? "true" : "false")
 
       this.importing = true
       importAttendee(fd).then(res => {
@@ -534,5 +679,63 @@ export default {
   margin-left: 10px;
   color: #999;
   font-size: 12px;
+}
+
+/* ---------- 导入预检报告 ---------- */
+.preview-box {
+  margin-top: 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px 14px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+.preview-head {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.preview-head i {
+  margin-right: 6px;
+  font-size: 16px;
+}
+.preview-head.lv-block { color: #d4342a; }
+.preview-head.lv-warn { color: #e6a23c; }
+.preview-head.lv-ok { color: #67c23a; }
+.preview-stat {
+  color: #606266;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.preview-list {
+  margin-top: 10px;
+}
+.preview-list-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+.preview-item {
+  font-size: 12px;
+  line-height: 1.7;
+  padding-left: 8px;
+  border-left: 2px solid transparent;
+}
+.preview-item.err {
+  color: #d4342a;
+  border-left-color: #d4342a;
+}
+.preview-item.warn {
+  color: #e6a23c;
+  border-left-color: #e6a23c;
+}
+.ok-text { color: #67c23a; font-weight: 600; }
+.no-text { color: #909399; }
+/* 强制导入按钮：视觉上刻意区别于正常导入，避免手滑 */
+.force-import {
+  background: #e6a23c !important;
+  border-color: #e6a23c !important;
 }
 </style>

@@ -117,7 +117,8 @@ public class AttendeeController extends BaseController
     @RepeatSubmit
     @PostMapping("/import")
     public AjaxResult importData(@RequestParam("file") MultipartFile file,
-                                 @RequestParam(defaultValue = "append") String mode)
+                                 @RequestParam(defaultValue = "append") String mode,
+                                 @RequestParam(defaultValue = "true") boolean strict)
     {
         if (file == null || file.isEmpty())
         {
@@ -126,10 +127,38 @@ public class AttendeeController extends BaseController
         String name = file.getOriginalFilename();
         try (InputStream is = file.getInputStream())
         {
-            Map<String, Object> stat = attendeeService.importAttendees(is, name, mode, getUsername());
+            Map<String, Object> stat = attendeeService.importAttendees(is, name, mode, getUsername(), strict);
             String msg = String.format("导入完成：新增 %s，更新 %s，跳过 %s（有效名单共 %s 人）",
                     stat.get("inserted"), stat.get("updated"), stat.get("skipped"), stat.get("total"));
             return AjaxResult.success(msg, stat);
+        }
+        catch (ServiceException e)
+        {
+            return error(e.getMessage());
+        }
+        catch (IOException e)
+        {
+            return error("文件读取失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 导入预检：只解析、不落库，返回阻塞问题与渠道映射解析结果。
+     * POST /admin/attendee/import/preview?mode=append|replace
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:attendee:import')")
+    @PostMapping("/import/preview")
+    public AjaxResult previewImport(@RequestParam("file") MultipartFile file,
+                                    @RequestParam(defaultValue = "append") String mode,
+                                    @RequestParam(defaultValue = "true") boolean strict)
+    {
+        if (file == null || file.isEmpty())
+        {
+            return error("请选择文件");
+        }
+        try (InputStream is = file.getInputStream())
+        {
+            return success(attendeeService.previewImport(is, file.getOriginalFilename(), mode, strict));
         }
         catch (ServiceException e)
         {

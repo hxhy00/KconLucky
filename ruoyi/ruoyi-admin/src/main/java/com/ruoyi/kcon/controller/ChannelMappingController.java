@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 渠道来源映射管理端
@@ -69,5 +70,22 @@ public class ChannelMappingController extends BaseController
     public AjaxResult remove(@PathVariable Long id)
     {
         return toAjax(channelMappingService.deleteById(id));
+    }
+
+    /**
+     * 全量重算：把当前所有渠道映射重新应用到存量名单。
+     * 用于修复「先导入、后补映射」留下的资格错乱数据。
+     * POST /admin/channel-mapping/resync
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:channel:edit')")
+    @Log(title = "渠道映射重算", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
+    @PostMapping("/resync")
+    public AjaxResult resync()
+    {
+        Map<String, Object> data = channelMappingService.resyncAll();
+        String msg = String.format("重算完成：已同步 %s 人，%s 人因已签到/已中奖未修改",
+                data.get("synced"), data.get("lockedCount"));
+        return AjaxResult.success(msg, data);
     }
 }

@@ -42,6 +42,22 @@ public interface IKconAttendeeService
     Map<String, Object> importAttendees(InputStream is, String fileName, String mode, String operator);
 
     /**
+     * Excel/CSV 导入（可控严格模式）。
+     *
+     * @param strict true=存在未配置映射等阻塞问题时整批拒绝；false=强制导入，仅提示
+     */
+    Map<String, Object> importAttendees(InputStream is, String fileName, String mode, String operator, boolean strict);
+
+    /**
+     * 导入预检：只解析、不落库。
+     * 与 {@link #importAttendees} 共用同一套解析逻辑，保证预检结论与实际导入一致。
+     *
+     * @return level(BLOCK/WARN/OK) / totalRows / willInsert / willUpdate / willSkip /
+     *         blockers / warnings / channelStats / unmappedChannels / skipDetails / flagMissingDetails
+     */
+    Map<String, Object> previewImport(InputStream is, String fileName, String mode, boolean strict);
+
+    /**
      * 看板统计
      */
     Map<String, Object> dashboardStat();

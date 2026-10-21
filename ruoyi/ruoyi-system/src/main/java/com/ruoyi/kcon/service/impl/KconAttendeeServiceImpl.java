@@ -188,6 +188,145 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> importAttendees(InputStream is, String fileName, String mode, String operator)
     {
+        return importAttendees(is, fileName, mode, operator, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> importAttendees(InputStream is, String fileName, String mode,
+                                               String operator, boolean strict)
+    {
+        List<String[]> rows = readRows(is, fileName);
+
+        // replace 模式的清空必须放在解析之后：解析会抛异常（缺列/文件为空/未配映射），
+        // 若先清空再解析，异常回滚虽然有效，但白跑一次全表 DELETE。
+        ParsedImport parsed = parseAttendees(rows, mode, operator, strict);
+
+        // 3. replace 模式先清空
+        if ("replace".equalsIgnoreCase(mode))
+        {
+            // 替换只清名单表，若此时已有签到记录，会产生「幽灵中奖者」：
+            // 抽奖池直接从 kcon_checkin 取号（不 join 名单表），孤儿端口号照样进池，
+            // 抽中后回查参会人返回 null，大屏定格页姓名/公司空白、兑奖也查不到持有人。
+            // 所以只要当天已有签到，就拒绝替换，让用户改用追加模式或先做数据清场。
+            int signed = checkinMapper.countAll();
+            if (signed > 0)
+            {
+                throw new ServiceException(
+                        "当前已有 " + signed + " 条签到记录，不能使用「替换」模式。"
+                        + "替换会清空名单但保留签到记录，导致已签到人员变成无法兑奖的孤儿记录。"
+                        + "请改用「追加」模式，或先在「数据清场」里清空数据再重新导入。");
+            }
+            // 用 DELETE 而非 TRUNCATE：TRUNCATE 属 DDL，会隐式提交，
+            // 本方法上的 @Transactional 会因此失效——一旦后续解析/插入中途失败，
+            // 就会留下「旧名单已清空、新名单未导入」的空档且无法回滚。
+            // 名单规模有限（千级），DELETE 的开销可接受。
+            attendeeMapper.clearAllAttendees();
+        }
+
+        int inserted = 0, updated = 0;
+        for (KconAttendee a : parsed.rows)
+        {
+            int rows1 = attendeeMapper.upsertAttendee(a);
+            // MySQL: 1=insert, 2=update（ON DUPLICATE KEY UPDATE）
+            if (rows1 == 1)
+            {
+                inserted++;
+            }
+            else if (rows1 >= 2)
+            {
+                updated++;
+            }
+        }
+        // upsert 返回 0 行的（理论上不会发生）计入跳过，保证三项之和与总行数一致
+        int skipped = parsed.skipped + (parsed.rows.size() - inserted - updated);
+
+        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 未配置映射={} 漏填参与标记={} 明细条数={}",
+                mode, inserted, updated, skipped, parsed.mappingMissing, parsed.drawFlagMissing,
+                parsed.skipDetails.size());
+
+        Map<String, Object> stat = new LinkedHashMap<>();
+        stat.put("total", attendeeMapper.countAll());
+        stat.put("inserted", inserted);
+        stat.put("updated", updated);
+        stat.put("skipped", skipped);
+        stat.put("skipDetails", parsed.skipDetails);
+        stat.put("mappingMissing", parsed.mappingMissing);
+        stat.put("mappingMissingDetails", parsed.mappingMissingDetails);
+        stat.put("drawFlagMissing", parsed.drawFlagMissing);
+        stat.put("flagMissingDetails", parsed.flagMissingDetails);
+        stat.put("batch", parsed.batch);
+        return stat;
+    }
+
+    @Override
+    public Map<String, Object> previewImport(InputStream is, String fileName, String mode, boolean strict)
+    {
+        List<String[]> rows = readRows(is, fileName);
+        // 预检的职责就是「把问题列出来」，任何情况下都不该在这里因阻塞问题抛异常，
+        // 否则前端只会收到一条错误消息，看不到完整报告。故这里固定传 false，
+        // 由返回的 level=BLOCK 让前端决定是否允许导入。
+        ParsedImport parsed = parseAttendees(rows, mode, operator(), false);
+
+        // 预检不能落库，但 replace 模式至少要知道会不会因为已有签到被拒
+        int signedTotal = checkinMapper.countAll();
+        if ("replace".equalsIgnoreCase(mode) && signedTotal > 0)
+        {
+            throw new ServiceException("当前已有 " + signedTotal + " 条签到记录，不能使用「替换」模式。"
+                    + "请改用「追加」模式，或先在「数据清场」里清空数据。");
+        }
+
+        // 新增 / 更新计数：按库中已存在的手机号区分
+        List<String> phones = new ArrayList<>(parsed.rows.size());
+        for (KconAttendee a : parsed.rows)
+        {
+            phones.add(a.getPhone());
+        }
+        List<String> existing = phones.isEmpty() ? new ArrayList<>()
+                : attendeeMapper.selectExistingPhones(phones);
+        int willUpdate = existing.size();
+        int willInsert = parsed.rows.size() - willUpdate;
+
+        // 渠道 → 权益/资格 的命中分布：现场最容易在这一栏看出映射漏配
+        Map<String, Object> channelMap = new LinkedHashMap<>();
+        for (KconAttendee a : parsed.rows)
+        {
+            String ch = a.getChannel() == null ? "" : a.getChannel();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> item = (Map<String, Object>) channelMap.get(ch);
+            if (item == null)
+            {
+                item = new LinkedHashMap<>();
+                item.put("channel", ch);
+                item.put("count", 0);
+                item.put("mapped", parsed.mappedChannels.contains(ch));
+                item.put("benefitType", a.getTicketType());
+                item.put("drawEligible", a.getDrawEligible());
+                channelMap.put(ch, item);
+            }
+            item.put("count", (Integer) item.get("count") + 1);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("level", parsed.blockers.isEmpty() ? (parsed.mappingMissing > 0 ? "WARN" : "OK") : "BLOCK");
+        data.put("totalRows", rows.size() - 1);
+        data.put("willInsert", willInsert);
+        data.put("willUpdate", willUpdate);
+        data.put("willSkip", parsed.skipped);
+        data.put("blockers", parsed.blockers);
+        data.put("warnings", parsed.warnings);
+        data.put("channelStats", new ArrayList<>(channelMap.values()));
+        data.put("unmappedChannels", parsed.mappingMissingDetails);
+        data.put("skipDetails", parsed.skipDetails);
+        data.put("flagMissingDetails", parsed.flagMissingDetails);
+        return data;
+    }
+
+    /**
+     * 读取文件为二维字符串数组（首行为表头）。
+     */
+    private List<String[]> readRows(InputStream is, String fileName)
+    {
         String lower = fileName == null ? "" : fileName.toLowerCase();
         List<String[]> rows;
         if (lower.endsWith(".csv"))
@@ -207,6 +346,17 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         {
             throw new ServiceException("文件内容为空");
         }
+        return rows;
+    }
+
+    /**
+     * 解析 + 逐行校验，产出待入库记录。
+     * 预检与正式导入共用本方法，保证「预检说没问题」和「实际导进去」完全一致。
+     */
+    private ParsedImport parseAttendees(List<String[]> rows, String mode, String operator, boolean strict)
+    {
+        ParsedImport parsed = new ParsedImport();
+        parsed.batch = "B" + System.currentTimeMillis();
 
         // 1. 解析表头 → 列索引映射
         String[] header = rows.get(0);
@@ -240,43 +390,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                     + "。正确表头应包含：姓名、手机号、渠道来源（权益类型/参与抽奖/公司/职位/邮箱为选填）");
         }
 
-        // 3. replace 模式先清空
-        if ("replace".equalsIgnoreCase(mode))
-        {
-            // 替换只清名单表，若此时已有签到记录，会产生「幽灵中奖者」：
-            // 抽奖池直接从 kcon_checkin 取号（不 join 名单表），孤儿端口号照样进池，
-            // 抽中后回查参会人返回 null，大屏定格页姓名/公司空白、兑奖也查不到持有人。
-            // 所以只要当天已有签到，就拒绝替换，让用户改用追加模式或先做数据清场。
-            int signed = checkinMapper.countAll();
-            if (signed > 0)
-            {
-                throw new ServiceException(
-                        "当前已有 " + signed + " 条签到记录，不能使用「替换」模式。"
-                        + "替换会清空名单但保留签到记录，导致已签到人员变成无法兑奖的孤儿记录。"
-                        + "请改用「追加」模式，或先在「数据清场」里清空数据再重新导入。");
-            }
-            // 用 DELETE 而非 TRUNCATE：TRUNCATE 属 DDL，会隐式提交，
-            // 本方法上的 @Transactional 会因此失效——一旦后续解析/插入中途失败，
-            // 就会留下「旧名单已清空、新名单未导入」的空档且无法回滚。
-            // 名单规模有限（千级），DELETE 的开销可接受。
-            attendeeMapper.clearAllAttendees();
-        }
-
-        String batch = "B" + System.currentTimeMillis();
-        int inserted = 0, updated = 0, skipped = 0;
-        // 未命中映射且未填「参与抽奖」的行数：该行照常入库（按「否」），单独计数提示
-        int drawFlagMissing = 0;
-        int mappingMissing = 0;
         int phoneIdx = colIndex.get("phone");
         Integer ticketIdx = colIndex.get("ticketType");
         Integer drawIdx = colIndex.get("drawEligible");
         Map<String, ChannelMapping> channelMappings = loadChannelMappings();
-        // 记录被跳过行的行号与原因：只返回一个「跳过 N 条」，现场拿着 Excel 不知道要改哪几行
-        List<Map<String, Object>> skipDetails = new ArrayList<>();
-        // 记录漏填「参与抽奖」的行号：导入成功但这些人按「否」处理，会失去抽奖资格
-        List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
-        // 记录未配置映射的渠道来源：提示到「渠道来源映射」补充，而不是让整批人静默失去资格
-        List<Map<String, Object>> mappingMissingDetails = new ArrayList<>();
+        // 文件内手机号去重：重复行按后者覆盖前者，但要在预检里提示
+        Map<String, Integer> seenPhones = new HashMap<>();
 
         for (int r = 1; r < rows.size(); r++)
         {
@@ -286,15 +405,21 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             String phone = cell(row, phoneIdx).trim();
             if (phone.isEmpty())
             {
-                skipped++;
-                addSkipDetail(skipDetails, lineNo, "手机号为空");
+                parsed.skipped++;
+                addSkipDetail(parsed.skipDetails, lineNo, "手机号为空");
                 continue;
             }
             if (!phone.matches("1[3-9]\\d{9}"))
             {
-                skipped++;
-                addSkipDetail(skipDetails, lineNo, "手机号格式不正确：" + phone);
+                parsed.skipped++;
+                addSkipDetail(parsed.skipDetails, lineNo, "手机号格式不正确：" + phone);
                 continue;
+            }
+            Integer firstLine = seenPhones.put(phone, lineNo);
+            if (firstLine != null)
+            {
+                addWarning(parsed.warnings, lineNo,
+                        "手机号 " + mask(phone) + " 与第 " + firstLine + " 行重复，将以本行为准");
             }
 
             // 「必填列存在」不等于「值必填」：列缺失已在上面统一拦截，
@@ -303,15 +428,15 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             String name = cell(row, colIndex.get("name")).trim();
             if (name.isEmpty())
             {
-                skipped++;
-                addSkipDetail(skipDetails, lineNo, "姓名为空");
+                parsed.skipped++;
+                addSkipDetail(parsed.skipDetails, lineNo, "姓名为空");
                 continue;
             }
             String channel = cell(row, colIndex.get("channel")).trim();
             if (channel.isEmpty())
             {
-                skipped++;
-                addSkipDetail(skipDetails, lineNo, "渠道来源为空");
+                parsed.skipped++;
+                addSkipDetail(parsed.skipDetails, lineNo, "渠道来源为空");
                 continue;
             }
 
@@ -327,21 +452,31 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             {
                 ticketType = mapping.benefitType;
                 drawEligible = mapping.drawEligible;
+                parsed.mappedChannels.add(channel);
+                // 映射判「否」但行内填了「是」：以映射为准，但提示一下，
+                // 多数是映射配错了或行内填错，不提示就会被静默吞掉
+                if (drawEligible == 0 && "是".equals(explicitDraw))
+                {
+                    addWarning(parsed.warnings, lineNo,
+                            "渠道「" + channel + "」映射为不参与抽奖，已忽略行内填写的「是」");
+                }
             }
             else
             {
                 // 未配置映射：回退到行内值；都为空时按「否」入库并提示补映射
                 ticketType = explicitTicket;
                 drawEligible = "是".equals(explicitDraw) ? 1 : 0;
-                mappingMissing++;
-                addMappingMissingDetail(mappingMissingDetails, lineNo, channel);
+                parsed.mappingMissing++;
+                addMappingMissingDetail(parsed.mappingMissingDetails, lineNo, channel);
+                addBlocker(parsed.blockers, lineNo,
+                        "渠道来源「" + channel + "」未配置映射，将回退到行内填写的权益/资格");
                 if (explicitDraw.isEmpty())
                 {
                     // 该行照常入库（按「否」），只做单独计数提示：漏填行名单缺失会
                     // 让持有人失去抽奖资格，现场需要知道具体行号去补。不并入 skipped——
                     // skipped 表示「没导入」，这行导入了，混在一起统计会对不上。
-                    drawFlagMissing++;
-                    addFlagMissingDetail(flagMissingDetails, lineNo);
+                    parsed.drawFlagMissing++;
+                    addFlagMissingDetail(parsed.flagMissingDetails, lineNo);
                 }
             }
 
@@ -352,7 +487,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             a.setTicketType(emptyToNull(ticketType));
             a.setDrawEligible(drawEligible);
             a.setPhoneTail4(tail4(phone));
-            a.setImportBatch(batch);
+            a.setImportBatch(parsed.batch);
             a.setCreateBy(operator);
 
             if (colIndex.containsKey("company"))
@@ -372,37 +507,81 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 a.setAttendCount(parseInt(cell(row, colIndex.get("attendCount"))));
             }
 
-            int rows1 = attendeeMapper.upsertAttendee(a);
-            // MySQL: 1=insert, 2=update（ON DUPLICATE KEY UPDATE）
-            if (rows1 == 1)
-            {
-                inserted++;
-            }
-            else if (rows1 >= 2)
-            {
-                updated++;
-            }
-            else
-            {
-                skipped++;
-            }
+            parsed.rows.add(a);
         }
 
-        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 未配置映射={} 漏填参与标记={} 明细条数={}",
-                mode, inserted, updated, skipped, mappingMissing, drawFlagMissing, skipDetails.size());
+        // 严格模式：存在阻塞问题就整批拒绝，不落库。
+        // 这件事必须放在写入之前——「未配置映射」以前只是警告，
+        // 结果映射漏配的渠道静默回退成「不参与抽奖」，现场抽完才发现人不在池子里。
+        if (strict && !parsed.blockers.isEmpty())
+        {
+            String first = String.valueOf(parsed.blockers.get(0).get("reason"));
+            throw new ServiceException("导入已中止：" + first
+                    + "（共 " + parsed.blockers.size() + " 处）。"
+                    + "请先在「渠道来源映射」补全，或改用强制导入。");
+        }
+        return parsed;
+    }
 
-        Map<String, Object> stat = new LinkedHashMap<>();
-        stat.put("total", attendeeMapper.countAll());
-        stat.put("inserted", inserted);
-        stat.put("updated", updated);
-        stat.put("skipped", skipped);
-        stat.put("skipDetails", skipDetails);
-        stat.put("mappingMissing", mappingMissing);
-        stat.put("mappingMissingDetails", mappingMissingDetails);
-        stat.put("drawFlagMissing", drawFlagMissing);
-        stat.put("flagMissingDetails", flagMissingDetails);
-        stat.put("batch", batch);
-        return stat;
+    /** 解析结果：一次解析，两种用途（预检展示 / 正式导入落库） */
+    private static final class ParsedImport
+    {
+        final List<KconAttendee> rows = new ArrayList<>();
+        final List<Map<String, Object>> skipDetails = new ArrayList<>();
+        final List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
+        final List<Map<String, Object>> mappingMissingDetails = new ArrayList<>();
+        final List<Map<String, Object>> blockers = new ArrayList<>();
+        final List<Map<String, Object>> warnings = new ArrayList<>();
+        /** 命中了映射的渠道集合（预检判断某渠道是否已配置用） */
+        final java.util.Set<String> mappedChannels = new java.util.HashSet<>();
+        int skipped;
+        int drawFlagMissing;
+        int mappingMissing;
+        String batch;
+    }
+
+    /** 预检明细上限：超过后只计数不列明细，避免响应体过大 */
+    private static final int PREVIEW_DETAIL_LIMIT = 50;
+
+    private void addBlocker(List<Map<String, Object>> details, int lineNo, String reason)
+    {
+        if (details.size() >= PREVIEW_DETAIL_LIMIT)
+        {
+            return;
+        }
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("row", lineNo);
+        d.put("reason", reason);
+        details.add(d);
+    }
+
+    private void addWarning(List<Map<String, Object>> details, int lineNo, String reason)
+    {
+        addBlocker(details, lineNo, reason);
+    }
+
+    /** 预检不落库，操作人仅用于构造记录，取当前登录用户 */
+    private String operator()
+    {
+        try
+        {
+            return com.ruoyi.common.utils.SecurityUtils.getUsername();
+        }
+        catch (Exception e)
+        {
+            // 无登录上下文（如内部调用）时退回占位，不影响解析
+            return "";
+        }
+    }
+
+    /** 手机号脱敏（预检回显用，避免把完整号码带到前端） */
+    private String mask(String phone)
+    {
+        if (phone == null || phone.length() < 7)
+        {
+            return "***";
+        }
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 
     /** 渠道来源映射条目 */

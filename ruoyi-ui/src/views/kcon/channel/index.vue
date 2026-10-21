@@ -29,6 +29,11 @@
         <el-button type="primary" plain icon="el-icon-plus" size="mini" @click="handleAdd"
                    v-hasPermi="['kcon:channel:add']">新增映射</el-button>
       </el-col>
+      <el-col :span="1.5">
+        <el-button type="warning" plain icon="el-icon-refresh" size="mini" :loading="resyncing"
+                   @click="handleResync"
+                   v-hasPermi="['kcon:channel:edit']">重算存量名单</el-button>
+      </el-col>
       <right-toolbar :showSearch="true" @queryTable="getList"></right-toolbar>
     </el-row>
 
@@ -95,7 +100,10 @@
 </template>
 
 <script>
-import { listChannelMapping, addChannelMapping, updateChannelMapping, delChannelMapping } from "@/api/kcon/channel"
+import {
+  listChannelMapping, addChannelMapping, updateChannelMapping, delChannelMapping,
+  resyncChannelMapping
+} from "@/api/kcon/channel"
 
 export default {
   name: "KconChannelMapping",
@@ -106,6 +114,7 @@ export default {
       total: 0,
       open: false,
       submitting: false,
+      resyncing: false,
       title: "",
       queryParams: { pageNum: 1, pageSize: 10, channelSource: null, drawEligible: null },
       form: {},
@@ -179,6 +188,31 @@ export default {
           this.$modal.msgSuccess("删除成功")
         })
         .catch(() => {})
+    },
+
+    // 全量重算：把当前映射重新应用到存量名单，修复「先导入后补映射」留下的资格错乱。
+    // 已签到/已中奖的人不会改，只列出来让人工核对——静默改动会造成「已中奖但资格变否」。
+    handleResync() {
+      this.$modal.confirm(
+        "将把当前所有渠道映射重新应用到已有名单（已签到/已中奖的人员不受影响）。确定重算？"
+      ).then(() => {
+        this.resyncing = true
+        return resyncChannelMapping().then(res => {
+          const d = (res && res.data) || {}
+          const locked = d.locked || []
+          let html = `已同步 <b>${d.synced || 0}</b> 人。`
+          if (locked.length) {
+            html += `<br/>以下 <b>${locked.length}</b> 人已签到或已中奖，为避免状态矛盾未做修改，请人工核对：<br/>`
+            html += locked.slice(0, 20).map(p => {
+              const why = p.signed === 1 ? "已签到" : ""
+              const won = p.won === 1 ? (why ? "、已中奖" : "已中奖") : ""
+              return `第${p.attendeeId}号 ${p.name}（${p.channel}，${why}${won}）`
+            }).join("<br/>")
+            if (locked.length > 20) html += `<br/>… 另有 ${locked.length - 20} 人`
+          }
+          this.$alert(html, "重算完成", { dangerouslyUseHTMLString: true })
+        })
+      }).catch(() => {}).finally(() => { this.resyncing = false })
     }
   }
 }

@@ -221,4 +221,70 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by a.name asc, a.id asc
     </select>
 
+    <!-- 按手机号批量查已存在的记录（导入预检区分新增/更新用） -->
+    <select id="selectExistingPhones" resultType="java.lang.String">
+        select phone from kcon_attendee where phone in
+        <foreach collection="phones" item="p" open="(" separator="," close=")">
+            #{p}
+        </foreach>
+    </select>
+
+    <!-- ================= 渠道映射变更后的存量重算 =================
+         只更新「未被锁定」的人：已签到或已有未作废中奖记录的人一律跳过。
+         理由：现场抽奖开始后再改映射，若把这些人的资格从 1 改成 0，
+         会出现「已中奖但资格是否」的矛盾；反之若从 0 改 1，他们也无法
+         重进已结束场次的奖池。这类人只能人工核对，故单独列出。 -->
+
+    <sql id="resyncSetClause">
+        set a.ticket_type   = m.benefit_type,
+            a.draw_eligible = m.draw_eligible,
+            a.update_time   = now()
+    </sql>
+
+    <!-- 未锁定的判定条件：无签到记录且无未作废中奖记录 -->
+    <sql id="notLockedCondition">
+        and not exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
+        and not exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2)
+    </sql>
+
+    <update id="resyncByChannel" parameterType="String">
+        update kcon_attendee a
+        join kcon_channel_mapping m on m.channel_source = a.channel
+        <include refid="resyncSetClause"/>
+        where a.channel = #{channel}
+        <include refid="notLockedCondition"/>
+    </update>
+
+    <update id="resyncAll">
+        update kcon_attendee a
+        join kcon_channel_mapping m on m.channel_source = a.channel
+        <include refid="resyncSetClause"/>
+        <where>
+            <include refid="notLockedCondition"/>
+        </where>
+    </update>
+
+    <select id="countLockedByChannel" parameterType="String" resultType="int">
+        select count(*) from kcon_attendee a
+        where a.channel = #{channel}
+          and (exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
+            or exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2))
+    </select>
+
+    <select id="selectLockedByChannel" parameterType="String" resultType="java.util.Map">
+        select a.id          as attendeeId,
+               a.name        as name,
+               a.channel     as channel,
+               a.phone_tail4 as phoneTail4,
+               case when exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
+                    then 1 else 0 end as signed,
+               case when exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2)
+                    then 1 else 0 end as won
+        from kcon_attendee a
+        where a.channel = #{channel}
+          and (exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
+            or exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2))
+        order by a.id
+    </select>
+
 </mapper>
