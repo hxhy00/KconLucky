@@ -84,10 +84,11 @@ if (( ${#migrations[@]} > 0 )); then
   done < <(printf '%s\n' "${migrations[@]}" | sort -V)
 fi
 
-if ! docker compose up -d --build; then
+# 镜像由本地构建后 docker load 导入，服务器不做构建（内存不足）
+if ! docker compose up -d; then
   log "error: compose up failed, rolling back to $PREV"
   git checkout --force --detach "$PREV" || true
-  docker compose up -d --build || true
+  docker compose up -d || true
   exit 1
 fi
 
@@ -110,7 +111,7 @@ done
 if [[ "$healthy" != "1" ]]; then
   log "error: health check failed, rolling back to $PREV"
   git checkout --force --detach "$PREV" || true
-  docker compose up -d --build || true
+  docker compose up -d || true
   exit 1
 fi
 
