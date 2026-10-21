@@ -159,5 +159,40 @@ DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
    AND `menu_id` IN (3009, 3060, 3061, 3062);
 
+-- 普通角色不该持有「删名单」与「作废中奖」：这两个动作会改写现场已产生的数据
+DELETE FROM `sys_role_menu`
+ WHERE `role_id` = 2
+   AND `menu_id` IN (3013, 3040, 3020, 3021, 3022);
+
+-- -------------------------------------------------------------
+-- 现场工作人员（role_id=3，role_key=kcon_staff）
+-- 日常签到/抽奖/核验能干活，但清场、作废中奖、改映射/奖品一律不可。
+-- 账号与授权见 kcon_migrate_v8.sql（新装环境两者都要执行）。
+-- -------------------------------------------------------------
+INSERT IGNORE INTO `sys_role`
+  (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `remark`)
+VALUES
+  (3, '现场工作人员', 'kcon_staff', 3, '1', 1, 1, '0', '0', 'admin', NOW(),
+   '现场签到/抽奖/核验操作员：可操作日常业务，不可清场、不可作废中奖、不可改映射与奖品');
+
+DELETE FROM `sys_role_menu` WHERE `role_id` = 3;
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 3, `menu_id` FROM `sys_menu`
+ WHERE `menu_id` BETWEEN 3000 AND 3999 AND `status` = '0';
+
+DELETE FROM `sys_role_menu`
+ WHERE `role_id` = 3
+   AND `menu_id` IN (
+        3006,                     -- 数据管理（清场/迁移）
+        3003, 3020, 3021, 3022,   -- 奖品设置
+        3009, 3060, 3061, 3062,   -- 渠道来源映射
+        3013,                     -- 名单删除
+        3040                      -- 中奖作废
+   );
+
+-- 「设置」目录下已无可见子菜单，连目录一并收回
+DELETE FROM `sys_role_menu` WHERE `role_id` = 3 AND `menu_id` = 3200;
+
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;

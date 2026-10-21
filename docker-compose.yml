@@ -34,10 +34,20 @@ services:
       - ./sql/00-ry-base.sql:/docker-entrypoint-initdb.d/00-ry-base.sql:ro
       - ./sql/kcon_lucky.sql:/docker-entrypoint-initdb.d/01-kcon_lucky.sql:ro
       - ./sql/kcon_menu.sql:/docker-entrypoint-initdb.d/02-kcon-menu.sql:ro
-      # 增量迁移脚本（幂等，已存在的列/索引会跳过）。
+      # 增量迁移脚本（幂等，已存在的列/索引/角色会跳过）。
       # 基线建表脚本现已包含这些对象，但对「已存在但缺列」的库仍是必需的；
       # 漏挂会导致库缺 kcon_winner.email 等对象，中奖查询直接 Unknown column。
+      #
+      # 挂载顺序即执行顺序，必须按版本号排列。漏挂 v3~v8 会造成：
+      #   v7 漏 → 缺 kcon_attendee.ticket_type_manual，人工改的权益被导入覆盖
+      #   v8 漏 → 缺 kcon_staff 角色与 staff 账号，现场工作人员无可用登录账号
       - ./sql/kcon_migrate_v2.sql:/docker-entrypoint-initdb.d/03-kcon-migrate_v2.sql:ro
+      - ./sql/kcon_migrate_v3.sql:/docker-entrypoint-initdb.d/04-kcon-migrate_v3.sql:ro
+      - ./sql/kcon_migrate_v4.sql:/docker-entrypoint-initdb.d/05-kcon-migrate_v4.sql:ro
+      - ./sql/kcon_migrate_v5.sql:/docker-entrypoint-initdb.d/06-kcon-migrate_v5.sql:ro
+      - ./sql/kcon_migrate_v6.sql:/docker-entrypoint-initdb.d/07-kcon-migrate_v6.sql:ro
+      - ./sql/kcon_migrate_v7.sql:/docker-entrypoint-initdb.d/08-kcon-migrate_v7.sql:ro
+      - ./sql/kcon_migrate_v8.sql:/docker-entrypoint-initdb.d/09-kcon-migrate_v8.sql:ro
     ports:
       # 仅绑定本机回环，不对局域网暴露；现场若不需要本机调试可整段注释掉
       - "127.0.0.1:${MYSQL_DEBUG_PORT:-3307}:3306"

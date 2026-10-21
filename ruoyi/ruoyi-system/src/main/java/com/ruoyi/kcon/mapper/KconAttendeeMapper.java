@@ -121,4 +121,18 @@ public interface KconAttendeeMapper
      * 按手机号批量查询已存在的记录 id（预检区分「新增」与「更新」用）
      */
     List<String> selectExistingPhones(@org.apache.ibatis.annotations.Param("phones") List<String> phones);
+
+    /**
+     * 把某行改为「跟随渠道来源映射」：清掉手工标记并按映射回填权益类型。
+     * 用于人工误改后恢复。
+     *
+     * @param id 名单主键
+     * @return 影响行数
+     */
+    int clearManualTicketType(Long id);
+
+    /**
+     * 统计某渠道下权益类型被人工改过（ticket_type_manual=1）的人数
+     */
+    int countManualByChannel(String channel);
 }

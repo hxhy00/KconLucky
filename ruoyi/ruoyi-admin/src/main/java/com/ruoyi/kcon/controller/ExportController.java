@@ -14,12 +14,14 @@ import com.ruoyi.kcon.mapper.KconSessionMapper;
 import com.ruoyi.kcon.mapper.KconVerifyLogMapper;
 import com.ruoyi.kcon.mapper.KconWinnerMapper;
 import com.ruoyi.kcon.domain.KconCheckinExportVo;
+import com.ruoyi.kcon.service.SensitiveOperationGuard;
 import com.ruoyi.kcon.util.QrCodeUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -57,6 +59,9 @@ public class ExportController extends BaseController
 
     @Autowired
     private KconSessionMapper sessionMapper;
+
+    @Autowired
+    private SensitiveOperationGuard sensitiveOperationGuard;
 
     /** 导出签到全量明细 */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:export')")
@@ -133,6 +138,13 @@ public class ExportController extends BaseController
      * 清场：清空名单/签到/中奖/核验日志，端口号池归零，奖品已抽数归零。
      * 正式开场前使用。
      *
+     * 双重校验（2026-10-21 起）：
+     *   1. @PreAuthorize 要求 kcon:data:reset 权限 —— 该权限只授予超管角色，
+     *      工作人员（kcon_staff）即便猜到接口地址也进不来；
+     *   2. 再要求输入**当前登录人本人的密码**。第一层挡住没权限的人，
+     *      第二层挡住「电脑没锁屏、别人顺手点一下」这类情况，并让每次清场
+     *      都能在操作日志里对应到具体执行人。
+     *
      * 注意：这里刻意不加 @Transactional。TRUNCATE TABLE 属于 DDL，在 MySQL 中会触发
      * 隐式提交且不可回滚，标注事务只会造成「有原子性」的错觉。若 TRUNCATE 之后的
      * 语句失败，会出现「名单已清空但端口号池未归零」的半清场状态，导致签到报
@@ -143,8 +155,12 @@ public class ExportController extends BaseController
     @Log(title = "数据清场", businessType = BusinessType.CLEAN)
     @RepeatSubmit
     @PostMapping("/reset")
-    public AjaxResult reset()
+    public AjaxResult reset(@RequestBody Map<String, String> body)
     {
+        // 密码校验放在所有写操作之前：不通过时数据库一个字节都不动
+        sensitiveOperationGuard.verifyCurrentUserPassword(
+                body == null ? null : body.get("password"), "数据清场");
+
         // 可回滚的部分先做
         sessionMapper.deactivateAll();     // 场次状态复位为未开始（测试报告问题 4）
         portPoolMapper.releaseAll();

@@ -133,11 +133,17 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
         }
         int synced = attendeeMapper.resyncByChannel(channel.trim());
         List<Map<String, Object>> locked = attendeeMapper.selectLockedByChannel(channel.trim());
-        if (synced > 0 || !locked.isEmpty())
+        // 权益类型被人工改过的人：重算会跳过其权益，需要单独告知，否则用户会以为
+        // 「映射改了但这个人没变」是 bug。
+        int manual = attendeeMapper.countManualByChannel(channel.trim());
+        if (synced > 0 || !locked.isEmpty() || manual > 0)
         {
-            log.info("渠道映射重算 channel={} 已同步={} 未修改={}", channel, synced, locked.size());
+            log.info("渠道映射重算 channel={} 已同步={} 未修改={} 人工权益={}",
+                    channel, synced, locked.size(), manual);
         }
-        return buildResult(synced, locked);
+        Map<String, Object> result = buildResult(synced, locked);
+        result.put("manualTicketTypeCount", manual);
+        return result;
     }
 
     @Override
@@ -147,6 +153,7 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
         // 全量重算时把各渠道的锁定人员汇总：用全部已配置渠道逐一查，避免漏
         List<KconChannelMapping> all = channelMappingMapper.selectAll();
         List<Map<String, Object>> locked = new ArrayList<>();
+        int manual = 0;
         if (all != null)
         {
             for (KconChannelMapping m : all)
@@ -157,10 +164,13 @@ public class KconChannelMappingServiceImpl implements IKconChannelMappingService
                     continue;
                 }
                 locked.addAll(attendeeMapper.selectLockedByChannel(ch.trim()));
+                manual += attendeeMapper.countManualByChannel(ch.trim());
             }
         }
-        log.info("渠道映射全量重算 已同步={} 未修改={}", synced, locked.size());
-        return buildResult(synced, locked);
+        log.info("渠道映射全量重算 已同步={} 未修改={} 人工权益={}", synced, locked.size(), manual);
+        Map<String, Object> result = buildResult(synced, locked);
+        result.put("manualTicketTypeCount", manual);
+        return result;
     }
 
     private Map<String, Object> buildResult(int synced, List<Map<String, Object>> locked)

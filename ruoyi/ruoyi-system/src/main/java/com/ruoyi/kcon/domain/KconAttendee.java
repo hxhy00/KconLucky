@@ -9,11 +9,10 @@ import jakarta.validation.constraints.Size;
 /**
  * 参会人名单对象 kcon_attendee
  *
- * 导入必填 3 列：姓名 / 手机号 / 渠道来源
- * 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
- * 权益类型与参与抽奖留空时，按渠道来源查映射表 kcon_channel_mapping 自动带出。
+ * 导入模板 6 列：必填 3 列（姓名 / 手机号 / 渠道来源），选填 3 列（公司 / 职位 / 邮箱）。
+ * 权益类型与参与抽奖不读导入文件，按渠道来源查映射表 kcon_channel_mapping 带出。
  *
- * 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级。
+ * 旧模板（渠道标识 / 票种 / 是否参与抽奖 / 职务-年级 等表头）已不再兼容。
  *
  * @author kcon
  */
@@ -45,12 +44,34 @@ public class KconAttendee extends BaseEntity
     private String ticketType;
 
     /**
-     * 是否参与抽奖：1=是 0=否（spec 006 补充，2026-10-16 用户确认）
+     * 权益类型是否被人工改过：1=是，0=否（来自渠道来源映射）。
      *
-     * 导入为选填列：留空时按渠道来源映射带出；无映射且未填时按「否」入库。
-     * 只有显式填「是」才具备基础资格，留空或无法识别一律按「否」入库
-     * （fail-safe：漏填只会失去资格，不会把该被排除的人放错进池）。
-     * 池计算时系统参数黑名单参数优先、实时生效，见 DrawEligibility。
+     * 置 1 后，映射重算（resync）与追加导入（upsert）都**不再覆盖**该行的权益类型，
+     * 以人工填写的值为准。用于「某人本来是赠票，但要单独给别的权益」这类临时调整。
+     * 名单页可手工清空该标记，恢复为跟随映射。
+     *
+     * 只保护权益类型；参与抽奖（drawEligible）仍以映射为准，不在此列。
+     */
+    private Integer ticketTypeManual;
+
+    public Integer getTicketTypeManual()
+    {
+        return ticketTypeManual;
+    }
+
+    public void setTicketTypeManual(Integer ticketTypeManual)
+    {
+        this.ticketTypeManual = ticketTypeManual;
+    }
+
+    /**
+     * 是否参与抽奖：1=是 0=否。**由「渠道来源映射」写入，不读导入文件。**
+     *
+     * 导入模板（6 列）已不含「参与抽奖」列，票务表里即使有该列也被忽略；
+     * 导入时按渠道来源匹配 kcon_channel_mapping 带出，手工新增/修改时由渠道下拉带出。
+     * 映射表即渠道白名单，未配映射的渠道不允许入库，因此不存在「来源不明却进池」的行。
+     * 映射变更会自动重算存量名单，但已签到或已中奖的人员被锁定不改，见 KconChannelMappingService。
+     * 池计算时再叠加系统参数黑名单、实时生效，见 DrawEligibility。
      */
     @Excel(name = "参与抽奖", readConverterExp = "1=是,0=否")
     private Integer drawEligible;

@@ -9,7 +9,6 @@ import com.ruoyi.kcon.service.IKconAttendeeService;
 import com.ruoyi.kcon.service.IKconChannelMappingService;
 import com.ruoyi.kcon.service.IKconCheckinService;
 import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -34,14 +33,18 @@ import java.util.Map;
 /**
  * 参会人名单管理实现
  *
- * 导入容错设计：
- *   - 按表头名匹配列，顺序任意
+ * 导入规则（2026-10-21 起：只认 6 列标准模板，不再兼容旧模板）：
+ *   - 表头必须是：姓名 / 手机号 / 渠道来源 / 公司 / 职位 / 邮箱，顺序任意、列可增删
  *   - 必填 3 列：姓名 / 手机号 / 渠道来源
- *   - 选填 5 列：权益类型 / 参与抽奖 / 公司 / 职位 / 邮箱
- *   - 权益类型与参与抽奖留空时，按渠道来源查映射表 kcon_channel_mapping 自动带出；
- *     命中映射时映射优先，未命中时回退到行内值
+ *   - 选填 3 列：公司 / 职位 / 邮箱
+ *   - 权益类型与参与抽奖不读文件，一律由渠道来源查映射表 kcon_channel_mapping 带出；
+ *     渠道未配置映射时该行计阻塞问题，正式导入整批拒绝
  *   - 未识别的列直接忽略（例如票务总表带来的 购票时间/金额/发票需求）
- *   - 兼容旧表头：渠道标识、渠道、票种、票务类型、是否参与抽奖、职务/年级、职务、年级
+ *   - 渠道来源用下拉选择（前端），避免手输错字
+ *
+ * 为什么不再兼容旧表头：旧模板的「票种」「是否参与抽奖」语义已作废，
+ * 继续接受只会让人以为填了有用，实际被映射静默覆盖。宁可导入时直接报「表头不认识」，
+ * 也不要让操作员拿着一份填满了却全部无效的表格反复试。
  *
  * @author kcon
  */
@@ -50,32 +53,17 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
 {
     private static final Logger log = LoggerFactory.getLogger(KconAttendeeServiceImpl.class);
 
-    /** 表头别名 → 标准字段名 */
+    /** 标准表头 → 标准字段名（只认 6 列模板，不做旧表头别名兼容） */
     private static final Map<String, String> HEADER_ALIAS = new HashMap<>();
 
     static
     {
         HEADER_ALIAS.put("姓名", "name");
         HEADER_ALIAS.put("手机号", "phone");
-        HEADER_ALIAS.put("手机", "phone");
-        HEADER_ALIAS.put("电话", "phone");
-        HEADER_ALIAS.put("渠道标识", "channel");
-        HEADER_ALIAS.put("渠道", "channel");
         HEADER_ALIAS.put("渠道来源", "channel");
-        HEADER_ALIAS.put("票种", "ticketType");
-        HEADER_ALIAS.put("票务类型", "ticketType");
-        HEADER_ALIAS.put("权益类型", "ticketType");
         HEADER_ALIAS.put("公司", "company");
-        HEADER_ALIAS.put("邮箱", "email");
-        HEADER_ALIAS.put("第几次参加kcon", "attendCount");
-        HEADER_ALIAS.put("第几次参加", "attendCount");
-        HEADER_ALIAS.put("参加次数", "attendCount");
-        HEADER_ALIAS.put("职务/年级", "position");
-        HEADER_ALIAS.put("职务", "position");
-        HEADER_ALIAS.put("年级", "position");
         HEADER_ALIAS.put("职位", "position");
-        HEADER_ALIAS.put("是否参与抽奖", "drawEligible");
-        HEADER_ALIAS.put("参与抽奖", "drawEligible");
+        HEADER_ALIAS.put("邮箱", "email");
     }
 
     /** 必填列（标准字段名）：只保留身份与来源，权益/资格由映射带出 */
@@ -130,6 +118,9 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     @Override
     public int insertAttendee(KconAttendee attendee)
     {
+        // 渠道白名单：与导入同一口径。若手工新增能绕过去，映射表就不是唯一事实源了，
+        // 现场仍会冒出没配映射的渠道人员，事后再靠人肉比对排查。
+        checkChannelAllowed(attendee.getChannel());
         attendee.setPhoneTail4(tail4(attendee.getPhone()));
         attendee.setPhone(attendee.getPhone().trim());
         // draw_eligible 列 NOT NULL：直连 API 新增时可能不带该字段，缺省按「否」
@@ -144,11 +135,23 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     @Override
     public int updateAttendee(KconAttendee attendee)
     {
+        // 只在渠道真被改过时才校验：存量里可能还有未配置映射的渠道（如历史遗留的「媒体」），
+        // 若每次编辑都校验，这些人连补个邮箱都改不了，只能靠改库。
+        if (attendee.getChannel() != null && !attendee.getChannel().trim().isEmpty())
+        {
+            KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
+            String oldChannel = old == null ? null : old.getChannel();
+            if (!attendee.getChannel().trim().equals(oldChannel))
+            {
+                checkChannelAllowed(attendee.getChannel());
+            }
+        }
         if (attendee.getPhone() != null && !attendee.getPhone().trim().isEmpty())
         {
             attendee.setPhone(attendee.getPhone().trim());
             attendee.setPhoneTail4(tail4(attendee.getPhone()));
         }
+        markManualTicketTypeIfChanged(attendee);
         int rows = attendeeMapper.updateAttendee(attendee);
         // 乐观锁：带了版本号却更新 0 行，说明这条名单在编辑期间被别人改过（或已被删除）。
         // 与其静默覆盖对方的修改，不如明确拒绝让人重新打开——现场两人同时补录名单时，
@@ -162,6 +165,51 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             throw new ServiceException("该名单已被他人修改，请关闭后重新打开再改");
         }
         return rows;
+    }
+
+    /**
+     * 编辑时若权益类型与库中现值不同，自动置「人工修改」标记。
+     *
+     * 为什么自动判断而不是让前端传标记：前端少传一次就丢一次保护，
+     * 而这里用「值真的变了」作为判据，无论谁调用都成立。
+     * 值没变则不动标记——否则每次点开保存都会把「跟随映射」误判成「人工改过」，
+     * 之后改映射这批人就再也同步不到了。
+     */
+    private void markManualTicketTypeIfChanged(KconAttendee attendee)
+    {
+        String incoming = attendee.getTicketType();
+        if (incoming == null)
+        {
+            return;
+        }
+        KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
+        if (old == null)
+        {
+            return;
+        }
+        String current = old.getTicketType();
+        boolean changed = current == null ? !incoming.trim().isEmpty()
+                : !current.trim().equals(incoming.trim());
+        if (changed)
+        {
+            attendee.setTicketTypeManual(1);
+        }
+    }
+
+    @Override
+    public int clearManualTicketType(Long id)
+    {
+        // 恢复为「跟随渠道来源映射」：清标记 + 按映射回填权益。
+        // 只影响权益类型，不动参与抽奖（该字段本来就以映射为准）。
+        if (id == null)
+        {
+            throw new ServiceException("缺少名单 ID");
+        }
+        if (attendeeMapper.selectAttendeeById(id) == null)
+        {
+            throw new ServiceException("该名单不存在，可能已被删除");
+        }
+        return attendeeMapper.clearManualTicketType(id);
     }
 
     @Override
@@ -188,19 +236,25 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> importAttendees(InputStream is, String fileName, String mode, String operator)
     {
-        return importAttendees(is, fileName, mode, operator, true);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> importAttendees(InputStream is, String fileName, String mode,
-                                               String operator, boolean strict)
-    {
         List<String[]> rows = readRows(is, fileName);
 
         // replace 模式的清空必须放在解析之后：解析会抛异常（缺列/文件为空/未配映射），
         // 若先清空再解析，异常回滚虽然有效，但白跑一次全表 DELETE。
-        ParsedImport parsed = parseAttendees(rows, mode, operator, strict);
+        ParsedImport parsed = parseAttendees(rows, mode, operator);
+
+        // 存在阻塞问题就整批拒绝，不落库，也没有「强制导入」的绕行口子。
+        // 「未配置映射」以前只是警告，漏配的渠道也能进名单、还能被抽中，现场抽完才发现。
+        // 既然映射表被定为允许导入的渠道白名单，就必须整批拦截：只跳过那几行而放行其余行，
+        // 现场拿到的是一份「看起来成功」的残缺名单，比直接失败更难发现。
+        // 注意这段只能放在 importAttendees，不能放进 parseAttendees——
+        // 否则预检也会抛异常，前端连「哪几行有问题」都看不到。
+        if (!parsed.blockers.isEmpty())
+        {
+            String first = String.valueOf(parsed.blockers.get(0).get("reason"));
+            throw new ServiceException("导入已中止：" + first
+                    + "（共 " + parsed.blockers.size() + " 处）。"
+                    + "请先在「设置 → 渠道来源映射」补全该渠道后重新导入。");
+        }
 
         // 3. replace 模式先清空
         if ("replace".equalsIgnoreCase(mode))
@@ -241,9 +295,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         // upsert 返回 0 行的（理论上不会发生）计入跳过，保证三项之和与总行数一致
         int skipped = parsed.skipped + (parsed.rows.size() - inserted - updated);
 
-        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 未配置映射={} 漏填参与标记={} 明细条数={}",
-                mode, inserted, updated, skipped, parsed.mappingMissing, parsed.drawFlagMissing,
-                parsed.skipDetails.size());
+        log.info("名单导入完成 mode={} 新增={} 更新={} 跳过={} 未配置映射={} 明细条数={}",
+                mode, inserted, updated, skipped, parsed.mappingMissing, parsed.skipDetails.size());
 
         Map<String, Object> stat = new LinkedHashMap<>();
         stat.put("total", attendeeMapper.countAll());
@@ -253,20 +306,17 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         stat.put("skipDetails", parsed.skipDetails);
         stat.put("mappingMissing", parsed.mappingMissing);
         stat.put("mappingMissingDetails", parsed.mappingMissingDetails);
-        stat.put("drawFlagMissing", parsed.drawFlagMissing);
-        stat.put("flagMissingDetails", parsed.flagMissingDetails);
         stat.put("batch", parsed.batch);
         return stat;
     }
 
     @Override
-    public Map<String, Object> previewImport(InputStream is, String fileName, String mode, boolean strict)
+    public Map<String, Object> previewImport(InputStream is, String fileName, String mode)
     {
         List<String[]> rows = readRows(is, fileName);
-        // 预检的职责就是「把问题列出来」，任何情况下都不该在这里因阻塞问题抛异常，
-        // 否则前端只会收到一条错误消息，看不到完整报告。故这里固定传 false，
-        // 由返回的 level=BLOCK 让前端决定是否允许导入。
-        ParsedImport parsed = parseAttendees(rows, mode, operator(), false);
+        // parseAttendees 内部不再抛阻塞异常（拦截上移到 importAttendees），
+        // 预检可以直接复用，得到 blockers 让前端展示「哪些行不会入库」。
+        ParsedImport parsed = parseAttendees(rows, mode, operator());
 
         // 预检不能落库，但 replace 模式至少要知道会不会因为已有签到被拒
         int signedTotal = checkinMapper.countAll();
@@ -318,7 +368,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         data.put("channelStats", new ArrayList<>(channelMap.values()));
         data.put("unmappedChannels", parsed.mappingMissingDetails);
         data.put("skipDetails", parsed.skipDetails);
-        data.put("flagMissingDetails", parsed.flagMissingDetails);
         return data;
     }
 
@@ -353,7 +402,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
      * 解析 + 逐行校验，产出待入库记录。
      * 预检与正式导入共用本方法，保证「预检说没问题」和「实际导进去」完全一致。
      */
-    private ParsedImport parseAttendees(List<String[]> rows, String mode, String operator, boolean strict)
+    private ParsedImport parseAttendees(List<String[]> rows, String mode, String operator)
     {
         ParsedImport parsed = new ParsedImport();
         parsed.batch = "B" + System.currentTimeMillis();
@@ -386,13 +435,19 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
         if (!missing.isEmpty())
         {
+            // 一个字段都没认出来 = 大概率是旧模板或别的表，直接说清楚，别让操作员猜
+            if (colIndex.isEmpty())
+            {
+                throw new ServiceException("无法识别表头，请使用系统提供的导入模板"
+                        + "（6 列：姓名、手机号、渠道来源、公司、职位、邮箱）。"
+                        + "旧版模板（含「渠道标识」「票种」「是否参与抽奖」等表头）已不再支持。");
+            }
             throw new ServiceException("缺少必填列：" + String.join("、", missing)
-                    + "。正确表头应包含：姓名、手机号、渠道来源（权益类型/参与抽奖/公司/职位/邮箱为选填）");
+                    + "。请使用系统提供的导入模板（6 列：姓名、手机号、渠道来源、公司、职位、邮箱），"
+                    + "旧版模板已不再支持。");
         }
 
         int phoneIdx = colIndex.get("phone");
-        Integer ticketIdx = colIndex.get("ticketType");
-        Integer drawIdx = colIndex.get("drawEligible");
         Map<String, ChannelMapping> channelMappings = loadChannelMappings();
         // 文件内手机号去重：重复行按后者覆盖前者，但要在预检里提示
         Map<String, Integer> seenPhones = new HashMap<>();
@@ -440,11 +495,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 continue;
             }
 
-            // 权益类型 / 参与抽奖为选填：先取行内值，再按渠道来源查映射。
-            // 映射优先（2026-10-19 用户确认）：命中映射时忽略行内填写。
-            String explicitTicket = ticketIdx == null ? "" : cell(row, ticketIdx).trim();
-            String explicitDraw = drawIdx == null ? "" : cell(row, drawIdx).trim();
-
+            // 权益类型 / 参与抽奖完全由映射决定：
+            // 6 列模板不含这两列，票务表里即使有也不再读取。
             ChannelMapping mapping = channelMappings.get(channel);
             String ticketType;
             int drawEligible;
@@ -453,31 +505,19 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 ticketType = mapping.benefitType;
                 drawEligible = mapping.drawEligible;
                 parsed.mappedChannels.add(channel);
-                // 映射判「否」但行内填了「是」：以映射为准，但提示一下，
-                // 多数是映射配错了或行内填错，不提示就会被静默吞掉
-                if (drawEligible == 0 && "是".equals(explicitDraw))
-                {
-                    addWarning(parsed.warnings, lineNo,
-                            "渠道「" + channel + "」映射为不参与抽奖，已忽略行内填写的「是」");
-                }
             }
             else
             {
-                // 未配置映射：回退到行内值；都为空时按「否」入库并提示补映射
-                ticketType = explicitTicket;
-                drawEligible = "是".equals(explicitDraw) ? 1 : 0;
+                // 未配置映射 = 硬性白名单不通过（2026-10-21 用户确认）：
+                // 映射表是「允许导入的渠道」唯一事实源，未配置的渠道一律不入库。
+                // 以前是回退行内值，结果没配映射的渠道也能进名单，再被抽中——
+                // 只能靠事后人肉比对才发现，所以这里直接跳过并计入 blocker。
+                parsed.skipped++;
                 parsed.mappingMissing++;
                 addMappingMissingDetail(parsed.mappingMissingDetails, lineNo, channel);
                 addBlocker(parsed.blockers, lineNo,
-                        "渠道来源「" + channel + "」未配置映射，将回退到行内填写的权益/资格");
-                if (explicitDraw.isEmpty())
-                {
-                    // 该行照常入库（按「否」），只做单独计数提示：漏填行名单缺失会
-                    // 让持有人失去抽奖资格，现场需要知道具体行号去补。不并入 skipped——
-                    // skipped 表示「没导入」，这行导入了，混在一起统计会对不上。
-                    parsed.drawFlagMissing++;
-                    addFlagMissingDetail(parsed.flagMissingDetails, lineNo);
-                }
+                        "渠道来源「" + channel + "」未配置映射，该渠道不允许导入（可在「渠道来源映射」新增后重试）");
+                continue;
             }
 
             KconAttendee a = new KconAttendee();
@@ -510,16 +550,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             parsed.rows.add(a);
         }
 
-        // 严格模式：存在阻塞问题就整批拒绝，不落库。
-        // 这件事必须放在写入之前——「未配置映射」以前只是警告，
-        // 结果映射漏配的渠道静默回退成「不参与抽奖」，现场抽完才发现人不在池子里。
-        if (strict && !parsed.blockers.isEmpty())
-        {
-            String first = String.valueOf(parsed.blockers.get(0).get("reason"));
-            throw new ServiceException("导入已中止：" + first
-                    + "（共 " + parsed.blockers.size() + " 处）。"
-                    + "请先在「渠道来源映射」补全，或改用强制导入。");
-        }
         return parsed;
     }
 
@@ -528,14 +558,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     {
         final List<KconAttendee> rows = new ArrayList<>();
         final List<Map<String, Object>> skipDetails = new ArrayList<>();
-        final List<Map<String, Object>> flagMissingDetails = new ArrayList<>();
         final List<Map<String, Object>> mappingMissingDetails = new ArrayList<>();
         final List<Map<String, Object>> blockers = new ArrayList<>();
         final List<Map<String, Object>> warnings = new ArrayList<>();
         /** 命中了映射的渠道集合（预检判断某渠道是否已配置用） */
         final java.util.Set<String> mappedChannels = new java.util.HashSet<>();
         int skipped;
-        int drawFlagMissing;
         int mappingMissing;
         String batch;
     }
@@ -598,9 +626,34 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     }
 
     /**
+     * 校验渠道来源是否已配置映射（映射表即允许入库的渠道白名单）。
+     *
+     * 只返回「合理」的错误：映射表整表为空时放行并告警，否则新装环境还没配映射时
+     * 连一条名单都新增不了，把人锁死在门外比漏校验更难恢复。
+     */
+    private void checkChannelAllowed(String channel)
+    {
+        if (channel == null || channel.trim().isEmpty())
+        {
+            throw new ServiceException("渠道来源不能为空，请从已配置的渠道中选择");
+        }
+        Map<String, ChannelMapping> mappings = loadChannelMappings();
+        if (mappings.isEmpty())
+        {
+            log.warn("渠道映射表为空，跳过渠道白名单校验 channel={}", channel);
+            return;
+        }
+        if (!mappings.containsKey(channel.trim()))
+        {
+            throw new ServiceException("渠道来源「" + channel.trim()
+                    + "」未配置映射，不允许使用。请先在「设置 → 渠道来源映射」新增该渠道。");
+        }
+    }
+
+    /**
      * 读取渠道来源映射表 kcon_channel_mapping。
      *
-     * 读取失败或表为空时返回空映射，导入回退到行内值。
+     * 读取失败或表为空时返回空映射。
      */
     private Map<String, ChannelMapping> loadChannelMappings()
     {
@@ -643,22 +696,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         Map<String, Object> d = new LinkedHashMap<>();
         d.put("row", lineNo);
         d.put("channel", channel);
-        d.put("reason", "渠道来源未配置映射，已回退到行内「参与抽奖」列");
-        details.add(d);
-    }
-
-    /** 漏填「参与抽奖」明细上限：与失败行明细一致，够现场定位即可 */
-    private static final int FLAG_MISSING_DETAIL_LIMIT = 20;
-
-    private void addFlagMissingDetail(List<Map<String, Object>> details, int lineNo)
-    {
-        if (details.size() >= FLAG_MISSING_DETAIL_LIMIT)
-        {
-            return;
-        }
-        Map<String, Object> d = new LinkedHashMap<>();
-        d.put("row", lineNo);
-        d.put("reason", "未配置映射且参与抽奖为空（按「否」处理）");
+        d.put("reason", "渠道来源未配置映射，该渠道不允许导入");
         details.add(d);
     }
 

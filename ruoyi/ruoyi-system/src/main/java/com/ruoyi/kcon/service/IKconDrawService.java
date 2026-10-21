@@ -47,12 +47,13 @@ public interface IKconDrawService
     int voidLastBatch(String sessionCode, String operator);
 
     /**
-     * 计算抽奖池端口号（已签到 ∩ 未中奖 ∩ 真正买票者；下午场再剔除上午场已中奖）
+     * 计算抽奖池端口号（今日已签到 ∩ 未中奖 ∩ 具备抽奖资格；下午场再剔除上午场已中奖）
      *
-     * spec 006：资格判定 = 名单显式列 draw_eligible=1 且 渠道 ∉ 黑名单
-     * 且 票种不含黑名单关键字。黑名单走系统参数实时判定（改参数当场生效），
-     * 详见 DrawEligibility。本方法是池的唯一计算入口，改这里即同时覆盖
-     * 抽奖执行与大屏/控制台的 poolCount。
+     * 资格判定（spec 008/010）：draw_eligible 由「渠道来源映射」写入，映射标记「是」才有资格；
+     * 再叠加渠道黑名单与权益类型关键字黑名单（系统参数实时生效，参数缺失时回退内置默认值）。
+     * 黑名单是映射表之前的兜底机制，详见 DrawEligibility。
+     *
+     * 本方法是池的唯一计算入口，改这里即同时覆盖抽奖执行与大屏/控制台的 poolCount。
      */
     List<Integer> calcPool(String sessionCode);
 

@@ -99,6 +99,20 @@ public class AttendeeController extends BaseController
         return toAjax(attendeeService.updateAttendee(attendee));
     }
 
+    /**
+     * 恢复某人的权益类型为「跟随渠道来源映射」。
+     * 人工改过权益类型后会打标记，映射重算与导入都不再覆盖；
+     * 调用本接口清掉标记并按映射回填，用于撤销人工修改。
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:attendee:edit')")
+    @Log(title = "参会人名单-恢复权益", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
+    @PutMapping("/{id}/ticket-type/reset")
+    public AjaxResult resetTicketType(@PathVariable Long id)
+    {
+        return toAjax(attendeeService.clearManualTicketType(id));
+    }
+
     /** 删除 */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:remove')")
     @Log(title = "参会人名单", businessType = BusinessType.DELETE)
@@ -117,8 +131,7 @@ public class AttendeeController extends BaseController
     @RepeatSubmit
     @PostMapping("/import")
     public AjaxResult importData(@RequestParam("file") MultipartFile file,
-                                 @RequestParam(defaultValue = "append") String mode,
-                                 @RequestParam(defaultValue = "true") boolean strict)
+                                 @RequestParam(defaultValue = "append") String mode)
     {
         if (file == null || file.isEmpty())
         {
@@ -127,7 +140,7 @@ public class AttendeeController extends BaseController
         String name = file.getOriginalFilename();
         try (InputStream is = file.getInputStream())
         {
-            Map<String, Object> stat = attendeeService.importAttendees(is, name, mode, getUsername(), strict);
+            Map<String, Object> stat = attendeeService.importAttendees(is, name, mode, getUsername());
             String msg = String.format("导入完成：新增 %s，更新 %s，跳过 %s（有效名单共 %s 人）",
                     stat.get("inserted"), stat.get("updated"), stat.get("skipped"), stat.get("total"));
             return AjaxResult.success(msg, stat);
@@ -149,8 +162,7 @@ public class AttendeeController extends BaseController
     @PreAuthorize("@ss.hasPermi('kcon:attendee:import')")
     @PostMapping("/import/preview")
     public AjaxResult previewImport(@RequestParam("file") MultipartFile file,
-                                    @RequestParam(defaultValue = "append") String mode,
-                                    @RequestParam(defaultValue = "true") boolean strict)
+                                    @RequestParam(defaultValue = "append") String mode)
     {
         if (file == null || file.isEmpty())
         {
@@ -158,7 +170,7 @@ public class AttendeeController extends BaseController
         }
         try (InputStream is = file.getInputStream())
         {
-            return success(attendeeService.previewImport(is, file.getOriginalFilename(), mode, strict));
+            return success(attendeeService.previewImport(is, file.getOriginalFilename(), mode));
         }
         catch (ServiceException e)
         {
@@ -170,7 +182,7 @@ public class AttendeeController extends BaseController
         }
     }
 
-    /** 下载导入模板（8 列：姓名/手机号/公司/职位/邮箱/渠道来源/权益类型/参与抽奖） */
+    /** 下载导入模板（6 列：姓名/手机号/渠道来源/公司/职位/邮箱；权益与抽奖资格由渠道映射决定） */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:import')")
     @Log(title = "名单模板下载", businessType = BusinessType.EXPORT)
     @PostMapping("/template")

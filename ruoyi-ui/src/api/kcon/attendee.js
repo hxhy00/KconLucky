@@ -20,6 +20,11 @@ export function updateAttendee(data) {
   return request({ url: '/admin/attendee', method: 'put', data })
 }
 
+// 恢复某人的权益类型为「跟随渠道来源映射」（清掉人工修改标记）
+export function resetAttendeeTicketType(id) {
+  return request({ url: '/admin/attendee/' + id + '/ticket-type/reset', method: 'put' })
+}
+
 // 删除
 export function delAttendee(ids) {
   return request({ url: '/admin/attendee/' + ids, method: 'delete' })

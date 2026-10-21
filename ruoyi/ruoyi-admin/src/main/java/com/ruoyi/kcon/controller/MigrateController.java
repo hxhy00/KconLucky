@@ -20,9 +20,11 @@ import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.exception.ServiceException;
+import com.ruoyi.kcon.service.SensitiveOperationGuard;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,6 +69,9 @@ public class MigrateController extends BaseController
 
     @Value("${spring.datasource.druid.master.password:}")
     private String dbPassword;
+
+    @Autowired
+    private SensitiveOperationGuard sensitiveOperationGuard;
 
     /**
      * 导出全量数据为 .sql（下载到浏览器）
@@ -176,8 +181,18 @@ public class MigrateController extends BaseController
     @Log(title = "全量数据恢复", businessType = BusinessType.UPDATE)
     @RepeatSubmit
     @PostMapping("/restore")
-    public AjaxResult restore(@RequestParam("file") MultipartFile file) throws Exception
+    public AjaxResult restore(@RequestParam(value = "file", required = false) MultipartFile file,
+                              @RequestParam(value = "password", required = false) String password) throws Exception
     {
+        // 恢复会用备份整体覆盖数据库，破坏力大于清场，同样要求输入本人密码。
+        // 放在最前面：校验不过时连上传的临时文件都不落盘。
+        //
+        // 注意 file 必须是 required = false。若写成 @RequestParam("file")，
+        // 缺文件时 Spring 会在进入本方法**之前**就抛 MissingServletRequestPartException，
+        // 密码校验根本没机会执行 —— 表现就是「密码错了却提示请选择文件」，
+        // 让人误以为密码校验形同虚设。缺文件的判断交给下面的业务分支。
+        sensitiveOperationGuard.verifyCurrentUserPassword(password, "数据恢复");
+
         if (file == null || file.isEmpty())
         {
             return error("请选择要恢复的 .sql 文件");

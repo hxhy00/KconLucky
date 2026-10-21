@@ -182,8 +182,10 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         data.put("checkinTime", format(checkinTime));
         data.put("repeat", repeat);
         data.put("name", attendee.getName());
-        // 新语义：ticket_type 已改为「权益类型」（午餐/周边），不是抽奖筛选输入；
-        // 签到成功页需要展示给观众。抽奖资格 drawEligible 仍然不下发。
+        // ticket_type 承载「权益类型」（午餐/周边文案），由渠道来源映射带出，
+        // 不是票务侧的票种。签到成功页需要展示给观众，故下发。
+        // 注：该值在服务端仍会参与 DrawEligibility 的关键字黑名单过滤（如文案含「媒体」「免费」），
+        // 但那是兜底机制，正常数据下资格已由映射的 draw_eligible 决定。抽奖资格本身始终不下发。
         data.put("ticketType", attendee.getTicketType());
 
         // spec 006 FR-A4：非买票者照常签到、照常拿端口号，不拦截。

@@ -10,6 +10,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="phone"        column="phone"         />
         <result property="channel"      column="channel"       />
         <result property="ticketType"   column="ticket_type"   />
+        <result property="ticketTypeManual" column="ticket_type_manual" />
         <result property="drawEligible" column="draw_eligible" />
         <result property="company"      column="company"       />
         <result property="email"        column="email"         />
@@ -29,7 +30,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 基础列 -->
     <sql id="selectAttendeeVo">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
+               a.company, a.email,
                a.attend_count, a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark
         from kcon_attendee a
@@ -37,7 +39,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 含签到状态的列（管理端列表 / 详情用） -->
     <sql id="selectAttendeeWithSignVo">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
+               a.company, a.email,
                a.attend_count, a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark,
                c.port_no as port_no,
@@ -60,7 +63,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectByTail4" parameterType="String" resultMap="KconAttendeeResult">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.draw_eligible, a.company, a.email,
+        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
+               a.company, a.email,
                a.attend_count, a.position, a.phone_tail4,
                c.port_no as port_no,
                c.checkin_time as checkin_time,
@@ -123,18 +127,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </insert>
 
     <!-- 追加导入：按手机号去重，存在则更新（选填字段为空时不覆盖已有值；
-         draw_eligible 是第 5 必填列、始终显式写，以最新导入为准直接覆盖） -->
+         draw_eligible 始终显式写，以最新导入为准直接覆盖）
+
+         ticket_type 特殊处理：若该行 ticket_type_manual = 1（人工改过权益类型），
+         导入不覆盖，保留人工值。理由：映射只能表达「整个渠道的默认权益」，
+         而人工修改表达的是「这个人的特例」，后者必须优先，否则一重导名单就丢。
+         人工值若要恢复为跟随映射，在名单页清掉手工标记即可（见 clearManualTicketType）。 -->
     <insert id="upsertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_attendee
-        (name, phone, channel, ticket_type, draw_eligible, company, email, attend_count, position,
-         phone_tail4, import_batch, create_by, create_time)
+        (name, phone, channel, ticket_type, ticket_type_manual, draw_eligible, company, email,
+         attend_count, position, phone_tail4, import_batch, create_by, create_time)
         values
-        (#{name}, #{phone}, #{channel}, #{ticketType}, #{drawEligible}, #{company}, #{email},
+        (#{name}, #{phone}, #{channel}, #{ticketType}, 0, #{drawEligible}, #{company}, #{email},
          #{attendCount}, #{position}, #{phoneTail4}, #{importBatch}, #{createBy}, now())
         on duplicate key update
             name          = values(name),
             channel       = values(channel),
-            ticket_type   = values(ticket_type),
+            <!-- 手工标记保留：ifnull 兜底，历史行该列为 NULL 时按 0 处理 -->
+            ticket_type   = if(ifnull(ticket_type_manual, 0) = 1, ticket_type, values(ticket_type)),
             draw_eligible = values(draw_eligible),
             company       = coalesce(values(company), company),
             email        = coalesce(values(email), email),
@@ -152,6 +162,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="phone != null and phone != ''">phone = #{phone},</if>
             <if test="channel != null">channel = #{channel},</if>
             <if test="ticketType != null">ticket_type = #{ticketType},</if>
+            <if test="ticketTypeManual != null">ticket_type_manual = #{ticketTypeManual},</if>
             <if test="drawEligible != null">draw_eligible = #{drawEligible},</if>
             <if test="company != null">company = #{company},</if>
             <if test="email != null">email = #{email},</if>
@@ -235,8 +246,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          会出现「已中奖但资格是否」的矛盾；反之若从 0 改 1，他们也无法
          重进已结束场次的奖池。这类人只能人工核对，故单独列出。 -->
 
+    <!-- 权益类型：人工改过（ticket_type_manual=1）的行不覆盖，保留人工值；
+         参与抽奖仍以映射为准，人工标记不保护该字段。 -->
     <sql id="resyncSetClause">
-        set a.ticket_type   = m.benefit_type,
+        set a.ticket_type   = if(ifnull(a.ticket_type_manual, 0) = 1, a.ticket_type, m.benefit_type),
             a.draw_eligible = m.draw_eligible,
             a.update_time   = now()
     </sql>
@@ -285,6 +298,26 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and (exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
             or exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2))
         order by a.id
+    </select>
+
+    <!-- ================= 手工权益标记的恢复 =================
+         把某行恢复为「跟随渠道来源映射」：清标记 + 立即按映射回填权益类型。
+         用一条 statement 完成，避免先清标记再重算之间的窗口期。
+         无映射的渠道（映射已被删）只清标记、权益置空，与原重算口径一致。 -->
+    <update id="clearManualTicketType" parameterType="Long">
+        update kcon_attendee a
+        left join kcon_channel_mapping m on m.channel_source = a.channel
+        set a.ticket_type        = m.benefit_type,
+            a.ticket_type_manual = 0,
+            a.update_time        = now()
+        where a.id = #{id}
+    </update>
+
+    <!-- 统计某渠道里被人工改过权益的人数（重算结果里提示「N 人未覆盖」用） -->
+    <select id="countManualByChannel" parameterType="String" resultType="int">
+        select count(*) from kcon_attendee a
+        where a.channel = #{channel}
+          and ifnull(a.ticket_type_manual, 0) = 1
     </select>
 
 </mapper>

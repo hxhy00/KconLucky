@@ -16,8 +16,26 @@
             请输入「<b style="color: #f56c6c;">清场</b>」二字确认执行：
           </p>
           <el-input v-model="confirmText" placeholder="清场" maxlength="4" style="width: 200px;" />
+
+          <p style="color: #606266; line-height: 1.8; margin-top: 16px;">
+            请输入<b style="color: #f56c6c;">当前账号的登录密码</b>完成二次验证：
+          </p>
+          <el-input
+            v-model="resetPassword"
+            type="password"
+            placeholder="当前账号密码"
+            show-password
+            maxlength="64"
+            style="width: 260px;"
+            @keyup.enter.native="handleReset"
+          />
+          <div class="text-muted" style="margin-top: 8px; font-size: 12px; line-height: 1.7;">
+            清场会记入操作日志并带上操作人用户名，密码连续输错 5 次将锁定 30 分钟。
+          </div>
+
           <div style="margin-top: 20px;">
-            <el-button type="danger" icon="el-icon-delete" :loading="resetting" :disabled="confirmText !== '清场'"
+            <el-button type="danger" icon="el-icon-delete" :loading="resetting"
+                       :disabled="confirmText !== '清场' || !resetPassword"
                        v-hasPermi="['kcon:data:reset']"
                        @click="handleReset">执 行 清 场</el-button>
             <el-button v-hasPermi="['kcon:attendee:export']" icon="el-icon-download" @click="handleExportSignSheet">
@@ -79,11 +97,19 @@
                 <div class="el-upload__tip" slot="tip">上限 20MB，建议先用「导出」得到备份样例</div>
               </el-upload>
 
+              <el-input
+                v-model="restorePassword"
+                type="password"
+                placeholder="请输入当前账号密码后点恢复"
+                show-password
+                maxlength="64"
+                style="margin-top: 14px;"
+              />
               <el-button
                 type="danger"
                 icon="el-icon-refresh-left"
                 :loading="restoring"
-                :disabled="!restoreFile"
+                :disabled="!restoreFile || !restorePassword"
                 style="margin-top: 14px;"
                 v-hasRole="['admin']"
                 @click="handleRestore"
@@ -106,31 +132,40 @@ export default {
       activeTab: "reset",
       // 清场
       confirmText: "",
+      resetPassword: "",
       resetting: false,
       // 迁移
       exporting: false,
       restoring: false,
-      restoreFile: null
+      restoreFile: null,
+      restorePassword: ""
     }
   },
   methods: {
     /* ==================== 数据清场 ==================== */
     handleReset() {
       if (this.confirmText !== "清场") return
+      if (!this.resetPassword) {
+        this.$modal.msgWarning("请输入当前账号的登录密码")
+        return
+      }
       this.$confirm(
         "将清空名单、签到、中奖、核验日志，并把端口号池与奖品已抽数归零。确认执行？",
         "数据清场",
         { type: "warning", confirmButtonText: "确认清场", cancelButtonText: "取消" }
       ).then(() => {
         this.resetting = true
-        // 必须挂 catch：请求失败时拦截器已弹错，但这里若不兜底，
-        // resetData() 的 reject 会成为 unhandled rejection 打到控制台；
-        // 且失败时不能清空 confirmText，否则用户要在输入框重敲「清场」。
-        resetData().then(res => {
+        // 密码校验失败时后端返回业务错误码，由 request 拦截器统一弹出文案
+        //（含剩余可尝试次数），这里不再重复弹「失败」，只做收尾。
+        resetData(this.resetPassword).then(res => {
           this.$modal.msgSuccess(res.msg || "清场完成")
           this.confirmText = ""
+          this.resetPassword = ""
         }).catch(() => {
-          this.$modal.msgError("清场失败，数据未变更，请重试。")
+          // 密码保留在输入框：多数情况是输错一位，让用户直接改比重敲省事；
+          // 但清空密码可避免离开座位后他人直接点按钮。
+          this.resetPassword = ""
+          this.confirmText = ""
         }).finally(() => { this.resetting = false })
       }).catch(() => {})
     },
@@ -188,6 +223,10 @@ export default {
         this.$modal.msgWarning("请先选择要恢复的 .sql 文件")
         return
       }
+      if (!this.restorePassword) {
+        this.$modal.msgWarning("请输入当前账号的登录密码")
+        return
+      }
       this.$prompt(
         "此操作会用备份内容整体覆盖当前数据库，现场已签到与已中奖的数据将丢失。\n" +
         "系统会先自动存档当前数据。请输入「确认恢复」四个字以继续。",
@@ -202,6 +241,8 @@ export default {
       ).then(() => {
         const formData = new FormData()
         formData.append("file", this.restoreFile)
+        // 密码放表单字段而非 URL 参数：URL 会被 nginx access log 与浏览器历史留存
+        formData.append("password", this.restorePassword)
         this.restoring = true
         import("@/utils/request").then(({ default: request }) => {
           request({
@@ -214,8 +255,10 @@ export default {
             this.$modal.msgSuccess(res.msg || "恢复完成")
             if (this.$refs.upload) this.$refs.upload.clearFiles()
             this.restoreFile = null
+            this.restorePassword = ""
           }).catch(() => {
-            this.$modal.msgError("恢复失败，当前数据未被覆盖，请检查文件后重试。")
+            // 后端在密码错误时不会落盘、也不会碰数据库，当前数据仍是安全的
+            this.restorePassword = ""
           }).finally(() => { this.restoring = false })
         }).catch(() => {
           // 动态 import 失败（网络中断导致 chunk 拉不下来）时，
