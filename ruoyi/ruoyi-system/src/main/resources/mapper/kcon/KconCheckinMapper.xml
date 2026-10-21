@@ -12,6 +12,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="checkinDate" column="checkin_date" />
         <result property="checkinTime" column="checkin_time" />
         <result property="createTime"  column="create_time"  />
+        <!-- selectAllPorts 联表带出的资格字段，漏映射会让 calcPool 判定全部失败（池恒为空） -->
+        <result property="channel"      column="channel"      />
+        <result property="ticketType"   column="ticket_type"  />
+        <result property="drawEligible" column="draw_eligible"/>
     </resultMap>
 
     <sql id="selectCheckinVo">
