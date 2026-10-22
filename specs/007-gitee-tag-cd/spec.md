@@ -1,10 +1,15 @@
 # Feature Specification: Gitee Tag 自动部署（CD）
 
+> **已废弃（2026-10-22）**：本特性已从仓库移除。Gitee 的 Tag Push WebHook 已撤销，
+> `deploy/`、`scripts/deploy.sh`、nginx 的 `/hooks/deploy` 反代与 compose 的
+> `extra_hosts` 均已删除，发布改为手动执行（见 `docs/04-部署运行.md` 第 7.4 节）。
+> 本文档仅作历史归档，不再代表当前实现。
+
 **Feature Branch**: `docs/007-gitee-tag-cd`（实现分支 `feature/011-tag-cd`）
 
 **Created**: 2026-10-19
 
-**Status**: 已实现（仓库侧）；服务器安装与 Gitee WebHook 配置待执行
+**Status**: 已废弃（原状态：已实现；2026-10-22 停用 CD 并移除代码）
 
 **Input**: 用户要求：本地打 tag 并 push 后，服务器能够及时响应并更新。方案选定为 Gitee WebHook + 服务器脚本，只认 `v*`，自动执行幂等数据库迁移。
 

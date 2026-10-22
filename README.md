@@ -17,7 +17,7 @@ KCon 2026 大会现场的**自助签到**与**抽奖大屏**系统。参会人�
 | 渠道映射 | 按票务渠道标识映射签到入口，支持变更后重算存量名单 |
 | 权限分级 | 管理员与现场工作人员分权；清场/恢复需二次输入本人密码 |
 | 公网部署 | Docker Compose 一键编排，镜像本地构建后推送，服务器不做构建 |
-| Tag 自动部署 | 推送 `v*` tag 触发 CD，健康检查失败自动回滚上一版本 |
+| 手动发布 | 本地构建镜像 → `docker save \| ssh \| docker load` → 服务器启动并做健康检查 |
 
 ---
 
@@ -120,8 +120,7 @@ KconLucky/
 ├── checkin-h5/                 # 签到 H5 源码
 ├── screen/                     # 抽奖大屏源码
 ├── sql/                        # 初始化脚本与幂等迁移脚本
-├── scripts/                    # 备份 / 恢复 / 清场 / 部署脚本
-├── deploy/                     # WebHook 接收器安装
+├── scripts/                    # 备份 / 恢复 / 清场 / 启动脚本
 ├── docs/                       # 需求、数据库、接口、部署、缺口、Mock 台账
 ├── specs/                      # 按序号的特性规格
 └── CONTRIBUTING.md             # 分支模型与贡献规范
@@ -156,7 +155,7 @@ cd screen && npm install && npm run dev
 
 - **本地构建**：`docker buildx build --platform linux/amd64` 构建 backend / web 镜像
 - **推送启动**：`docker save | ssh | docker load` → `docker compose up -d --no-build`
-- **自动部署**：推送 `v*` tag 触发 CD，健康检查失败自动回滚上一版本
+- **发布方式**：手动执行（2026-10-22 起停用 tag 触发的 CD）
 
 > 本地为 Apple Silicon 时必须显式 `--platform linux/amd64`，否则产物是 arm 镜像，服务器起不来。
 

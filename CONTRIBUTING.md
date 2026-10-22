@@ -103,7 +103,7 @@ git push origin main develop --tags   # 手动执行
 git branch -d hotfix/020-fix-xxx
 ```
 
-> 推送 `v*` tag 会触发 CD 自动部署，见 `docs/04-部署运行.md` 第 7.4 节。
+> 2026-10-22 起已停用 CD：推送 tag 不再触发自动部署，发布按 `docs/04-部署运行.md` 第 7.4 节手动执行。
 
 ---
 
