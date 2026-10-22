@@ -44,6 +44,18 @@ public class ChannelMappingController extends BaseController
         return getDataTable(list);
     }
 
+    /**
+     * 下拉框数据源：不分页返回全量映射。
+     * 名单页/导入预检的渠道下拉若走分页 /list，写死 pageSize 会在映射条数
+     * 超过页大小时静默截断；映射表是白名单且量级很小（几十条），直接全量返回。
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:channel:list')")
+    @GetMapping("/optionselect")
+    public AjaxResult optionselect()
+    {
+        return success(channelMappingService.selectList(new KconChannelMapping()));
+    }
+
     @PreAuthorize("@ss.hasPermi('kcon:channel:add')")
     @Log(title = "渠道来源映射", businessType = BusinessType.INSERT)
     @RepeatSubmit

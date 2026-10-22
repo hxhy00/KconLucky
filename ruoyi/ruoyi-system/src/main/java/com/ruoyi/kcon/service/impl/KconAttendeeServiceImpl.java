@@ -135,11 +135,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     @Override
     public int updateAttendee(KconAttendee attendee)
     {
+        // 全程只查一次旧记录：渠道校验与「人工权益」判定共用，避免同一事务里重复打库
+        KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
         // 只在渠道真被改过时才校验：存量里可能还有未配置映射的渠道（如历史遗留的「媒体」），
         // 若每次编辑都校验，这些人连补个邮箱都改不了，只能靠改库。
         if (attendee.getChannel() != null && !attendee.getChannel().trim().isEmpty())
         {
-            KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
             String oldChannel = old == null ? null : old.getChannel();
             if (!attendee.getChannel().trim().equals(oldChannel))
             {
@@ -151,7 +152,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             attendee.setPhone(attendee.getPhone().trim());
             attendee.setPhoneTail4(tail4(attendee.getPhone()));
         }
-        markManualTicketTypeIfChanged(attendee);
+        markManualTicketTypeIfChanged(attendee, old);
         int rows = attendeeMapper.updateAttendee(attendee);
         // 乐观锁：带了版本号却更新 0 行，说明这条名单在编辑期间被别人改过（或已被删除）。
         // 与其静默覆盖对方的修改，不如明确拒绝让人重新打开——现场两人同时补录名单时，
@@ -175,14 +176,13 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
      * 值没变则不动标记——否则每次点开保存都会把「跟随映射」误判成「人工改过」，
      * 之后改映射这批人就再也同步不到了。
      */
-    private void markManualTicketTypeIfChanged(KconAttendee attendee)
+    private void markManualTicketTypeIfChanged(KconAttendee attendee, KconAttendee old)
     {
         String incoming = attendee.getTicketType();
         if (incoming == null)
         {
             return;
         }
-        KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
         if (old == null)
         {
             return;
@@ -628,8 +628,9 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     /**
      * 校验渠道来源是否已配置映射（映射表即允许入库的渠道白名单）。
      *
-     * 只返回「合理」的错误：映射表整表为空时放行并告警，否则新装环境还没配映射时
-     * 连一条名单都新增不了，把人锁死在门外比漏校验更难恢复。
+     * 映射表整表为空时同样拒绝：与导入口径一致（空表 = 不放行任何渠道），
+     * 否则「手工能加、导入不能导」会让空表状态下的白名单形同虚设。
+     * 手工新增的入口本身就在「渠道来源映射」菜单旁，配置路径很短，不会把人锁死。
      */
     private void checkChannelAllowed(String channel)
     {
@@ -640,8 +641,9 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         Map<String, ChannelMapping> mappings = loadChannelMappings();
         if (mappings.isEmpty())
         {
-            log.warn("渠道映射表为空，跳过渠道白名单校验 channel={}", channel);
-            return;
+            // 与导入同一口径：映射表是「允许使用的渠道」唯一事实源，空表 = 一个渠道都不放行。
+            // 以前这里告警放行、导入却整批拒绝，口径不一致会让人以为「手工能加就说明渠道合法」。
+            throw new ServiceException("渠道来源映射表为空，请先在「渠道来源映射」中配置后再添加名单");
         }
         if (!mappings.containsKey(channel.trim()))
         {
@@ -679,7 +681,9 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
         catch (Exception e)
         {
-            log.warn("读取渠道来源映射失败，导入将回退到行内值", e);
+            // 读取失败按空表处理：白名单口径下空表 = 一个渠道都不放行（手工与导入一致），
+            // 宁可现场先配置好映射，也不能在映射读不到时悄悄放行未配置的渠道
+            log.warn("读取渠道来源映射失败，白名单校验按空表处理（所有渠道将被拒绝）", e);
         }
         return map;
     }

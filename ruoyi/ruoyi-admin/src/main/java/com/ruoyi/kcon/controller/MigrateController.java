@@ -177,8 +177,12 @@ public class MigrateController extends BaseController
      *
      * 会先自动导出当前数据作为存档（失败即中止），再执行恢复。
      */
+    // isSaveRequestData = false：password 是顶层 @RequestParam String，
+    // LogAspect 的 excludeParamNames（fastjson 属性过滤器）对顶层标量参数不生效，
+    // 记录请求参数会把明文密码写进 sys_oper_log.oper_param。
+    // 上传文件名无审计价值（MultipartFile 本就被 isFilterObject 过滤）。
     @PreAuthorize("@ss.hasRole('admin')")
-    @Log(title = "全量数据恢复", businessType = BusinessType.UPDATE)
+    @Log(title = "全量数据恢复", businessType = BusinessType.UPDATE, isSaveRequestData = false)
     @RepeatSubmit
     @PostMapping("/restore")
     public AjaxResult restore(@RequestParam(value = "file", required = false) MultipartFile file,

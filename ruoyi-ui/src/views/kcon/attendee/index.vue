@@ -318,7 +318,7 @@ import {
   listAttendee, getAttendee, addAttendee, updateAttendee, delAttendee,
   importAttendee, previewImport, resetAttendeeTicketType
 } from "@/api/kcon/attendee"
-import { listChannelMapping } from "@/api/kcon/channel"
+import { optionselectChannelMapping } from "@/api/kcon/channel"
 
 // 静默增量轮询间隔
 const POLL_INTERVAL = 10000
@@ -510,10 +510,10 @@ export default {
       this.open = false
       this.reset()
     },
-    // 渠道下拉数据源：映射表即白名单，只允许从中选择
+    // 渠道下拉数据源：映射表即白名单，只允许从中选择；optionselect 不分页，避免写死 pageSize 截断
     loadChannelOptions() {
-      listChannelMapping({ pageNum: 1, pageSize: 200 }).then(res => {
-        this.channelOptions = res.rows || []
+      optionselectChannelMapping().then(res => {
+        this.channelOptions = res.data || []
       }).catch(() => {
         this.channelOptions = []
       })

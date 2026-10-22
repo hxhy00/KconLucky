@@ -5,8 +5,11 @@
 --
 --   1. 新增角色「现场工作人员」role_key = kcon_staff（role_id = 3）
 --   2. 新增账号 staff（显示名：现场工作人员），仅绑定 kcon_staff
+--      （账号按 user_name 幂等，不硬编码 user_id，避免误伤占用同 ID 的账号）
 --   3. 按「日常能用」授权，明确收回以下高危权限：
 --        kcon:attendee:remove  删名单
+--        kcon:attendee:import  名单导入（含 replace 模式可整表替换，
+--                              等效删名单，一并收回；名单维护由超管负责）
 --        kcon:winner:void      作废中奖
 --        kcon:prize:*          奖品增删改
 --        kcon:data:reset       数据清场（含整个「数据管理」菜单）
@@ -21,7 +24,7 @@
 --   ★ 上线后请立刻在「系统管理 → 用户管理」里改成自己的密码 ★
 --   散列与 kcon 库现有账号一致（BCrypt）。
 --
--- 幂等：可重复执行（INSERT IGNORE / DELETE 后重建授权）。
+-- 幂等：可重复执行（NOT EXISTS 防重插 / DELETE 后重建授权）。
 -- 执行：docker compose exec -T mysql mysql -uroot -p<pwd> kcon_lucky < sql/kcon_migrate_v8.sql
 -- =============================================================
 
@@ -40,23 +43,29 @@ VALUES
 
 -- -------------------------------------------------------------
 -- 2. 账号：staff
---    若已存在同名账号，不覆盖其密码（避免重复执行把用户改过的密码刷回初始值）
+--    不硬编码 user_id：目标库的自增段可能已被手工建号占用（INSERT IGNORE 静默跳过
+--    会导致 kcon_staff 被授给一个无关账号、且 DELETE 角色绑定会伤及无辜）。
+--    改为按 user_name 幂等：不存在才插入（user_id 走自增），存在则沿用原账号
+--    不覆盖密码（避免重复执行把用户改过的密码刷回初始值）。
 -- -------------------------------------------------------------
-INSERT IGNORE INTO `sys_user`
-  (`user_id`, `dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `create_by`, `create_time`, `remark`)
-VALUES
-  (3, NULL, 'staff', '现场工作人员', '00', '', '',
-   '2', '',
-   '$2a$10$h30sQpojfdnRzS82ER//2eFEzdBj2SudcZv/Aj0lDVvWsd1ME2GiC',
-   '0', '0', '', NULL, 'admin', NOW(),
-   '现场操作账号，绑定「现场工作人员」角色');
+INSERT INTO `sys_user`
+  (`dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `create_by`, `create_time`, `remark`)
+SELECT NULL, 'staff', '现场工作人员', '00', '', '', '2', '',
+  '$2a$10$h30sQpojfdnRzS82ER//2eFEzdBj2SudcZv/Aj0lDVvWsd1ME2GiC',
+  '0', '0', '', NULL, 'admin', NOW(),
+  '现场操作账号，绑定「现场工作人员」角色'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_user` WHERE `user_name` = 'staff' AND `del_flag` = '0');
 
-INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`) VALUES (3, 3);
+-- 角色绑定也按 user_name 关联，不依赖具体 user_id
+INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`)
+SELECT u.`user_id`, 3 FROM `sys_user` u
+ WHERE u.`user_name` = 'staff' AND u.`del_flag` = '0';
 
--- 确保只绑定 kcon_staff：若被误加了其它角色，这里清掉（保留 admin 除外）
-DELETE FROM `sys_user_role`
- WHERE `user_id` = 3
-   AND `role_id` <> 3;
+-- 确保只绑定 kcon_staff：清掉该账号被误加的其它角色（按 user_name 定位，不会伤及他人）
+DELETE ur FROM `sys_user_role` ur
+  JOIN `sys_user` u ON u.`user_id` = ur.`user_id`
+ WHERE u.`user_name` = 'staff'
+   AND ur.`role_id` <> 3;
 
 -- -------------------------------------------------------------
 -- 3. 授权：工作人员 = 全部业务菜单 - 高危项
@@ -77,6 +86,7 @@ SELECT 3, `menu_id` FROM `sys_menu`
 --   3009 渠道来源映射 + 3060/3061/3062 映射增删改
 --   3003 奖品设置 + 3020/3021/3022 奖品增删改
 --   3013 名单删除
+--   3014 名单导入（replace 模式可整表替换，等效删名单）
 --   3040 中奖作废
 DELETE FROM `sys_role_menu`
  WHERE `role_id` = 3
@@ -85,6 +95,7 @@ DELETE FROM `sys_role_menu`
         3003, 3020, 3021, 3022,                 -- 奖品设置及其按钮
         3009, 3060, 3061, 3062,                 -- 渠道来源映射及其按钮
         3013,                                   -- 名单删除
+        3014,                                   -- 名单导入（replace 模式可整表替换，等效删名单）
         3040                                    -- 中奖作废
    );
 
@@ -120,6 +131,8 @@ SELECT
   (SELECT COUNT(*) FROM `sys_role_menu` rm
      JOIN `sys_menu` m ON m.menu_id = rm.menu_id
     WHERE rm.role_id = 3 AND m.perms LIKE 'kcon:%' AND m.perms <> '') AS `staff业务权限数`,
-  (SELECT COUNT(*) FROM `sys_user_role` WHERE `user_id` = 3) AS `staff角色绑定数`,
+  (SELECT COUNT(*) FROM `sys_user_role` ur
+     JOIN `sys_user` u ON u.user_id = ur.user_id
+    WHERE u.user_name = 'staff' AND u.del_flag = '0') AS `staff角色绑定数`,
   (SELECT COUNT(*) FROM `sys_role_menu`
-    WHERE `role_id` = 3 AND `menu_id` IN (3006, 3013, 3040)) AS `高危项残留数（应为0）`;
+    WHERE `role_id` = 3 AND `menu_id` IN (3006, 3013, 3014, 3040)) AS `高危项残留数（应为0）`;

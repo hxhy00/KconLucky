@@ -4,6 +4,11 @@ export function listChannelMapping(query) {
   return request({ url: '/admin/channel-mapping/list', method: 'get', params: query })
 }
 
+// 下拉数据源：不分页全量（避免写死 pageSize 截断渠道列表）
+export function optionselectChannelMapping() {
+  return request({ url: '/admin/channel-mapping/optionselect', method: 'get' })
+}
+
 export function addChannelMapping(data) {
   return request({ url: '/admin/channel-mapping', method: 'post', data })
 }

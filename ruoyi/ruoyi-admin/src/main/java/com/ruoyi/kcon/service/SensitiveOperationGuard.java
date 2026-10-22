@@ -125,8 +125,10 @@ public class SensitiveOperationGuard
     /**
      * 单账号的失败计数。
      *
-     * 锁定条件：失败次数达到上限，且距最后一次失败未超过锁定时长。
-     * 超过锁定时长后计数自动失效，等价于解锁。
+     * 滑动时间窗语义：距最后一次失败超过锁定时长，计数整体失效（等价于重新开始计）。
+     * isExpired 不设 count 前置条件——否则未达上限时计数永不衰减，
+     * 「一小时内零散输错 5 次（中间穿插成功以外）」也会触发锁定，与「连续失败」不符。
+     * 校验成功会在 verifyCurrentUserPassword 里 remove，正常使用不受影响。
      */
     private static class FailureState
     {
@@ -141,7 +143,7 @@ public class SensitiveOperationGuard
 
         boolean isExpired(long now)
         {
-            return count >= MAX_FAILURES && now - lastFailureAt > LOCK_MILLIS;
+            return now - lastFailureAt > LOCK_MILLIS;
         }
     }
 }

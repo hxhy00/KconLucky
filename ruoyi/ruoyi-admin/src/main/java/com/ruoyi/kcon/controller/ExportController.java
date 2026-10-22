@@ -151,8 +151,12 @@ public class ExportController extends BaseController
      * 「端口号已耗尽」、抽奖报「该场次奖项已抽完」。
      * 因此把可回滚的 UPDATE 放在 TRUNCATE 之前：一旦失败，数据仍在。
      */
+    // isSaveRequestData = false：请求体里只有明文密码，LogAspect 的参数序列化
+    // 对 Map 的 key 不做属性排除（EXCLUDE_PROPERTIES 只对 bean 字段生效），
+    // 若记录请求参数，密码会明文落进 sys_oper_log.oper_param。
+    // 审计需要的信息（谁、何时、执行了清场）由 @Log 的 title 与操作人字段承载。
     @PreAuthorize("@ss.hasPermi('kcon:data:reset')")
-    @Log(title = "数据清场", businessType = BusinessType.CLEAN)
+    @Log(title = "数据清场", businessType = BusinessType.CLEAN, isSaveRequestData = false)
     @RepeatSubmit
     @PostMapping("/reset")
     public AjaxResult reset(@RequestBody Map<String, String> body)

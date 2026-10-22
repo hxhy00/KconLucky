@@ -59,7 +59,7 @@ public interface IKconAttendeeService
      * 与 {@link #importAttendees} 共用同一套解析逻辑，保证预检结论与实际导入一致。
      *
      * @return level(BLOCK/WARN/OK) / totalRows / willInsert / willUpdate / willSkip /
-     *         blockers / warnings / channelStats / unmappedChannels / skipDetails / flagMissingDetails
+     *         blockers / warnings / channelStats / unmappedChannels / skipDetails
      */
     Map<String, Object> previewImport(InputStream is, String fileName, String mode);
 
