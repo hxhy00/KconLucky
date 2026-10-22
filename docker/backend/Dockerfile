@@ -21,7 +21,16 @@ RUN mvn -B clean package -DskipTests
 # --- 运行阶段 ---
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx768m"
+# 堆上限按「宿主机总内存」定，不是按业务量定。
+# 线上实例为 1.7G 内存且无 swap，原先 -Xmx768m 会让 JVM 常驻逼近 900m，
+# 叠加 MySQL(约 400m) 与系统进程后直接 OOM Kill。
+# 本系统是单场活动、并发极低的写入型负载，-Xmx512m 足够；
+# 宁可让 GC 多跑几次，也不要把机器推到 OOM。
+#
+# !! 这里的值会被 docker-compose.yml 的 environment.JAVA_OPTS 覆盖 !!
+# compose 里写的是 ${JAVA_OPTS:-<同上默认值>}，两处默认值必须保持一致；
+# 只想临时调参时改 .env 即可，不要只改本文件——改了也不生效。
+ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError"
 
 # mysql-client：管理端「数据迁移」功能需要调 mysqldump / mysql
 # 导出全量 .sql 备份与从 .sql 恢复（需求 AC-11），不自研 SQL 导出器。
