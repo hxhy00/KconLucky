@@ -54,6 +54,13 @@
             <artifactId>ruoyi-generator</artifactId>
         </dependency>
 
+        <!-- 测试：JUnit 5 + Mockito + MockMvc（版本由 spring-boot-dependencies 管理） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>

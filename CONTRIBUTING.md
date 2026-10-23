@@ -131,7 +131,7 @@ git branch -d hotfix/020-fix-xxx
 
 1. 需求落 `docs/01-需求规格.md`，接口契约落 `docs/03-接口设计.md`；有规格需求时先建 `specs/{seq}-{主题}/`。
 2. 从 `develop` 切出 `feature/{seq}-{主题}`，分支与 `specs/` 目录的 `{seq}-{主题}` **必须同源**。
-3. 本地构建自测通过后提交，`--no-ff` 合回 `develop`。
+3. 本地构建与自动化测试通过后提交（`cd ruoyi && mvn -B test`、`ruoyi-ui` / `checkin-h5` 的 `npm test`），`--no-ff` 合回 `develop`。
 4. 涉 DDL 的改动，同时更新新装基线脚本与幂等迁移脚本（`sql/kcon_migrate_v*.sql`），否则新装环境与现有环境行为不一致。
 5. 发布走 `release/*`，见第 3 节。
 

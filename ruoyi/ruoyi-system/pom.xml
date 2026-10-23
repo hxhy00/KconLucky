@@ -35,6 +35,13 @@
             <version>3.5.3</version>
         </dependency>
 
+        <!-- 测试：JUnit 5 + Mockito + AssertJ（版本由 spring-boot-dependencies 管理） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
 </project>
