@@ -98,10 +98,11 @@ VALUES
   -- 日志子菜单
   (3004, '中奖日志',   3100, 1, 'winner',    'kcon/winner/index',    '', '', 1, 0, 'C', '0', '0', 'kcon:winner:list',  'money', 'admin', NOW(), '中奖名单与状态'),
   (3008, '核验日志',   3100, 2, 'verifylog', 'kcon/verifylog/index', '', '', 1, 0, 'C', '0', '0', 'kcon:verify:query', 'list',  'admin', NOW(), '核验操作追溯'),
-  -- 设置子菜单
+  -- 设置子菜单（顺序：奖品设置 → 渠道来源映射 → 用户管理 → 数据管理）
   (3003, '奖品设置',   3200, 1, 'prize',     'kcon/prize/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:prize:list',   'star',  'admin', NOW(), '场次奖项档位'),
-  (3006, '数据管理',   3200, 2, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）'),
-  (3009, '渠道来源映射', 3200, 3, 'channel-mapping', 'kcon/channel/index', '', '', 1, 0, 'C', '0', '0', 'kcon:channel:list', 'dict', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖');
+  (3009, '渠道来源映射', 3200, 2, 'channel-mapping', 'kcon/channel/index', '', '', 1, 0, 'C', '0', '0', 'kcon:channel:list', 'dict', 'admin', NOW(), '渠道来源 → 权益类型 / 参与抽奖'),
+  (3016, '用户管理',   3200, 3, 'staff',     'kcon/staff/index',     '', '', 1, 0, 'C', '0', '0', 'kcon:staff:list',   'peoples', 'admin', NOW(), '现场工作人员账号（仅超管）'),
+  (3006, '数据管理',   3200, 4, 'data',      'kcon/data/index',      '', 'KconDataManage', 1, 0, 'C', '0', '0', 'kcon:data:reset', 'tool', 'admin', NOW(), '数据清场与全量备份迁移（仅超管）');
 
 -- -------------------------------------------------------------
 -- 按钮权限
@@ -130,7 +131,12 @@ VALUES
   -- 渠道来源映射（spec 010）
   (3060, '映射新增', 3009, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:add',    '#', 'admin', NOW(), ''),
   (3061, '映射修改', 3009, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:edit',   '#', 'admin', NOW(), ''),
-  (3062, '映射删除', 3009, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:remove', '#', 'admin', NOW(), '');
+  (3062, '映射删除', 3009, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:channel:remove', '#', 'admin', NOW(), ''),
+  -- 工作人员账号（设置 → 用户管理）
+  (3017, '账号新增',   3016, 1, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:staff:add',      '#', 'admin', NOW(), ''),
+  (3018, '重置密码',   3016, 2, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:staff:resetPwd', '#', 'admin', NOW(), ''),
+  (3019, '启用停用',   3016, 3, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:staff:edit',     '#', 'admin', NOW(), ''),
+  (3023, '账号删除',   3016, 4, '', NULL, '', '', 1, 0, 'F', '0', '0', 'kcon:staff:remove',   '#', 'admin', NOW(), '');
 -- 数据迁移不再单独设按钮权限：后端用 @ss.hasRole('admin') 控制，
 -- 前端对应按钮用 v-hasRole，避免留下一个谁也不校验的 kcon:data:migrate 权限点
 
@@ -159,15 +165,21 @@ DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
    AND `menu_id` IN (3009, 3060, 3061, 3062);
 
--- 普通角色不该持有「删名单」与「作废中奖」：这两个动作会改写现场已产生的数据
+-- 普通角色不该持有「删名单」「作废中奖」「账号管理」：
+-- 前两个动作会改写现场已产生的数据，账号管理只留给超管
 DELETE FROM `sys_role_menu`
  WHERE `role_id` = 2
-   AND `menu_id` IN (3013, 3040, 3020, 3021, 3022);
+   AND `menu_id` IN (3013, 3040, 3020, 3021, 3022,
+                     3016, 3017, 3018, 3019, 3023);
 
 -- -------------------------------------------------------------
--- 现场工作人员（role_id=3，role_key=kcon_staff）
+-- 现场工作人员（role_key=kcon_staff）
 -- 日常签到/抽奖/核验能干活，但清场、作废中奖、改映射/奖品一律不可。
--- 账号与授权见 kcon_migrate_v8.sql（新装环境两者都要执行）。
+-- 角色与授权：本脚本（基线）；账号：kcon_migrate_v8.sql（默认停用，需超管重置密码后启用）；
+-- 用户管理菜单：kcon_migrate_v9.sql。新装环境三者依次执行。
+--
+-- 注意：这里写死 role_id=3 只适用于**新装基线**（00-ry-base 只创建 1/2 两个角色，
+-- 3 必然空闲）。**不要在存量库执行本脚本**，存量升级请走 v8/v9（按 role_key 解析）。
 -- -------------------------------------------------------------
 INSERT IGNORE INTO `sys_role`
   (`role_id`, `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`, `status`, `del_flag`, `create_by`, `create_time`, `remark`)
@@ -189,6 +201,7 @@ DELETE FROM `sys_role_menu`
         3009, 3060, 3061, 3062,   -- 渠道来源映射
         3013,                     -- 名单删除
         3014,                     -- 名单导入（replace 模式可整表替换，等效删名单）
+        3016, 3017, 3018, 3019, 3023, -- 用户管理（工作人员不能管理账号）
         3040                      -- 中奖作废
    );
 

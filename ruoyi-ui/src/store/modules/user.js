@@ -80,13 +80,15 @@ const user = {
           commit('SET_NICK_NAME', user.nickName)
           commit('SET_AVATAR', avatar)
           /* 初始密码提示 */
-          if(res.isDefaultModifyPwd) {
+          // 工作人员账号的密码由管理员统一重置，不能自助修改，因此不弹改密提醒
+          const isStaff = (res.roles || []).includes('kcon_staff')
+          if(!isStaff && res.isDefaultModifyPwd) {
             MessageBox.confirm('您的密码还是初始密码，请修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
             }).catch(() => {})
           }
           /* 过期密码提示 */
-          if(!res.isDefaultModifyPwd && res.isPasswordExpired) {
+          if(!isStaff && !res.isDefaultModifyPwd && res.isPasswordExpired) {
             MessageBox.confirm('您的密码已过期，请尽快修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
             }).catch(() => {})

@@ -48,8 +48,13 @@ public class ChannelMappingController extends BaseController
      * 下拉框数据源：不分页返回全量映射。
      * 名单页/导入预检的渠道下拉若走分页 /list，写死 pageSize 会在映射条数
      * 超过页大小时静默截断；映射表是白名单且量级很小（几十条），直接全量返回。
+     *
+     * 权限：除渠道映射维护者（kcon:channel:list）外，能给名单选渠道的角色
+     * （kcon:attendee:list，如现场工作人员）也必须可读——否则进入参会名单页
+     * 时下拉数据拉取失败，会弹「没有权限」，而该页本身是工作人员有权使用的。
+     * 这里只返回「渠道 → 权益/资格」配置，不含任何凭据。
      */
-    @PreAuthorize("@ss.hasPermi('kcon:channel:list')")
+    @PreAuthorize("@ss.hasAnyPermi('kcon:channel:list,kcon:attendee:list')")
     @GetMapping("/optionselect")
     public AjaxResult optionselect()
     {

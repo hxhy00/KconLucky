@@ -24,6 +24,7 @@ import com.ruoyi.common.utils.file.FileUploadUtils;
 import com.ruoyi.common.utils.file.FileUtils;
 import com.ruoyi.common.utils.file.MimeTypeUtils;
 import com.ruoyi.framework.web.service.TokenService;
+import com.ruoyi.kcon.service.StaffRoleGuard;
 import com.ruoyi.system.service.ISysUserService;
 
 /**
@@ -40,6 +41,9 @@ public class SysProfileController extends BaseController
 
     @Autowired
     private TokenService tokenService;
+
+    @Autowired
+    private StaffRoleGuard staffRoleGuard;
 
     /**
      * 个人信息
@@ -95,6 +99,17 @@ public class SysProfileController extends BaseController
         String oldPassword = params.get("oldPassword");
         String newPassword = params.get("newPassword");
         LoginUser loginUser = getLoginUser();
+        // 现场工作人员账号的密码由管理员在「设置 → 用户管理」统一重置，禁止自助修改。
+        // 用 StaffRoleGuard 查数据库实时绑定，而不是 Token 里的角色快照：
+        // 管理员刚调整过角色时，旧令牌最长还能存活 30 分钟，快照会让限制延迟生效。
+        if (staffRoleGuard.isStaff(loginUser.getUserId()))
+        {
+            return error("工作人员账号的密码由管理员统一设置，请联系管理员重置");
+        }
+        if (StringUtils.isEmpty(newPassword))
+        {
+            return error("新密码不能为空");
+        }
         Long userId = loginUser.getUserId();
         SysUser user = userService.selectUserById(userId);
         String password = user.getPassword();

@@ -2,8 +2,8 @@
   <div class="app-container">
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
       <div slot="title">
-        导入名单时按「渠道来源」匹配本表，命中后用这里的「权益类型 / 参与抽奖」覆盖行内值。
-        未配置的渠道来源会回退到行内值，并在导入结果里单独提示。
+        本表是「允许使用的渠道来源」唯一白名单：导入名单与手工新增都按这里匹配，
+        未配置的渠道会被直接拒绝。命中后用这里的「权益类型 / 参与抽奖」作为该渠道人员的默认值。
       </div>
     </el-alert>
 
@@ -181,7 +181,8 @@ export default {
       })
     },
     handleDelete(row) {
-      this.$modal.confirm(`确认删除渠道来源「${row.channelSource}」的映射？删除后导入将回退到行内值。`)
+      this.$modal.confirm(`确认删除渠道来源「${row.channelSource}」的映射？` +
+        `删除后该渠道将不再允许导入或新增名单，存量人员保持原值；如需继续使用请重新添加映射。`)
         .then(() => delChannelMapping(row.id))
         .then(() => {
           this.getList()

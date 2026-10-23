@@ -101,6 +101,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		</if>
 		<!-- 数据范围过滤 -->
 		${params.dataScope}
+		<!-- 固定排序：无 ORDER BY 时 MySQL 不保证翻页顺序，可能跨页重复/漏行 -->
+		order by u.create_time desc, u.user_id desc
 	</select>
 	
 	<select id="selectUnallocatedList" parameterType="SysUser" resultMap="SysUserResult">
@@ -197,7 +199,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
  		where user_id = #{userId}
 	</update>
 	
-	<update id="updateUserStatus" parameterType="SysUser">
+	<!-- 调用方只传 userId/status（Mapper 接口是 @Param 标量），操作人记录在 sys_oper_log -->
+	<update id="updateUserStatus">
  		update sys_user set status = #{status}, update_time = sysdate() where user_id = #{userId}
 	</update>
 	

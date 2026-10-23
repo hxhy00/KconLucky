@@ -40,7 +40,7 @@ export default {
           { required: true, message: "用户昵称不能为空", trigger: "blur" }
         ],
         email: [
-          { required: true, message: "邮箱地址不能为空", trigger: "blur" },
+          // 邮箱非必填：工作人员账号创建时只要求手机号，强制必填会让个人中心无法保存
           {
             type: "email",
             message: "请输入正确的邮箱地址",

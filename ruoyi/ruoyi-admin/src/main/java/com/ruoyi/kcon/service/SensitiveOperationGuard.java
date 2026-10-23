@@ -132,9 +132,10 @@ public class SensitiveOperationGuard
      */
     private static class FailureState
     {
-        int count;
+        /** 会在 compute 内写、在 compute 外读，声明 volatile 避免读到过期计数 */
+        volatile int count;
 
-        long lastFailureAt;
+        volatile long lastFailureAt;
 
         boolean isLocked()
         {

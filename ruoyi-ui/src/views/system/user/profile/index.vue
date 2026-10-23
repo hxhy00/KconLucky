@@ -48,7 +48,8 @@
             <el-tab-pane label="基本资料" name="userinfo">
               <userInfo :user="user" />
             </el-tab-pane>
-            <el-tab-pane label="修改密码" name="resetPwd">
+            <!-- 工作人员账号由管理员统一重置密码，不提供自助修改入口 -->
+            <el-tab-pane v-if="!isStaff" label="修改密码" name="resetPwd">
               <resetPwd />
             </el-tab-pane>
           </el-tabs>
@@ -75,9 +76,15 @@ export default {
       selectedTab: "userinfo"
     }
   },
+  computed: {
+    // 工作人员没有自助改密权限，隐藏「修改密码」页签（服务端同样会拒绝）
+    isStaff() {
+      return (this.$store.getters.roles || []).includes("kcon_staff")
+    }
+  },
   created() {
     const activeTab = this.$route.params && this.$route.params.activeTab
-    if (activeTab) {
+    if (activeTab && !(this.isStaff && activeTab === "resetPwd")) {
       this.selectedTab = activeTab
     }
     this.getUser()
