@@ -94,6 +94,32 @@ public class SysUser extends BaseEntity
     /** 角色ID */
     private Long roleId;
 
+    /** 岗位角色 key 列表（工作人员建号用，后端白名单校验后转 roleIds） */
+    private List<String> roleKeys;
+
+    /** 岗位角色名拼接（工作人员列表展示用，如「签到台、兑奖台」） */
+    private String roleNames;
+
+    public List<String> getRoleKeys()
+    {
+        return roleKeys;
+    }
+
+    public void setRoleKeys(List<String> roleKeys)
+    {
+        this.roleKeys = roleKeys;
+    }
+
+    public String getRoleNames()
+    {
+        return roleNames;
+    }
+
+    public void setRoleNames(String roleNames)
+    {
+        this.roleNames = roleNames;
+    }
+
     public SysUser()
     {
 

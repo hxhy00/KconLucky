@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.kcon.mapper.KconBenefitGrantMapper">
+
+    <resultMap type="KconBenefitGrant" id="KconBenefitGrantResult">
+        <id     property="id"           column="id"            />
+        <result property="grantType"    column="grant_type"    />
+        <result property="attendeeId"   column="attendee_id"   />
+        <result property="portNo"       column="port_no"       />
+        <result property="name"         column="name"          />
+        <result property="phone"        column="phone_mask"    />
+        <result property="item"         column="item"          />
+        <result property="sessionCode"  column="session_code"  />
+        <result property="tierName"     column="tier_name"     />
+        <result property="operator"     column="operator"      />
+        <result property="createTime"   column="create_time"   />
+    </resultMap>
+
+    <!-- 建表列 phone_mask 在写入前已由 Service 层掩码；查询侧不出明文 -->
+
+    <insert id="insertGrant" parameterType="KconBenefitGrant" useGeneratedKeys="true" keyProperty="id">
+        insert into kcon_benefit_grant
+        (grant_type, attendee_id, port_no, name, phone_mask, item, session_code, tier_name, operator, create_time)
+        values
+        (#{grantType}, #{attendeeId}, #{portNo}, #{name}, #{phone}, #{item},
+         #{sessionCode}, #{tierName}, #{operator}, now())
+    </insert>
+
+    <select id="countByAttendeeAndType" parameterType="KconBenefitGrant" resultType="int">
+        select count(*) from kcon_benefit_grant
+        where grant_type = #{grantType} and attendee_id = #{attendeeId}
+    </select>
+
+    <select id="selectGrantList" parameterType="KconBenefitGrant" resultMap="KconBenefitGrantResult">
+        select id, grant_type, attendee_id, port_no, name, phone_mask, item,
+               session_code, tier_name, operator, create_time
+        from kcon_benefit_grant
+        <where>
+            <if test="grantType != null and grantType != ''">
+                and grant_type = #{grantType}
+            </if>
+            <if test="portNo != null">
+                and port_no = #{portNo}
+            </if>
+            <if test="name != null and name != ''">
+                and name like concat('%', #{name}, '%')
+            </if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and create_time &lt;= #{params.endTime}
+            </if>
+        </where>
+        order by create_time desc, id desc
+    </select>
+
+    <update id="truncateGrant">
+        truncate table kcon_benefit_grant
+    </update>
+
+</mapper>

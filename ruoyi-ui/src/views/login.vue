@@ -2,51 +2,31 @@
   <div class="login">
     <el-form ref="loginForm" :model="loginForm" :rules="loginRules" class="login-form">
       <img :src="logoImg" class="login-logo" alt="KCon 2026" />
-      <h3 class="title">{{title}}</h3>
+      <h3 class="title">{{ title }}</h3>
       <el-form-item prop="username">
-        <el-input
-          v-model="loginForm.username"
-          type="text"
-          auto-complete="off"
-          placeholder="账号"
-        >
+        <el-input v-model="loginForm.username" type="text" auto-complete="off" maxlength="11" placeholder="手机号">
           <svg-icon slot="prefix" icon-class="user" class="el-input__icon input-icon" />
         </el-input>
       </el-form-item>
       <el-form-item prop="password">
-        <el-input
-          v-model="loginForm.password"
-          type="password"
-          auto-complete="off"
-          placeholder="密码"
-          @keyup.enter.native="handleLogin"
-        >
+        <el-input v-model="loginForm.password" type="password" auto-complete="off" placeholder="密码"
+          @keyup.enter.native="handleLogin">
           <svg-icon slot="prefix" icon-class="password" class="el-input__icon input-icon" />
         </el-input>
       </el-form-item>
       <el-form-item prop="code" v-if="captchaEnabled">
-        <el-input
-          v-model="loginForm.code"
-          auto-complete="off"
-          placeholder="验证码"
-          style="width: 63%"
-          @keyup.enter.native="handleLogin"
-        >
+        <el-input v-model="loginForm.code" auto-complete="off" placeholder="验证码" style="width: 63%"
+          @keyup.enter.native="handleLogin">
           <svg-icon slot="prefix" icon-class="validCode" class="el-input__icon input-icon" />
         </el-input>
         <div class="login-code">
-          <img :src="codeUrl" @click="getCode" class="login-code-img"/>
+          <img :src="codeUrl" @click="getCode" class="login-code-img" />
         </div>
       </el-form-item>
       <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住账号</el-checkbox>
       <el-form-item style="width:100%;">
-        <el-button
-          :loading="loading"
-          size="medium"
-          type="primary"
-          style="width:100%;"
-          @click.native.prevent="handleLogin"
-        >
+        <el-button :loading="loading" size="medium" type="primary" style="width:100%;"
+          @click.native.prevent="handleLogin">
           <span v-if="!loading">登 录</span>
           <span v-else>登 录 中...</span>
         </el-button>
@@ -90,7 +70,8 @@ export default {
       },
       loginRules: {
         username: [
-          { required: true, trigger: "blur", message: "请输入您的账号" }
+          { required: true, trigger: "blur", message: "请输入您的手机号" },
+          { pattern: /^1[3-9]\d{9}$/, trigger: "blur", message: "手机号格式不正确" }
         ],
         password: [
           { required: true, trigger: "blur", message: "请输入您的密码" }
@@ -107,7 +88,7 @@ export default {
   },
   watch: {
     $route: {
-      handler: function(route) {
+      handler: function (route) {
         this.redirect = route.query && route.query.redirect
       },
       immediate: true
@@ -155,7 +136,7 @@ export default {
           // 任何情况下都不保存密码，并顺手清掉历史残留
           Cookies.remove("password")
           this.$store.dispatch("Login", this.loginForm).then(() => {
-            this.$router.push({ path: this.redirect || "/" }).catch(()=>{})
+            this.$router.push({ path: this.redirect || "/" }).catch(() => { })
           }).catch(() => {
             this.loading = false
             if (this.captchaEnabled) {
@@ -178,6 +159,7 @@ export default {
   background-image: url("../assets/images/login-background.jpg");
   background-size: cover;
 }
+
 .login-logo {
   display: block;
   /* 新版是正方形透明 mark（原为 306×104 横版整图），宽度按方形调小 */
@@ -197,32 +179,39 @@ export default {
   width: 400px;
   padding: 25px 25px 5px 25px;
   z-index: 1;
+
   .el-input {
     height: 38px;
+
     input {
       height: 38px;
     }
   }
+
   .input-icon {
     height: 39px;
     width: 14px;
     margin-left: 2px;
   }
 }
+
 .login-tip {
   font-size: 13px;
   text-align: center;
   color: #bfbfbf;
 }
+
 .login-code {
   width: 33%;
   height: 38px;
   float: right;
+
   img {
     cursor: pointer;
     vertical-align: middle;
   }
 }
+
 .el-login-footer {
   height: 40px;
   line-height: 40px;
@@ -235,6 +224,7 @@ export default {
   font-size: 12px;
   letter-spacing: 1px;
 }
+
 .login-code-img {
   height: 38px;
 }

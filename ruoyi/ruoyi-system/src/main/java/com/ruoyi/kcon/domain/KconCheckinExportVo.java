@@ -32,9 +32,6 @@ public class KconCheckinExportVo
     @Excel(name = "邮箱")
     private String email;
 
-    @Excel(name = "第几次参加KCon")
-    private String attendCount;
-
     @Excel(name = "职务/年级")
     private String position;
 
@@ -43,6 +40,12 @@ public class KconCheckinExportVo
 
     @Excel(name = "签到时间")
     private String checkinTime;
+
+    @Excel(name = "权益发放")
+    private String benefitGrantFlag;
+
+    @Excel(name = "权益发放时间")
+    private String benefitGrantTime;
 
     @Excel(name = "是否中奖")
     private String winnerFlag;
@@ -113,16 +116,6 @@ public class KconCheckinExportVo
         this.email = email;
     }
 
-    public String getAttendCount()
-    {
-        return attendCount;
-    }
-
-    public void setAttendCount(String attendCount)
-    {
-        this.attendCount = attendCount;
-    }
-
     public String getPosition()
     {
         return position;
@@ -151,6 +144,26 @@ public class KconCheckinExportVo
     public void setCheckinTime(String checkinTime)
     {
         this.checkinTime = checkinTime;
+    }
+
+    public String getBenefitGrantFlag()
+    {
+        return benefitGrantFlag;
+    }
+
+    public void setBenefitGrantFlag(String benefitGrantFlag)
+    {
+        this.benefitGrantFlag = benefitGrantFlag;
+    }
+
+    public String getBenefitGrantTime()
+    {
+        return benefitGrantTime;
+    }
+
+    public void setBenefitGrantTime(String benefitGrantTime)
+    {
+        this.benefitGrantTime = benefitGrantTime;
     }
 
     public String getWinnerFlag()

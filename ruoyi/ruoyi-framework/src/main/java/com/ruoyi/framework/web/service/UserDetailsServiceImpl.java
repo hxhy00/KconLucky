@@ -34,13 +34,17 @@ public class UserDetailsServiceImpl implements UserDetailsService
     @Autowired
     private SysPermissionService permissionService;
 
+    /**
+     * 手机号登录：前端 username 字段实际传的是手机号，
+     * 全部人员（管理员与各岗位工作人员）统一用「手机号 + 密码」登录。
+     */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException
     {
-        SysUser user = userService.selectUserByUserName(username);
+        SysUser user = userService.selectUserByPhone(username);
         if (StringUtils.isNull(user))
         {
-            log.info("登录用户：{} 不存在.", username);
+            log.info("登录手机号：{} 不存在.", username);
             throw new ServiceException(MessageUtils.message("user.not.exists"));
         }
         else if (UserStatus.DELETED.getCode().equals(user.getDelFlag()))

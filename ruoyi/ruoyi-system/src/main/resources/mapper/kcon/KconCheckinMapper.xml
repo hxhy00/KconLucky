@@ -35,6 +35,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
+    <select id="selectByAttendeeId" parameterType="java.lang.Long" resultMap="KconCheckinResult">
+        <include refid="selectCheckinVo"/>
+        where attendee_id = #{attendeeId}
+        limit 1
+    </select>
+
     <insert id="insertCheckin" parameterType="KconCheckin" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_checkin (attendee_id, phone, port_no, checkin_date, checkin_time, create_time)
         values (#{attendeeId}, #{phone}, #{portNo}, #{checkinDate}, #{checkinTime}, now())
@@ -92,7 +98,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by c.checkin_time asc, c.id asc
     </select>
 
-    <!-- 导出：名单 + 端口号 + 签到 + 中奖情况 -->
+    <!-- 导出：名单 + 端口号 + 签到 + 中奖情况 + 权益发放 -->
     <select id="selectExportList" resultType="java.util.LinkedHashMap">
         select
             a.name                                       as `姓名`,
@@ -102,10 +108,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             case when a.draw_eligible = 1 then '是' else '否' end as `是否参与抽奖`,
             a.company                                    as `公司`,
             a.email                                      as `邮箱`,
-            a.attend_count                               as `第几次参加KCon`,
             a.position                                   as `职务/年级`,
             c.port_no                                    as `端口号`,
             date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as `签到时间`,
+            case when g.id is null then '未发放' else '已发放' end as `权益发放`,
+            date_format(g.create_time, '%Y-%m-%d %H:%i:%s')  as `权益发放时间`,
             case when w.id is null then '否' else '是' end as `是否中奖`,
             w.tier_name                                  as `奖项`,
             case
@@ -117,6 +124,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             end                                          as `是否已领取`
         from kcon_attendee a
         left join kcon_checkin c on c.attendee_id = a.id
+        left join kcon_benefit_grant g on g.attendee_id = a.id and g.grant_type = 'BENEFIT'
         left join kcon_winner  w on w.port_no = c.port_no and w.status != 2
         order by a.id
     </select>

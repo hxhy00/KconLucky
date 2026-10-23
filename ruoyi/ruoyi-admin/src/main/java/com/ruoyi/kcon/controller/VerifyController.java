@@ -46,8 +46,7 @@ public class VerifyController extends BaseController
      * 表现为「发放成功但表单没清空」这种很难查的现象。
      * 真正需要防重的是下面的 /receive（发放），它有状态校验且不可撤销。
      *
-     * 走 verifyAndLog：一次人工核验落一条日志。发放接口内部的前置校验、以及
-     * 发放后的状态刷新都不再写日志，避免一次兑奖在日志里留下多条记录。
+     * 走 verify（纯判定）：核验动作已不再留痕，发放追溯统一走 kcon_benefit_grant。
      */
     @PreAuthorize("@ss.hasPermi('kcon:verify:query')")
     @PostMapping
@@ -67,7 +66,7 @@ public class VerifyController extends BaseController
             return error("端口号格式错误");
         }
         String phone = body.get("phone") == null ? null : String.valueOf(body.get("phone"));
-        return success(verifyService.verifyAndLog(portNo, phone, getUsername()));
+        return success(verifyService.verify(portNo, phone, getUsername()));
     }
 
     /**

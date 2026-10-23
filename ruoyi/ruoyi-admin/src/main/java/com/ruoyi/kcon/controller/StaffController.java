@@ -19,6 +19,7 @@ import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.constant.CacheConstants;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.core.domain.entity.SysRole;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.domain.model.LoginUser;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -31,19 +32,23 @@ import com.ruoyi.framework.web.service.TokenService;
 import com.ruoyi.kcon.service.StaffRoleGuard;
 import com.ruoyi.system.service.ISysUserService;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 工作人员账号（kcon_staff）管理。
+ * 工作人员账号管理（按岗位：签到台 / 抽奖台 / 兑奖台）。
  *
  * 相比 RuoYi 原生「用户管理」，这里只做现场真正需要的事：
- * 列出工作人员、建号、重置密码、启用/停用、删除。
- * 刻意不暴露部门 / 岗位 / 角色多选 / 导入导出——那些字段现场用不到，
- * 且让管理员能自由勾角色会把「工作人员」与「超管」的边界交回到界面上。
+ * 列出工作人员、建号（选岗位）、重置密码、启用/停用、删除。
+ * 刻意不暴露部门 / 岗位多选以外的自由勾角色 / 导入导出——部门与岗位表现场用不到，
+ * 且让管理员自由勾任意角色会把「工作人员」与「超管」的边界交回到界面上。
  *
  * 安全边界（全部在服务端强制）：
- *   1. 角色由后端固定为 kcon_staff，忽略请求里携带的任何 roleIds / deptId / postIds；
- *   2. 重置密码、启停、删除前都校验目标账号确实绑定了 kcon_staff，避免被用来操作超管账号；
+ *   1. 角色只允许从三个岗位角色（签到台/抽奖台/兑奖台）中选择，可多选（一人多岗），
+ *      岗位 key 由后端白名单校验，请求里携带的 deptId / postIds 一律忽略；
+ *   2. 重置密码、启停、删除前都校验目标账号绑定的是岗位角色，避免被用来操作超管账号；
  *   3. 不允许删除或停用自己（防止把自己锁在门外）；
  *   4. 重置密码 / 停用 / 删除后立即吊销该账号已签发的登录令牌，
  *      否则旧浏览器最多还能继续操作 30 分钟（Token 会随请求续期，实际可能更久）。
@@ -74,38 +79,46 @@ public class StaffController extends BaseController
     private TokenService tokenService;
 
     /**
-     * 工作人员列表（只含绑定 kcon_staff 的账号）
+     * 可选岗位列表（建号页下拉数据源）
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:staff:list')")
+    @GetMapping("/roles")
+    public AjaxResult roles()
+    {
+        return success(staffRoleGuard.selectableRoles());
+    }
+
+    /**
+     * 工作人员列表（含绑定任一岗位角色的账号，并带岗位名）
      */
     @PreAuthorize("@ss.hasPermi('kcon:staff:list')")
     @GetMapping("/list")
     public TableDataInfo list(SysUser query)
     {
         // 必须先解析角色 ID 再 startPage：PageHelper 的分页参数只作用于下一条 SQL，
-        // 若放在 startPage 之后调用（内部会查 sys_role），分页会被角色查询吃掉，
-        // 用户列表退化为全量返回；pageSize 小于角色数时还会查不到 kcon_staff 直接报错。
-        Long roleId = staffRoleGuard.roleId();
+        // 若放在 startPage 之后调用（内部会查 sys_role），分页会被角色查询吃掉。
+        List<Long> roleIds = resolveAllRoleIdsStrict();
         startPage();
-        query.setRoleId(roleId);
-        List<SysUser> list = userService.selectAllocatedList(query);
+        query.setRoleIds(roleIds.toArray(new Long[0]));
+        List<SysUser> list = userService.selectAllocatedRoleInList(query);
+        // 岗位名展示：为每个账号补 roleNames（按绑定角色过滤出岗位角色名）
+        fillRoleNames(list);
         return getDataTable(list);
     }
 
     /**
      * 新增工作人员账号。
      *
-     * 只接受 userName / nickName / phonenumber / password，其余字段一律由后端覆盖，
-     * 避免前端多传一个 roleIds 就把超管角色加进去。
+     * 全员手机号登录：只需 姓名 / 手机号 / 密码 / 岗位（可多选）。
+     * user_name 不由前端填写——它只是 sys_user 的内部必填标识，
+     * 由后端按手机号自动生成（u_ + 手机号后 8 位，冲突时加随机后缀）；
+     * 登录身份完全由 phonenumber 承载。
      */
     @PreAuthorize("@ss.hasPermi('kcon:staff:add')")
     @Log(title = "工作人员账号", businessType = BusinessType.INSERT)
     @PostMapping
-    public AjaxResult add(@Validated @RequestBody SysUser user)
+    public AjaxResult add(@RequestBody SysUser user)
     {
-        String userName = trim(user.getUserName());
-        if (StringUtils.isEmpty(userName) || !userName.matches("[A-Za-z0-9_]{2,30}"))
-        {
-            return error("用户名需为 2-30 位字母、数字或下划线");
-        }
         String nickName = trim(user.getNickName());
         if (StringUtils.isEmpty(nickName))
         {
@@ -124,34 +137,69 @@ public class StaffController extends BaseController
         {
             return error("手机号格式不正确");
         }
-        checkPassword(userName, user.getPassword());
+        // 密码规则按「手机号」为身份来校验（不能与手机号相同）
+        checkPassword(phonenumber, user.getPassword());
+
+        // 岗位白名单校验：只接受三个岗位角色的 key，可多选（一人多岗）
+        Long[] roleIds = staffRoleGuard.resolveRoleIds(user.getRoleKeys());
+
+        // 手机号是登录身份，必须全场唯一
+        user.setUserId(null);
+        user.setPhonenumber(phonenumber);
+        if (!userService.checkPhoneUnique(user))
+        {
+            return error("该手机号已被其它账号使用");
+        }
 
         user.setUserId(null);
-        user.setUserName(userName);
+        user.setUserName(generateUserName(phonenumber));
         user.setNickName(nickName);
-        user.setPhonenumber(phonenumber);
         user.setEmail(null);
         user.setSex(null);
         user.setAvatar(null);
         user.setRemark(null);
         user.setPwdUpdateDate(null);
         // 以下三项是防止越权的关键：部门、岗位、角色都不由前端决定
+        // （角色取自上方白名单解析结果）
         user.setDeptId(null);
         user.setPostIds(null);
-        user.setRoleIds(new Long[] { staffRoleGuard.roleId() });
+        user.setRoleIds(roleIds);
         user.setStatus("0");
         user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
 
-        if (!userService.checkUserNameUnique(user))
-        {
-            return error("用户名「" + userName + "」已存在，请换一个");
-        }
-        if (!userService.checkPhoneUnique(user))
-        {
-            return error("手机号已被其它账号使用");
-        }
         user.setCreateBy(getUsername());
         return toAjax(userService.insertUser(user));
+    }
+
+    /**
+     * 生成内部用户名：u_ + 手机号后 8 位；极小概率撞名（历史数据）时追加 4 位随机数。
+     * user_name 只是 sys_user 的内部必填标识，登录与展示都不用它。
+     */
+    private String generateUserName(String phonenumber)
+    {
+        String base = "u_" + phonenumber.substring(phonenumber.length() - 8);
+        if (userService.checkUserNameUnique(userWithName(base)))
+        {
+            return base;
+        }
+        for (int i = 0; i < 5; i++)
+        {
+            String candidate = base + (int) (Math.random() * 9000 + 1000);
+            if (userService.checkUserNameUnique(userWithName(candidate)))
+            {
+                return candidate;
+            }
+        }
+        // 5 次都撞名几乎不可能；抛出让操作者看到明确错误而不是静默生成脏数据
+        throw new ServiceException("系统生成内部账号标识失败，请重试");
+    }
+
+    /** 构造仅带 user_name 的探测对象（userId 为 null 时 Service 按「新账号」语义比对） */
+    private SysUser userWithName(String userName)
+    {
+        SysUser probe = new SysUser();
+        probe.setUserName(userName);
+        return probe;
     }
 
     /**
@@ -265,6 +313,61 @@ public class StaffController extends BaseController
             throw new ServiceException("缺少账号 ID");
         }
         return user.getUserId();
+    }
+
+    /**
+     * 列表用岗位角色 ID：任何岗位缺失都报错（列表查不到岗位角色说明基线有问题），
+     * 与 isStaff 的「配置异常按非工作人员处理」口径不同——这里必须显式失败。
+     */
+    private List<Long> resolveAllRoleIdsStrict()
+    {
+        List<Long> ids = new ArrayList<>();
+        for (String key : StaffRoleGuard.staffRoleKeysArray())
+        {
+            SysRole role = staffRoleGuard.resolveRolePublic(key);
+            if (role == null)
+            {
+                throw new ServiceException("岗位角色「" + key + "」不存在，请检查 kcon_menu.sql 是否已执行");
+            }
+            ids.add(role.getRoleId());
+        }
+        return ids;
+    }
+
+    /** 为列表账号补充岗位名展示 */
+    private void fillRoleNames(List<SysUser> list)
+    {
+        Map<Long, String> nameByRoleId = new HashMap<>();
+        for (String key : StaffRoleGuard.staffRoleKeysArray())
+        {
+            SysRole role = staffRoleGuard.resolveRolePublic(key);
+            if (role != null)
+            {
+                nameByRoleId.put(role.getRoleId(), role.getRoleName());
+            }
+        }
+        for (SysUser user : list)
+        {
+            List<SysRole> roles = user.getRoles();
+            if (roles == null || roles.isEmpty())
+            {
+                continue;
+            }
+            StringBuilder names = new StringBuilder();
+            for (SysRole role : roles)
+            {
+                String name = nameByRoleId.get(role.getRoleId());
+                if (name != null)
+                {
+                    if (names.length() > 0)
+                    {
+                        names.append("、");
+                    }
+                    names.append(name);
+                }
+            }
+            user.setRoleNames(names.length() > 0 ? names.toString() : null);
+        }
     }
 
     /**

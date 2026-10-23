@@ -22,11 +22,19 @@ public interface SysUserMapper
 
     /**
      * 根据条件分页查询已配用户角色列表
-     * 
+     *
      * @param user 用户信息
      * @return 用户信息集合信息
      */
     public List<SysUser> selectAllocatedList(SysUser user);
+
+    /**
+     * 根据条件分页查询绑定了任一指定角色（user.roleIds）的用户列表
+     *
+     * @param user 用户信息（roleIds 必填）
+     * @return 用户信息集合信息
+     */
+    public List<SysUser> selectAllocatedRoleInList(SysUser user);
 
     /**
      * 根据条件分页查询未分配用户角色列表
@@ -43,6 +51,14 @@ public interface SysUserMapper
      * @return 用户对象信息
      */
     public SysUser selectUserByUserName(String userName);
+
+    /**
+     * 通过手机号查询用户（手机号登录用）
+     *
+     * @param phonenumber 手机号
+     * @return 用户对象信息
+     */
+    public SysUser selectUserByPhone(String phonenumber);
 
     /**
      * 通过用户ID查询用户

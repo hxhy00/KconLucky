@@ -86,10 +86,6 @@ public class KconAttendee extends BaseEntity
     @Size(max = 128, message = "邮箱长度不能超过 128")
     private String email;
 
-    /** 第几次参加 KCon（选填） */
-    @Excel(name = "第几次参加KCon")
-    private Integer attendCount;
-
     /** 职位（选填） */
     @Excel(name = "职位")
     @Size(max = 64, message = "职位长度不能超过 64")
@@ -112,6 +108,14 @@ public class KconAttendee extends BaseEntity
 
     /** 签到时间（联表带出） */
     private String checkinTime;
+
+    /** 权益发放状态：1=已发放（联表带出，防重复领取的可见标记） */
+    @Excel(name = "权益发放", readConverterExp = "1=已发放,0=未发放")
+    private Integer benefitGranted;
+
+    /** 权益发放时间（联表带出） */
+    @Excel(name = "权益发放时间")
+    private String benefitGrantTime;
 
     /** 手机号掩码（返回前端用，不入库） */
     private String phoneMask;
@@ -151,9 +155,6 @@ public class KconAttendee extends BaseEntity
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
 
-    public Integer getAttendCount() { return attendCount; }
-    public void setAttendCount(Integer attendCount) { this.attendCount = attendCount; }
-
     public String getPosition() { return position; }
     public void setPosition(String position) { this.position = position; }
 
@@ -171,6 +172,12 @@ public class KconAttendee extends BaseEntity
 
     public String getCheckinTime() { return checkinTime; }
     public void setCheckinTime(String checkinTime) { this.checkinTime = checkinTime; }
+
+    public Integer getBenefitGranted() { return benefitGranted; }
+    public void setBenefitGranted(Integer benefitGranted) { this.benefitGranted = benefitGranted; }
+
+    public String getBenefitGrantTime() { return benefitGrantTime; }
+    public void setBenefitGrantTime(String benefitGrantTime) { this.benefitGrantTime = benefitGrantTime; }
 
     public String getPhoneMask() { return phoneMask; }
     public void setPhoneMask(String phoneMask) { this.phoneMask = phoneMask; }

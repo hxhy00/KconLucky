@@ -120,9 +120,17 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     {
         // 渠道白名单：与导入同一口径。若手工新增能绕过去，映射表就不是唯一事实源了，
         // 现场仍会冒出没配映射的渠道人员，事后再靠人肉比对排查。
-        checkChannelAllowed(attendee.getChannel());
+        // 先 trim 再校验与落库：校验用 trim 后的值，落库也必须用同一个值，
+        // 否则「 嘉宾 」能通过白名单，却以带空格的形式存进库，后续按渠道重算会漏行。
+        String channel = attendee.getChannel() == null ? null : attendee.getChannel().trim();
+        attendee.setChannel(channel);
+        checkChannelAllowed(channel);
+        // 尾号必须基于 trim 后的手机号计算：带尾部空格时先取后四位会得到 "001 " 这类脏值
+        if (attendee.getPhone() != null)
+        {
+            attendee.setPhone(attendee.getPhone().trim());
+        }
         attendee.setPhoneTail4(tail4(attendee.getPhone()));
-        attendee.setPhone(attendee.getPhone().trim());
         // draw_eligible 列 NOT NULL：直连 API 新增时可能不带该字段，缺省按「否」
         // （与导入口径一致：只有显式「是」才进池），避免插 null 触发 SQL 错误
         if (attendee.getDrawEligible() == null)
@@ -139,13 +147,16 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         KconAttendee old = attendeeMapper.selectAttendeeById(attendee.getId());
         // 只在渠道真被改过时才校验：存量里可能还有未配置映射的渠道（如历史遗留的「媒体」），
         // 若每次编辑都校验，这些人连补个邮箱都改不了，只能靠改库。
+        // 校验与落库统一使用 trim 后的值，避免「白名单通过、库里带空格」。
         if (attendee.getChannel() != null && !attendee.getChannel().trim().isEmpty())
         {
+            String channel = attendee.getChannel().trim();
             String oldChannel = old == null ? null : old.getChannel();
-            if (!attendee.getChannel().trim().equals(oldChannel))
+            if (!channel.equals(oldChannel))
             {
-                checkChannelAllowed(attendee.getChannel());
+                checkChannelAllowed(channel);
             }
+            attendee.setChannel(channel);
         }
         if (attendee.getPhone() != null && !attendee.getPhone().trim().isEmpty())
         {
@@ -253,7 +264,7 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             String first = String.valueOf(parsed.blockers.get(0).get("reason"));
             throw new ServiceException("导入已中止：" + first
                     + "（共 " + parsed.blockers.size() + " 处）。"
-                    + "请先在「设置 → 渠道来源映射」补全该渠道后重新导入。");
+                    + "请先在「设置 → 渠道来源」补全该渠道后重新导入。");
         }
 
         // 3. replace 模式先清空
@@ -542,10 +553,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             {
                 a.setPosition(emptyToNull(cell(row, colIndex.get("position"))));
             }
-            if (colIndex.containsKey("attendCount"))
-            {
-                a.setAttendCount(parseInt(cell(row, colIndex.get("attendCount"))));
-            }
 
             parsed.rows.add(a);
         }
@@ -643,12 +650,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         {
             // 与导入同一口径：映射表是「允许使用的渠道」唯一事实源，空表 = 一个渠道都不放行。
             // 以前这里告警放行、导入却整批拒绝，口径不一致会让人以为「手工能加就说明渠道合法」。
-            throw new ServiceException("渠道来源映射表为空，请先在「渠道来源映射」中配置后再添加名单");
+            throw new ServiceException("渠道来源映射表为空，请先在「渠道来源」中配置后再添加名单");
         }
         if (!mappings.containsKey(channel.trim()))
         {
             throw new ServiceException("渠道来源「" + channel.trim()
-                    + "」未配置映射，不允许使用。请先在「设置 → 渠道来源映射」新增该渠道。");
+                    + "」未配置映射，不允许使用。请先在「设置 → 渠道来源」新增该渠道。");
         }
     }
 
@@ -731,8 +738,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         data.put("signRate", total == 0 ? 0.0
                 : Math.round(signed * 1000.0 / total) / 10.0);
         data.put("topCompanies", attendeeMapper.statTopCompanies(10));
-        Map<String, Object> dist = attendeeMapper.statAttendCount();
-        data.put("attendCountDist", dist != null ? dist : new LinkedHashMap<>());
         return data;
     }
 

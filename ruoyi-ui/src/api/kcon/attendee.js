@@ -25,6 +25,11 @@ export function resetAttendeeTicketType(id) {
   return request({ url: '/admin/attendee/' + id + '/ticket-type/reset', method: 'put' })
 }
 
+// 权益发放：需已签到、一人一条、发放后不可撤销
+export function grantBenefit(attendeeId) {
+  return request({ url: '/admin/benefit/grant/' + attendeeId, method: 'post' })
+}
+
 // 删除
 export function delAttendee(ids) {
   return request({ url: '/admin/attendee/' + ids, method: 'delete' })

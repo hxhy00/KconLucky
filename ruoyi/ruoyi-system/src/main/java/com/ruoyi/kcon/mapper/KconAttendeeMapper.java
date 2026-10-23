@@ -81,11 +81,6 @@ public interface KconAttendeeMapper
     List<Map<String, Object>> statTopCompanies(int limit);
 
     /**
-     * 首次 / 多次参加分布
-     */
-    Map<String, Object> statAttendCount();
-
-    /**
      * 统一签到表数据（按姓名排序）
      */
     List<KconAttendee> selectSignSheet();

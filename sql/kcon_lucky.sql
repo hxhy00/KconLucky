@@ -183,6 +183,8 @@ CREATE TABLE `kcon_winner` (
 
 -- -------------------------------------------------------------
 -- 3.8 kcon_verify_log 兑奖核验日志
+--     已退役：核验动作不再留痕，发放追溯统一走 kcon_benefit_grant。
+--     表暂保留供历史数据查询，新装环境不再写入。
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `kcon_verify_log`;
 CREATE TABLE `kcon_verify_log` (
@@ -195,7 +197,35 @@ CREATE TABLE `kcon_verify_log` (
   PRIMARY KEY (`id`),
   KEY `idx_port` (`port_no`),
   KEY `idx_create_time` (`create_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='兑奖核验日志';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='兑奖核验日志（已退役，仅存历史）';
+
+-- -------------------------------------------------------------
+-- 3.9 kcon_benefit_grant 参会人发放记录（发放日志）
+--     一张表记录「有人给参会人发放了什么」：
+--       grant_type = BENEFIT 权益发放（名单页「发放」按钮，一人一条）
+--       grant_type = PRIZE    奖品发放（兑奖确认成功时写一条）
+--     防重复领取：
+--       权益发放靠 uk_attendee_type 唯一键（一人一条权益记录），
+--       奖品发放靠 kcon_winner.status 0→1 条件更新（本表只做留痕）。
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `kcon_benefit_grant`;
+CREATE TABLE `kcon_benefit_grant` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `grant_type`   VARCHAR(16)  NOT NULL                COMMENT 'BENEFIT=权益发放 PRIZE=奖品发放',
+  `attendee_id`  BIGINT       DEFAULT NULL            COMMENT '参会人ID（奖品发放可能为空）',
+  `port_no`      INT          DEFAULT NULL            COMMENT '端口号（奖品发放必有；权益发放已签到时带出）',
+  `name`         VARCHAR(64)  DEFAULT NULL            COMMENT '姓名快照',
+  `phone_mask`   VARCHAR(20)  DEFAULT NULL            COMMENT '手机号（掩码存储）',
+  `item`         VARCHAR(128) DEFAULT NULL            COMMENT '发放内容快照：权益文本 / 奖项名',
+  `session_code` VARCHAR(16)  DEFAULT NULL            COMMENT '场次（奖品发放带出）',
+  `tier_name`    VARCHAR(32)  DEFAULT NULL            COMMENT '奖项（奖品发放带出）',
+  `operator`     VARCHAR(64)  DEFAULT NULL            COMMENT '操作人',
+  `create_time`  DATETIME     NOT NULL                COMMENT '发放时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_attendee_type` (`attendee_id`, `grant_type`),
+  KEY `idx_port` (`port_no`),
+  KEY `idx_type_time` (`grant_type`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='参会人发放记录（权益/奖品发放日志）';
 
 -- -------------------------------------------------------------
 -- 端口号池灌数：1-65535（幂等：已存在则跳过）

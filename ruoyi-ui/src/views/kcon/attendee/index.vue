@@ -9,7 +9,10 @@
         <el-input v-model="queryParams.phone" placeholder="手机号（支持模糊）" clearable @keyup.enter.native="handleQuery" />
       </el-form-item>
       <el-form-item label="渠道来源" prop="channel">
-        <el-input v-model="queryParams.channel" placeholder="如 重要嘉宾赠票" clearable @keyup.enter.native="handleQuery" />
+        <el-select v-model="queryParams.channel" placeholder="全部渠道" clearable filterable
+                   style="width: 180px;">
+          <el-option v-for="c in channelOptions" :key="c.channelSource" :label="c.channelSource" :value="c.channelSource" />
+        </el-select>
       </el-form-item>
       <el-form-item label="权益类型" prop="ticketType">
         <el-input v-model="queryParams.ticketType" placeholder="如 含自助午餐" clearable @keyup.enter.native="handleQuery" />
@@ -104,13 +107,6 @@
         </template>
       </el-table-column>
       <el-table-column label="职位" prop="position" width="110" />
-      <el-table-column label="参加次数" prop="attendCount" width="90" align="center">
-        <template slot-scope="scope">
-          <span v-if="scope.row.attendCount === 1">首次</span>
-          <span v-else-if="scope.row.attendCount > 1">第 {{ scope.row.attendCount }} 次</span>
-          <span v-else class="text-muted">—</span>
-        </template>
-      </el-table-column>
       <el-table-column label="端口号" prop="portNo" width="90" align="center">
         <template slot-scope="scope">
           <span v-if="scope.row.portNo" class="port-cell">{{ scope.row.portNo }}</span>
@@ -125,8 +121,18 @@
         </template>
       </el-table-column>
       <el-table-column label="签到时间" prop="checkinTime" width="160" />
-      <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+      <el-table-column label="权益发放" width="100" align="center">
         <template slot-scope="scope">
+          <el-tag v-if="scope.row.benefitGranted === 1" size="mini" type="success">已发放</el-tag>
+          <span v-else class="text-muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
+        <template slot-scope="scope">
+          <el-button size="mini" type="text" icon="el-icon-present"
+                     :disabled="scope.row.benefitGranted === 1 || scope.row.signed !== 1"
+                     @click="handleGrant(scope.row)"
+                     v-hasPermi="['kcon:benefit:grant']">发放</el-button>
           <el-button size="mini" type="text" icon="el-icon-edit" @click="handleUpdate(scope.row)"
                      v-hasPermi="['kcon:attendee:edit']">补录</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)"
@@ -181,10 +187,6 @@
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="选填" maxlength="128" />
-        </el-form-item>
-        <el-form-item label="第几次参加" prop="attendCount">
-          <el-input-number v-model="form.attendCount" :min="1" :max="99" controls-position="right" />
-          <span class="tip">留空表示未知</span>
         </el-form-item>
         <el-form-item label="职位" prop="position">
           <el-input v-model="form.position" placeholder="选填，如 CTO / 大二" maxlength="64" />
@@ -316,7 +318,7 @@
 <script>
 import {
   listAttendee, getAttendee, addAttendee, updateAttendee, delAttendee,
-  importAttendee, previewImport, resetAttendeeTicketType
+  importAttendee, previewImport, resetAttendeeTicketType, grantBenefit
 } from "@/api/kcon/attendee"
 import { optionselectChannelMapping } from "@/api/kcon/channel"
 
@@ -461,7 +463,7 @@ export default {
     // 只比对会因「别人签到」或「本页编辑」而变化的字段
     rowFingerprint(r) {
       return [r.name, r.phone, r.channel, r.ticketType, r.ticketTypeManual, r.drawEligible,
-              r.company, r.email, r.attendCount, r.position, r.signed, r.portNo, r.checkinTime].join("|")
+              r.company, r.email, r.position, r.signed, r.portNo, r.checkinTime, r.benefitGranted].join("|")
     },
     // 变化的行短暂高亮，让操作员注意到「刚才这一行更新了」，而不是数字悄悄变
     flashChanged(ids) {
@@ -502,7 +504,7 @@ export default {
       this.form = {
         id: null, name: null, phone: null, channel: null,
         ticketType: null, drawEligible: 1, company: null, email: null,
-        attendCount: null, position: null
+        position: null
       }
       this.resetForm("form")
     },
@@ -608,6 +610,19 @@ export default {
           this.refreshQuietly()
         })
         .catch(() => {})
+    },
+    // 权益发放：需已签到、一人一条、发放后不可撤销（按钮已对未签到/已发放置灰）
+    handleGrant(row) {
+      const tip = `确认为「${row.name}」发放权益？<br/><br/>
+        <b>权益内容：</b>${row.ticketType || '（未配置）'}<br/>
+        <b>端口号：</b>${row.portNo}<br/><br/>
+        <span style="color:#d4342a">发放后不可撤销；同一人重复发放会被系统拦截。</span>`
+      this.$modal.confirm(tip).then(() => {
+        return grantBenefit(row.id)
+      }).then(() => {
+        this.$modal.msgSuccess("发放成功")
+        this.refreshQuietly()
+      }).catch(() => {})
     },
     handleExport() {
       this.download('/admin/attendee/export', { ...this.queryParams }, `参会名单_${new Date().getTime()}.xlsx`)

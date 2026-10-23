@@ -14,7 +14,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="drawEligible" column="draw_eligible" />
         <result property="company"      column="company"       />
         <result property="email"        column="email"         />
-        <result property="attendCount"  column="attend_count"  />
         <result property="position"     column="position"      />
         <result property="phoneTail4"   column="phone_tail4"   />
         <result property="importBatch"  column="import_batch"  />
@@ -26,29 +25,35 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="portNo"       column="port_no"       />
         <result property="signed"       column="signed"        />
         <result property="checkinTime"  column="checkin_time"  />
+        <result property="benefitGranted"   column="benefit_granted"   />
+        <result property="benefitGrantTime" column="benefit_grant_time" />
     </resultMap>
 
     <!-- 基础列 -->
     <sql id="selectAttendeeVo">
         select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
                a.company, a.email,
-               a.attend_count, a.position, a.phone_tail4, a.import_batch,
+               a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark
         from kcon_attendee a
     </sql>
 
-    <!-- 含签到状态的列（管理端列表 / 详情用） -->
+    <!-- 含签到状态的列（管理端列表 / 详情用）；
+         联权益发放记录取「是否已发放权益」，防重复领取的可见标记 -->
     <sql id="selectAttendeeWithSignVo">
         select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
                a.company, a.email,
-               a.attend_count, a.position, a.phone_tail4, a.import_batch,
+               a.position, a.phone_tail4, a.import_batch,
                a.create_by, a.create_time, a.update_by, a.update_time, a.remark,
                c.port_no as port_no,
                case when c.id is null then 0 else 1 end as signed,
                date_format(c.checkin_time, '%Y-%m-%d %H:%i:%s') as checkin_time,
+               case when g.id is null then 0 else 1 end as benefit_granted,
+               date_format(g.create_time, '%Y-%m-%d %H:%i:%s') as benefit_grant_time,
                date_format(ifnull(a.update_time, a.create_time), '%Y-%m-%d %H:%i:%s') as version
         from kcon_attendee a
         left join kcon_checkin c on c.attendee_id = a.id
+        left join kcon_benefit_grant g on g.attendee_id = a.id and g.grant_type = 'BENEFIT'
     </sql>
 
     <select id="selectAttendeeById" parameterType="Long" resultMap="KconAttendeeResult">
@@ -65,7 +70,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectByTail4" parameterType="String" resultMap="KconAttendeeResult">
         select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
                a.company, a.email,
-               a.attend_count, a.position, a.phone_tail4,
+               a.position, a.phone_tail4,
                c.port_no as port_no,
                c.checkin_time as checkin_time,
                case when c.id is null then 0 else 1 end as signed
@@ -118,11 +123,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <insert id="insertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_attendee
-        (name, phone, channel, ticket_type, draw_eligible, company, email, attend_count, position,
+        (name, phone, channel, ticket_type, draw_eligible, company, email, position,
          phone_tail4, import_batch, create_by, create_time, remark)
         values
         (#{name}, #{phone}, #{channel}, #{ticketType}, #{drawEligible}, #{company}, #{email},
-         #{attendCount}, #{position}, #{phoneTail4}, #{importBatch},
+         #{position}, #{phoneTail4}, #{importBatch},
          #{createBy}, now(), #{remark})
     </insert>
 
@@ -136,10 +141,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="upsertAttendee" parameterType="KconAttendee" useGeneratedKeys="true" keyProperty="id">
         insert into kcon_attendee
         (name, phone, channel, ticket_type, ticket_type_manual, draw_eligible, company, email,
-         attend_count, position, phone_tail4, import_batch, create_by, create_time)
+         position, phone_tail4, import_batch, create_by, create_time)
         values
         (#{name}, #{phone}, #{channel}, #{ticketType}, 0, #{drawEligible}, #{company}, #{email},
-         #{attendCount}, #{position}, #{phoneTail4}, #{importBatch}, #{createBy}, now())
+         #{position}, #{phoneTail4}, #{importBatch}, #{createBy}, now())
         on duplicate key update
             name          = values(name),
             channel       = values(channel),
@@ -148,7 +153,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             draw_eligible = values(draw_eligible),
             company       = coalesce(values(company), company),
             email        = coalesce(values(email), email),
-            attend_count = coalesce(values(attend_count), attend_count),
             position     = coalesce(values(position), position),
             phone_tail4  = values(phone_tail4),
             import_batch = values(import_batch),
@@ -166,7 +170,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="drawEligible != null">draw_eligible = #{drawEligible},</if>
             <if test="company != null">company = #{company},</if>
             <if test="email != null">email = #{email},</if>
-            <if test="attendCount != null">attend_count = #{attendCount},</if>
             <if test="position != null">position = #{position},</if>
             <if test="phoneTail4 != null">phone_tail4 = #{phoneTail4},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
@@ -217,14 +220,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         group by a.company
         order by total desc
         limit #{limit}
-    </select>
-
-    <select id="statAttendCount" resultType="java.util.Map">
-        select
-            sum(case when attend_count = 1 then 1 else 0 end) as firstTime,
-            sum(case when attend_count is not null and attend_count > 1 then 1 else 0 end) as returning,
-            sum(case when attend_count is null then 1 else 0 end) as unknown
-        from kcon_attendee
     </select>
 
     <select id="selectSignSheet" resultMap="KconAttendeeResult">

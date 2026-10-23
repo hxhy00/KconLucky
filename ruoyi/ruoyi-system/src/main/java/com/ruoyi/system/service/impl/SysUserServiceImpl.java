@@ -93,6 +93,18 @@ public class SysUserServiceImpl implements ISysUserService
     }
 
     /**
+     * 绑定了任一指定角色的用户列表（工作人员岗位列表用）。
+     * 带上与 selectAllocatedList 相同的 @DataScope：超管调用时 DataScopeAspect
+     * 会把 params.dataScope 置空（不过滤），行为一致。
+     */
+    @Override
+    @DataScope(deptAlias = "d", userAlias = "u")
+    public List<SysUser> selectAllocatedRoleInList(SysUser user)
+    {
+        return userMapper.selectAllocatedRoleInList(user);
+    }
+
+    /**
      * 根据条件分页查询未分配用户角色列表
      * 
      * @param user 用户信息
@@ -115,6 +127,15 @@ public class SysUserServiceImpl implements ISysUserService
     public SysUser selectUserByUserName(String userName)
     {
         return userMapper.selectUserByUserName(userName);
+    }
+
+    /**
+     * 通过手机号查询用户（手机号登录用）
+     */
+    @Override
+    public SysUser selectUserByPhone(String phonenumber)
+    {
+        return userMapper.selectUserByPhone(phonenumber);
     }
 
     /**

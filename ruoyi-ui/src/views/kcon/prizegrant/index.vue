@@ -2,7 +2,8 @@
   <div class="app-container">
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
       <div slot="title">
-        每次核验与发放都会自动留痕，未通过的尝试同样记录，可据此追溯奖品由谁核验发放。
+        兑奖核验「确认发放」成功后自动留痕，可据此追溯奖品发放人与发放时间。
+        权益发放记录不在此页，见「日志 → 权益发放」。
       </div>
     </el-alert>
     <el-form :model="queryParams" ref="queryForm" size="small" :inline="true" v-show="showSearch" label-width="80px">
@@ -10,12 +11,11 @@
         <el-input v-model="queryParams.portNo" placeholder="端口号（精确匹配）" clearable
                   style="width: 160px;" @keyup.enter.native="handleQuery" />
       </el-form-item>
-      <el-form-item label="核验结果" prop="result">
-        <el-select v-model="queryParams.result" placeholder="全部" clearable style="width: 160px;">
-          <el-option v-for="o in resultOptions" :key="o.value" :label="o.label" :value="o.value" />
-        </el-select>
+      <el-form-item label="姓名" prop="name">
+        <el-input v-model="queryParams.name" placeholder="姓名（支持模糊）" clearable
+                  style="width: 140px;" @keyup.enter.native="handleQuery" />
       </el-form-item>
-      <el-form-item label="操作时间">
+      <el-form-item label="发放时间">
         <el-date-picker
           v-model="dateRange"
           style="width: 240px"
@@ -36,39 +36,44 @@
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
         <el-button type="info" plain icon="el-icon-document" size="mini" @click="handleExport"
-                   v-hasPermi="['kcon:verify:query']">导出</el-button>
+                   v-hasPermi="['kcon:prizegrant:export']">导出</el-button>
       </el-col>
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
 
-    <el-table v-loading="loading" :data="verifyLogList">
+    <el-table v-loading="loading" :data="grantList">
       <el-table-column label="端口号" prop="portNo" width="100" align="center">
         <template slot-scope="scope">
           <span v-if="scope.row.portNo" class="port-cell">{{ scope.row.portNo }}</span>
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="输入手机号" prop="inputPhoneMask" width="140" align="center">
+      <el-table-column label="姓名" prop="name" min-width="100" align="center">
         <template slot-scope="scope">
-          <span v-if="scope.row.inputPhoneMask">{{ scope.row.inputPhoneMask }}</span>
+          <span v-if="scope.row.name">{{ scope.row.name }}</span>
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <!-- 端口号 / 手机号 / 操作时间内容定长，保留固定宽度保证对齐；
-           核验结果、操作人不设宽度，由 el-table 按剩余空间自动分配，
-           宽屏下表格会撑满整行，不再出现右侧大片空白 -->
-      <el-table-column label="核验结果" min-width="140" align="center">
+      <el-table-column label="手机号" prop="phoneMask" width="130" align="center">
         <template slot-scope="scope">
-          <el-tag size="mini" :type="resultType(scope.row.result)">{{ resultLabel(scope.row.result) }}</el-tag>
+          <span v-if="scope.row.phoneMask">{{ scope.row.phoneMask }}</span>
+          <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作人" prop="operator" min-width="140" align="center">
+      <el-table-column label="场次" prop="sessionCode" width="100" align="center">
+        <template slot-scope="scope">
+          <span v-if="scope.row.sessionCode">{{ scope.row.sessionCode }}</span>
+          <span v-else class="text-muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="奖项" prop="tierName" min-width="160" show-overflow-tooltip />
+      <el-table-column label="操作人" prop="operator" min-width="120" align="center">
         <template slot-scope="scope">
           <span v-if="scope.row.operator">{{ scope.row.operator }}</span>
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作时间" prop="createTime" min-width="180" align="center" />
+      <el-table-column label="发放时间" prop="createTime" min-width="170" align="center" />
     </el-table>
 
     <pagination v-show="total>0" :total="total" :page.sync="queryParams.pageNum"
@@ -77,32 +82,22 @@
 </template>
 
 <script>
-import { listVerifyLog } from "@/api/kcon/verifylog"
-
-// 核验结果枚举：value 与后端 KconVerifyLog 常量一一对应
-// label 与后端 KconVerifyServiceImpl#resultText 文案保持一致，改文案需两边同步
-const RESULT_OPTIONS = [
-  { value: "VALID", label: "有效", type: "success" },
-  { value: "NOT_ISSUED", label: "端口号未发放", type: "info" },
-  { value: "PHONE_MISMATCH", label: "手机号不匹配", type: "danger" },
-  { value: "RECEIVED", label: "已领取", type: "warning" }
-]
+import { listPrizeGrant } from "@/api/kcon/grant"
 
 export default {
-  name: "KconVerifyLog",
+  name: "KconPrizeGrant",
   data() {
     return {
       loading: true,
       showSearch: true,
       total: 0,
-      verifyLogList: [],
+      grantList: [],
       dateRange: [],
-      resultOptions: RESULT_OPTIONS,
       queryParams: {
         pageNum: 1,
         pageSize: 10,
         portNo: null,
-        result: null
+        name: null
       }
     }
   },
@@ -112,8 +107,8 @@ export default {
   methods: {
     getList() {
       this.loading = true
-      listVerifyLog(this.addDateRange(this.queryParams, this.dateRange)).then(res => {
-        this.verifyLogList = res.rows
+      listPrizeGrant(this.addDateRange(this.queryParams, this.dateRange)).then(res => {
+        this.grantList = res.rows
         this.total = res.total
         this.loading = false
       }).catch(() => { this.loading = false })
@@ -127,22 +122,10 @@ export default {
       this.resetForm("queryForm")
       this.handleQuery()
     },
-    resultOption(result) {
-      return RESULT_OPTIONS.find(o => o.value === result)
-    },
-    resultLabel(result) {
-      const o = this.resultOption(result)
-      // 未知取值原样显示，便于发现脏数据
-      return o ? o.label : (result || "未知")
-    },
-    resultType(result) {
-      const o = this.resultOption(result)
-      return o ? o.type : "info"
-    },
     handleExport() {
-      this.download('/admin/verifylog/export',
+      this.download('/admin/prize-grant/export',
         this.addDateRange({ ...this.queryParams }, this.dateRange),
-        `兑奖核验日志_${new Date().getTime()}.xlsx`)
+        `奖品发放日志_${new Date().getTime()}.xlsx`)
     }
   }
 }

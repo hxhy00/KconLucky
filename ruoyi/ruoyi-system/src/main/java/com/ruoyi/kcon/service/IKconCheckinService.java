@@ -72,7 +72,6 @@ public interface IKconCheckinService
         m.put("name", a.getName());
         m.put("phoneMask", maskPhone(a.getPhone()));
         m.put("company", a.getCompany());
-        m.put("attendCount", a.getAttendCount());
         m.put("position", a.getPosition());
         return m;
     }

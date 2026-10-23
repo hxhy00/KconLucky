@@ -8,6 +8,7 @@ import com.ruoyi.kcon.domain.KconWinner;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.mapper.KconVerifyLogMapper;
 import com.ruoyi.kcon.mapper.KconWinnerMapper;
+import com.ruoyi.kcon.service.IKconBenefitGrantService;
 import com.ruoyi.kcon.service.IKconCheckinService;
 import com.ruoyi.kcon.service.IKconVerifyService;
 import org.slf4j.Logger;
@@ -57,6 +58,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
 
     @Autowired
     private KconVerifyLogMapper verifyLogMapper;
+
+    @Autowired
+    private IKconBenefitGrantService grantService;
 
     @Override
     public Map<String, Object> verify(Integer portNo, String phone, String operator)
@@ -141,14 +145,15 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         return data;
     }
 
+    /**
+     * 兼容保留：人工核验方法签名不变，但核验动作已不再写核验日志（verifyAndLog 与
+     * verify 等价）。管理端 verify 接口已改走 verify；保留此方法仅为避免接口破坏性变更，
+     * 新代码一律调 {@link #verify}。
+     */
     @Override
     public Map<String, Object> verifyAndLog(Integer portNo, String phone, String operator)
     {
-        Map<String, Object> data = verify(portNo, phone, operator);
-        // 一次人工核验只记一条日志。写日志失败不影响核验结果（writeLog 内部已吞异常）。
-        // result 兜底为非空字符串：万一 verify 新增分支漏 put，也不落一条 result="null" 的脏日志。
-        writeLog(portNo, phone, nvlOf(data.get("result")), operator);
-        return data;
+        return verify(portNo, phone, operator);
     }
 
     @Override
@@ -178,6 +183,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         {
             throw new ServiceException("该奖品已被领取，请勿重复操作");
         }
+        // 写奖品发放日志（kcon_benefit_grant，type=PRIZE）：发放成功后留痕，
+        // 内部只 try/catch 不抛错——主流程状态已落库，日志失败不应回滚发放。
+        grantService.recordPrizeGrant(portNo, winner, operator);
         log.info("兑奖成功 portNo={} operator={}", portNo, operator);
     }
 
@@ -207,24 +215,15 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(time);
     }
 
+    /**
+     * 核验日志已退役：核验动作不再留痕（写日志逻辑随 kcon_verify_log 一起下线），
+     * 发放追溯统一走 kcon_benefit_grant。查询接口与 fillDisplay/resultText 等
+     * 辅助方法保留——历史数据仍可通过该 Mapper 查询，且 ExportController 的
+     * 数据导出不再依赖本表（见 KconCheckinMapper#selectExportList）。
+     */
     private void writeLog(Integer portNo, String phone, String result, String operator)
     {
-        try
-        {
-            KconVerifyLog log = new KconVerifyLog();
-            log.setPortNo(portNo);
-            // 日志中同样脱敏存储，避免明文手机号落盘
-            log.setInputPhone(IKconCheckinService.maskPhone(phone));
-            log.setResult(result);
-            log.setOperator(operator);
-            verifyLogMapper.insertLog(log);
-        }
-        catch (Exception e)
-        {
-            // 保留堆栈：getMessage() 对 NPE 等可能为 null，现场排障时丢关键信息。
-            // 这里吞异常是有意的——写日志失败不应阻断核验本身。
-            log.warn("写核验日志失败 portNo={}", portNo, e);
-        }
+        // no-op：核验留痕已下线
     }
 
     // ---------------- 核验日志查询 ----------------

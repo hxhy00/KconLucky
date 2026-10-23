@@ -7,6 +7,7 @@ import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.kcon.mapper.KconAttendeeMapper;
+import com.ruoyi.kcon.mapper.KconBenefitGrantMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.mapper.KconPortPoolMapper;
 import com.ruoyi.kcon.mapper.KconPrizeMapper;
@@ -58,6 +59,9 @@ public class ExportController extends BaseController
     private KconVerifyLogMapper verifyLogMapper;
 
     @Autowired
+    private KconBenefitGrantMapper benefitGrantMapper;
+
+    @Autowired
     private KconSessionMapper sessionMapper;
 
     @Autowired
@@ -82,10 +86,11 @@ public class ExportController extends BaseController
             vo.setTicketType(str(row.get("票种")));
             vo.setCompany(str(row.get("公司")));
             vo.setEmail(str(row.get("邮箱")));
-            vo.setAttendCount(str(row.get("第几次参加KCon")));
             vo.setPosition(str(row.get("职务/年级")));
             vo.setPortNo(str(row.get("端口号")));
             vo.setCheckinTime(str(row.get("签到时间")));
+            vo.setBenefitGrantFlag(str(row.get("权益发放")));
+            vo.setBenefitGrantTime(str(row.get("权益发放时间")));
             vo.setWinnerFlag(str(row.get("是否中奖")));
             vo.setTierName(str(row.get("奖项")));
             vo.setReceiveFlag(str(row.get("是否已领取")));
@@ -173,7 +178,8 @@ public class ExportController extends BaseController
         checkinMapper.truncateCheckin();
         winnerMapper.truncateWinner();
         verifyLogMapper.truncateLog();
+        benefitGrantMapper.truncateGrant();
         attendeeMapper.truncateAttendee();
-        return success("清场完成：名单、签到、中奖、核验日志已清空，端口号池与奖品已抽数已归零，场次状态已复位");
+        return success("清场完成：名单、签到、中奖、核验日志、发放日志已清空，端口号池与奖品已抽数已归零，场次状态已复位");
     }
 }

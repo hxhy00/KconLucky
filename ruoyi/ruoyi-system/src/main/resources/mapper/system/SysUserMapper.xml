@@ -85,14 +85,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		<!-- 数据范围过滤 -->
 		${params.dataScope}
 	</select>
-	
-	<select id="selectAllocatedList" parameterType="SysUser" resultMap="SysUserResult">
+
+	<!-- 工作人员列表：绑定任一指定岗位角色的账号（roleIds 为空数组时不返回任何行） -->
+	<select id="selectAllocatedRoleInList" parameterType="SysUser" resultMap="SysUserResult">
 	    select distinct u.user_id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time
 	    from sys_user u
 			 left join sys_dept d on u.dept_id = d.dept_id
 			 left join sys_user_role ur on u.user_id = ur.user_id
 			 left join sys_role r on r.role_id = ur.role_id
-	    where u.del_flag = '0' and r.role_id = #{roleId}
+	    where u.del_flag = '0' and r.role_id in
+	    <foreach collection="roleIds" item="rid" open="(" separator="," close=")">
+			#{rid}
+		</foreach>
 	    <if test="userName != null and userName != ''">
 			AND u.user_name like concat('%', #{userName}, '%')
 		</if>
@@ -104,7 +108,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		<!-- 固定排序：无 ORDER BY 时 MySQL 不保证翻页顺序，可能跨页重复/漏行 -->
 		order by u.create_time desc, u.user_id desc
 	</select>
-	
+
 	<select id="selectUnallocatedList" parameterType="SysUser" resultMap="SysUserResult">
 	    select distinct u.user_id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time
 	    from sys_user u
@@ -122,10 +126,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 		<!-- 数据范围过滤 -->
 		${params.dataScope}
 	</select>
-	
+
 	<select id="selectUserByUserName" parameterType="String" resultMap="SysUserResult">
 	    <include refid="selectUserVo"/>
 		where u.user_name = #{userName} and u.del_flag = '0'
+	</select>
+
+	<!-- 手机号登录：按手机号取启用状态账号（手机号全场唯一，含管理员与所有岗位） -->
+	<select id="selectUserByPhone" parameterType="String" resultMap="SysUserResult">
+	    <include refid="selectUserVo"/>
+		where u.phonenumber = #{phonenumber} and u.del_flag = '0'
+		limit 1
 	</select>
 	
 	<select id="selectUserById" parameterType="Long" resultMap="SysUserResult">

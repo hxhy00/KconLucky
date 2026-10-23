@@ -62,27 +62,8 @@
     </el-card>
 
     <el-row :gutter="20" style="margin-top: 20px;">
-      <!-- 首次/多次参加 -->
-      <el-col :span="8">
-        <el-card shadow="never">
-          <div slot="header"><span>参会届数分布</span></div>
-          <div class="dist-row">
-            <span>首次参加</span>
-            <b>{{ attendDist.firstTime || 0 }}</b>
-          </div>
-          <div class="dist-row">
-            <span>多次参加</span>
-            <b>{{ attendDist.returning || 0 }}</b>
-          </div>
-          <div class="dist-row">
-            <span>未知（未填写）</span>
-            <b class="text-muted">{{ attendDist.unknown || 0 }}</b>
-          </div>
-        </el-card>
-      </el-col>
-
       <!-- 公司 Top -->
-      <el-col :span="16">
+      <el-col :span="24">
         <el-card shadow="never">
           <div slot="header">
             <span>公司参会 Top 10</span>
@@ -143,11 +124,6 @@ export default {
         { title: "参会名单", desc: "导入名单 · 打印签到表", path: "/attendee", icon: "el-icon-user" },
         { title: "中奖日志", desc: "中奖名单与领取状态", path: "/log/winner", icon: "el-icon-medal" }
       ]
-    }
-  },
-  computed: {
-    attendDist() {
-      return this.stat.attendCountDist || {}
     }
   },
   created() {
@@ -263,15 +239,6 @@ export default {
 .stat-value.success { color: #67C23A; }
 .stat-value.warning { color: #E6A23C; }
 .stat-value.primary { color: #d4342a; }
-
-.dist-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px dashed #ebeef5;
-  font-size: 14px;
-}
-.dist-row b { font-size: 18px; }
 
 .empty-tip {
   color: #c0c4cc;

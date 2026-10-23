@@ -18,6 +18,11 @@ public interface KconCheckinMapper
     KconCheckin selectByPhone(String phone);
 
     /**
+     * 按参会人 ID 查签到记录（权益发放前校验「必须已签到」用）
+     */
+    KconCheckin selectByAttendeeId(Long attendeeId);
+
+    /**
      * 按端口号查签到记录
      */
     KconCheckin selectByPortNo(Integer portNo);
