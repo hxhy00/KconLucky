@@ -152,6 +152,7 @@ export default {
       })
     },
     handleReceive() {
+      if (this.receiving) return
       if (this.verifyResult !== "VALID") return
       // 用核验时的快照提交，而不是输入框当前值，避免「弹窗显示 A、实际发放 B」
       const body = this.verifiedBody || this.buildBody()

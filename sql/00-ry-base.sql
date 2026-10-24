@@ -74,7 +74,7 @@ create table sys_user (
 -- ----------------------------
 -- 初始化-用户信息表数据
 -- ----------------------------
-insert into sys_user values(1,  103, 'KconLucky', '管理员', '00', '', '13653917580', '1', '', '$2a$10$wd7zotgolUzWKZwSp6DcnucO.7g517jJvlAZs4dRoZxWuuqsogdTG', '0', '0', '127.0.0.1', sysdate(), sysdate(), 'KconLucky', sysdate(), '', null, '管理员（手机号登录）');
+insert into sys_user values(1,  103, 'KconLucky', '管理员', '00', '', '13000000000', '1', '', '$2a$10$wd7zotgolUzWKZwSp6DcnucO.7g517jJvlAZs4dRoZxWuuqsogdTG', '0', '0', '127.0.0.1', sysdate(), sysdate(), 'KconLucky', sysdate(), '', null, '管理员（手机号登录）');
 
 
 -- ----------------------------

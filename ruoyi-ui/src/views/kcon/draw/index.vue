@@ -207,6 +207,7 @@
 
 <script>
 import { getDrawStatus, doDraw, switchDrawSession, getDrawSetting, saveDrawSetting } from "@/api/kcon/draw"
+import { isSessionExpired } from "@/utils/session-expired"
 
 // 轮询间隔：与「现场看板」一致，签到台/控制台挂在副屏上时数字自己走
 const POLL_INTERVAL = 5000
@@ -253,8 +254,8 @@ export default {
     },
     /** 大屏访问地址：与后端 qrcode 接口同源，按当前页面 host 推导 */
     screenUrl() {
-      const host = window.location.origin.replace(/\/admin\/?$/, "")
-      return `${host}/screen/`
+      // origin 不含路径，replace(/\/admin\/?$/) 永远不会命中，属于无效代码
+      return `${window.location.origin}/screen/`
     },
     /** 全部有效中奖，按场次 × 档位分组（后端已按 draw_order 排好：三等 → 二等 → 一等） */
     winnerGroups() {
@@ -396,6 +397,8 @@ export default {
         this.loadError = ""
       }).catch(() => {
         // 错误提示由 request.js 统一弹出，这里只记录状态并保留上一次的有效数据
+        // 会话已过期时请求会快速失败：静默跳过，避免每 5 秒刷一条「后端服务异常」
+        if (isSessionExpired()) return
         this.loadError = "抽奖池状态获取失败，请确认后端服务与网络后重试。"
       }).finally(() => {
         this.polling = false
@@ -424,6 +427,7 @@ export default {
     },
     // ---------------- 操作 ----------------
     handleDraw() {
+      if (this.drawing) return
       if (this.poolEmpty) {
         this.$modal.msgWarning("请先让观众签到")
         return
@@ -432,20 +436,34 @@ export default {
         this.$modal.msgWarning("该场次奖项已抽完")
         return
       }
-      const tierName = this.currentTier.tierName
-      const remain = this.rowRemain(this.currentTier)
+      // 点击瞬间把档位拍成快照：确认弹窗停留期间轮询仍在刷新状态，
+      // 若等到确认后再读实时值，会出现「弹窗写 A 档、实际抽 B 档」
+      const snapshot = {
+        sessionCode: this.status.sessionCode,
+        prizeId: this.currentTier.id,
+        tierName: this.currentTier.tierName,
+        remain: this.rowRemain(this.currentTier)
+      }
       this.$modal.confirm(
-        `将一次抽出「${tierName}」剩余的全部 ${remain} 位（当前场次可抽号数 ${this.poolCount}，` +
+        `将一次抽出「${snapshot.tierName}」剩余的全部 ${snapshot.remain} 位（当前场次可抽号数 ${this.poolCount}，` +
         `不够时只抽得出来的那些）。抽出后大屏会逐个揭晓。确认继续？`
       )
-        .then(() => this.submitDraw())
+        .then(() => this.submitDraw(snapshot))
         .catch(() => {})
     },
-    submitDraw() {
+    submitDraw(snapshot) {
+      if (this.drawing || !snapshot) return Promise.resolve()
+      // 确认期间档位可能已被推进（例如另一台控制台抽满、或轮询发现已抽完），
+      // 快照与实时状态不一致时不能提交
+      const live = this.currentTier
+      if (!live || live.id !== snapshot.prizeId) {
+        this.$modal.msgWarning("档位已变化，请重新确认")
+        return Promise.resolve()
+      }
       this.drawing = true
       return doDraw({
-        sessionCode: this.status.sessionCode,
-        prizeId: this.currentTier.id
+        sessionCode: snapshot.sessionCode,
+        prizeId: snapshot.prizeId
       }).then(res => {
         const data = res.data || {}
         const ws = data.winners || []
@@ -485,6 +503,9 @@ export default {
       this.switching = true
       return switchDrawSession({ sessionCode: code }).then(res => {
         this.applyStatus(res.data, ++this.seq)
+        // 上一场次「本次抽出」的名单与当前场次无关，切场后必须清掉，避免误核对
+        this.lastBatch = []
+        this.lastBatchTier = ""
         // 切场次是明确的操作意图，横栏同步跟过去，让操作员看到的就是刚切到的场次。
         // 必须确认该场次真的进了 panels（场次可能刚被删、或后端返回的 sessionCode 与请求不一致），
         // 否则 v-model 指向一个不存在的 tab，界面会变成所有 tab 都不选中、内容空白

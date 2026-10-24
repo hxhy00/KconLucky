@@ -116,7 +116,7 @@ public class KconCheckinServiceImpl implements IKconCheckinService
             // 事务会整体回滚（端口号占用一并归还），这里只能提示重试：
             // 在当前事务已标记 rollback-only 的情况下无法再读库返回已有记录，
             // 且调用方重试后必然命中上面的「已签到 → 返回原端口号」分支。
-            log.warn("并发签到冲突，phone={}，提示调用方重试", attendee.getPhone());
+            log.warn("并发签到冲突，phone={}，提示调用方重试", IKconCheckinService.maskPhone(attendee.getPhone()));
             throw new ServiceException("签到处理中，请稍后重试");
         }
 
@@ -224,7 +224,9 @@ public class KconCheckinServiceImpl implements IKconCheckinService
         // 「谁在场、尾号是多少、端口号是多少」全量敞开；而兑奖核验靠「本人知道完整手机号」
         // 来判定，尾号一旦可被枚举，这层判定就被从源头削弱了。
         // 因此这里砍掉尾号分支：核验与找回统一要求完整 11 位，攻击面从 10^4 收敛到 10^11。
-        if (!kw.matches("\\d{11}"))
+        // 与 query/submit 保持同一格式口径：只接受 1[3-9] 开头的 11 位手机号，
+        // 不要放宽成 \d{11}，否则 00000000000 这类占位串也会打到数据库。
+        if (!kw.matches("1[3-9]\\d{9}"))
         {
             data.put("signed", false);
             data.put("msg", "请输入完整 11 位手机号（为防冒领，找回端口号不再支持只输后四位）");

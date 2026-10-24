@@ -29,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -222,6 +223,19 @@ class DrawAdminControllerTest
                 .andExpect(jsonPath("$.msg").value("当前场次没有可撤回的中奖记录"));
 
         verify(drawService).voidLastBatch(null, OPERATOR);
+    }
+
+    @Test
+    @DisplayName("作废接口使用独立的 kcon:winner:void 权限，不再复用抽奖操作权限")
+    void voidEndpointsRequireWinnerVoidPermission() throws Exception
+    {
+        PreAuthorize single = DrawAdminController.class
+                .getDeclaredMethod("doVoid", Map.class).getAnnotation(PreAuthorize.class);
+        PreAuthorize batch = DrawAdminController.class
+                .getDeclaredMethod("doVoidBatch", Map.class).getAnnotation(PreAuthorize.class);
+
+        assertThat(single.value()).isEqualTo("@ss.hasPermi('kcon:winner:void')");
+        assertThat(batch.value()).isEqualTo("@ss.hasPermi('kcon:winner:void')");
     }
 
     @Test

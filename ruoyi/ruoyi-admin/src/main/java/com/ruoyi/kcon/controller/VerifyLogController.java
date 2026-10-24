@@ -21,9 +21,8 @@ import java.util.List;
 /**
  * 兑奖核验日志查询（管理端）
  *
- * 只读接口：每次**人工核验**已在 KconVerifyServiceImpl 留痕，本页只查不改。
- * 发放流程内部的前置复核不写本表（发放动作凭 sys_oper_log + kcon_winner 的领取时间/操作人追溯），
- * 因此一次兑奖在本表只对应「核验」那一条记录。
+ * 只读接口：核验留痕已下线（发放追溯统一走 kcon_benefit_grant），
+ * 本页仅用于查询历史 kcon_verify_log 数据与导出，不再有写入入口。
  *
  * @author kcon
  */
@@ -50,8 +49,17 @@ public class VerifyLogController extends BaseController
     @GetMapping("/list")
     public TableDataInfo list(KconVerifyLog query)
     {
+        // 分页参数存在 ThreadLocal，查询异常时必须清掉，避免污染同线程的后续请求
+        List<KconVerifyLog> list;
         startPage();
-        List<KconVerifyLog> list = verifyService.selectVerifyLogList(query);
+        try
+        {
+            list = verifyService.selectVerifyLogList(query);
+        }
+        finally
+        {
+            clearPage();
+        }
         return getDataTable(list);
     }
 

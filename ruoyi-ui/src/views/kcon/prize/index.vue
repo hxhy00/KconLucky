@@ -31,7 +31,7 @@
       <el-table-column label="场次" width="120" align="center">
         <template slot-scope="scope">
           <el-tag size="mini" :type="scope.row.sessionCode === 'AM' ? 'warning' : 'primary'">
-            {{ scope.row.sessionCode === 'AM' ? '上午场' : '下午场' }}
+            {{ sessionName(scope.row.sessionCode) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -54,7 +54,8 @@
                      v-hasPermi="['kcon:prize:edit']">修改</el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)"
                      v-hasPermi="['kcon:prize:remove']"
-                     :disabled="scope.row.drawnCount > 0">删除</el-button>
+                     :loading="deletingId === scope.row.id"
+                     :disabled="scope.row.drawnCount > 0 || deletingId != null">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -125,6 +126,8 @@ export default {
       // 后端确有同场次同名的唯一性校验（Controller 预检 + validatePrize），
       // 重复请求会被拒；但被拒也得让用户看到一次报错，不如前端直接锁住按钮
       submitting: false,
+      // 正在删除的行 id：请求在途期间禁用删除，避免连点造成重复请求
+      deletingId: null,
       title: "",
       queryParams: { pageNum: 1, pageSize: 10, sessionCode: null },
       sessions: [],
@@ -158,6 +161,10 @@ export default {
       listSessions().then(res => {
         this.sessions = res.data || []
       }).catch(() => { this.sessions = [] })
+    },
+    sessionName(code) {
+      const hit = this.sessions.find(s => s.code === code)
+      return hit ? hit.name : (code || '—')
     },
     getList() {
       this.loading = true
@@ -225,13 +232,18 @@ export default {
       })
     },
     handleDelete(row) {
+      if (this.deletingId != null) return
       this.$modal.confirm(`确认删除奖项「${row.tierName}」？`)
-        .then(() => delPrize(row.id))
+        .then(() => {
+          this.deletingId = row.id
+          return delPrize(row.id)
+        })
         .then(() => {
           this.getList()
           this.$modal.msgSuccess("删除成功")
         })
         .catch(() => {})
+        .finally(() => { this.deletingId = null })
     }
   }
 }

@@ -11,7 +11,10 @@ FILE="$1"
 read -r -p "确认用 $FILE 覆盖当前数据？[y/N] " ans
 [ "$ans" = "y" ] || [ "$ans" = "Y" ] || { echo "已取消"; exit 0; }
 
-docker exec -i kcon-mysql mysql -uroot -p"${MYSQL_ROOT_PASSWORD:-root123}" \
+# 不设默认口令：未提供时直接报错退出
+: "${MYSQL_ROOT_PASSWORD:? 需要在环境变量中提供 MYSQL_ROOT_PASSWORD（可在项目根 .env 中配置后 source .env，或执行前手动 export）}"
+
+docker exec -i kcon-mysql mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" \
   --default-character-set=utf8mb4 < "$FILE"
 
 echo "恢复完成。"

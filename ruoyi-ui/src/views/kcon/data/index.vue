@@ -162,8 +162,9 @@ export default {
           this.confirmText = ""
           this.resetPassword = ""
         }).catch(() => {
-          // 密码保留在输入框：多数情况是输错一位，让用户直接改比重敲省事；
-          // 但清空密码可避免离开座位后他人直接点按钮。
+          // 失败后清空密码与确认词：避免密码留在页面上被他人误用，
+          // 也避免「清场」二字还在，下一个人直接点按钮。
+          // 密码输错的剩余次数由 request 拦截器统一提示，重敲一次成本可接受。
           this.resetPassword = ""
           this.confirmText = ""
         }).finally(() => { this.resetting = false })
@@ -203,6 +204,16 @@ export default {
         // 必须把文件从 upload 的列表里踢掉：limit=1 且没配 on-exceed 时，
         // 这个文件会一直占着唯一名额，用户再选文件会被 limit 静默拦下、
         // 「恢复数据」按钮永久 disabled，只能刷新页面。accept=".sql" 拦不住拖拽。
+        this.$nextTick(() => {
+          if (this.$refs.upload) this.$refs.upload.clearFiles()
+        })
+        return
+      }
+      // nginx client_max_body_size 为 20MB，超限时后端会直接返回 413，
+      // 在选文件阶段就拦下并说明原因，避免用户以为是「恢复失败」
+      if (raw.size > 20 * 1024 * 1024) {
+        this.$modal.msgWarning("文件超过 20MB 上限，请确认备份文件是否完整")
+        this.restoreFile = null
         this.$nextTick(() => {
           if (this.$refs.upload) this.$refs.upload.clearFiles()
         })

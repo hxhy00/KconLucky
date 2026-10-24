@@ -54,7 +54,9 @@
             {{ scope.row.status === '0' ? '停用' : '启用' }}
           </el-button>
           <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDelete(scope.row)"
-            v-hasPermi="['kcon:staff:remove']">删除</el-button>
+            v-hasPermi="['kcon:staff:remove']"
+            :loading="deletingId === scope.row.userId"
+            :disabled="deletingId != null">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -115,6 +117,8 @@ export default {
       loading: true,
       submitting: false,
       statusLoadingId: null,
+      // 正在删除的账号 id：请求在途期间禁用删除，避免连点造成重复请求
+      deletingId: null,
       showSearch: true,
       staffList: [],
       total: 0,
@@ -239,12 +243,17 @@ export default {
       })
     },
     handleDelete(row) {
+      if (this.deletingId != null) return
       this.$modal.confirm(`确认删除账号「${row.nickName}」？删除后该账号立即无法登录。`)
-        .then(() => delStaff(row.userId))
+        .then(() => {
+          this.deletingId = row.userId
+          return delStaff(row.userId)
+        })
         .then(() => {
           this.$modal.msgSuccess("已删除")
           this.getList()
         }).catch(() => { })
+        .finally(() => { this.deletingId = null })
     }
   }
 }

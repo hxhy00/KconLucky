@@ -86,6 +86,8 @@ export default {
       showSearch: true,
       total: 0,
       grantList: [],
+      // 请求序号：快速翻页/搜索时，慢返回的旧响应不能盖掉新结果
+      listSeq: 0,
       dateRange: [],
       queryParams: {
         pageNum: 1,
@@ -101,11 +103,16 @@ export default {
   methods: {
     getList() {
       this.loading = true
+      const seq = ++this.listSeq
       listBenefitGrant(this.addDateRange(this.queryParams, this.dateRange)).then(res => {
+        if (seq !== this.listSeq) return
         this.grantList = res.rows
         this.total = res.total
-        this.loading = false
-      }).catch(() => { this.loading = false })
+      }).catch(() => {
+        // request.js 已统一提示，这里只兜底
+      }).finally(() => {
+        if (seq === this.listSeq) this.loading = false
+      })
     },
     handleQuery() {
       this.queryParams.pageNum = 1

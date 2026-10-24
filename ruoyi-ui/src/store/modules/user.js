@@ -4,6 +4,7 @@ import { MessageBox, } from 'element-ui'
 import { login, logout, getInfo } from '@/api/login'
 import { getToken, setToken, removeToken } from '@/utils/auth'
 import { isHttp, isEmpty } from "@/utils/validate"
+import { resetSessionExpired } from "@/utils/session-expired"
 import defAva from '@/assets/images/profile.jpg'
 
 const user = {
@@ -52,6 +53,8 @@ const user = {
         login(username, password, code, uuid).then(res => {
           setToken(res.token)
           commit('SET_TOKEN', res.token)
+          // 登录成功后复位会话过期标记，后续请求恢复正常提示
+          resetSessionExpired()
           store.dispatch('lock/unlockScreen')
           resolve()
         }).catch(error => {
@@ -82,16 +85,16 @@ const user = {
           /* 初始密码提示 */
           // 工作人员账号的密码由管理员统一重置，不能自助修改，因此不弹改密提醒
           const isStaff = (res.roles || []).includes('kcon_staff')
-          if(!isStaff && res.isDefaultModifyPwd) {
-            MessageBox.confirm('您的密码还是初始密码，请修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
+          if (!isStaff && res.isDefaultModifyPwd) {
+            MessageBox.confirm('您的密码还是初始密码，请修改密码！', '安全提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-            }).catch(() => {})
+            }).catch(() => { })
           }
           /* 过期密码提示 */
-          if(!isStaff && !res.isDefaultModifyPwd && res.isPasswordExpired) {
-            MessageBox.confirm('您的密码已过期，请尽快修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
+          if (!isStaff && !res.isDefaultModifyPwd && res.isPasswordExpired) {
+            MessageBox.confirm('您的密码已过期，请尽快修改密码！', '安全提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-            }).catch(() => {})
+            }).catch(() => { })
           }
           resolve(res)
         }).catch(error => {

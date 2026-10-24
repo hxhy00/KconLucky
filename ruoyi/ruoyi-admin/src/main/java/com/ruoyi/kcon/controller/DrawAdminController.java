@@ -83,8 +83,13 @@ public class DrawAdminController extends BaseController
         return success(result);
     }
 
-    /** 作废上一次中奖 { "winnerId": 33 }，号码回池可重抽 */
-    @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
+    /**
+     * 作废上一次中奖 { "winnerId": 33 }，号码回池可重抽
+     *
+     * 作废是防作弊的最后一道闸：抽奖台操作员若同时能作废，就能把已抽出的记录撤回重抽，
+     * 因此这里用独立的 {@code kcon:winner:void} 权限，不再与抽奖操作共用。
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
     @Log(title = "抽奖控制台-作废中奖", businessType = BusinessType.OTHER)
     @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
     @RepeatSubmit
@@ -108,8 +113,12 @@ public class DrawAdminController extends BaseController
         return success(buildStatus());
     }
 
-    /** 撤回最近一档 { "sessionCode": "PM" }：把该场次最后一次抽出的整批全部作废，号码回池 */
-    @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
+    /**
+     * 撤回最近一档 { "sessionCode": "PM" }：把该场次最后一次抽出的整批全部作废，号码回池
+     *
+     * 与单条作废同理，必须使用 {@code kcon:winner:void}，抽奖台操作员不得自带撤回能力。
+     */
+    @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
     @Log(title = "抽奖控制台-撤回最近一档", businessType = BusinessType.OTHER)
     @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
     @RepeatSubmit
@@ -171,20 +180,26 @@ public class DrawAdminController extends BaseController
         //    取首条即为最近一次。已领取的记录 Service 会拒绝作废，这里提前过滤掉，
         //    免得控制台把一个必然失败的按钮摆给操作员。
         //    startPage() 走 RuoYi 默认分页（1 页 10 条）限制返回量，取完首条即可。
+        //    分页参数存在 ThreadLocal，必须 try/finally 清掉：
+        //    若查询抛异常，残留参数会污染同一 Tomcat 线程上的下一个请求。
         KconWinner winnerQuery = new KconWinner();
         winnerQuery.setSessionCode(sessionCode);
         winnerQuery.setStatus(KconWinner.STATUS_WON);
+        List<KconWinner> winners;
         startPage();
-        List<KconWinner> winners = drawService.selectWinnerList(winnerQuery);
+        try
+        {
+            winners = drawService.selectWinnerList(winnerQuery);
+        }
+        finally
+        {
+            clearPage();
+        }
         data.put("lastWinner", winners == null || winners.isEmpty() ? null : toLastWinner(winners.get(0)));
 
         // 3. 中奖记录（按场次 × 档位分组）：控制台不再只显示全局最近一位，
         //    操作员能一眼核对每档已抽出的人。放在 lastWinner 之后执行，
         //    避免其内部多条查询消耗掉 startPage() 的分页上下文。
-        //    先 clearPage() 加固：startPage() 把分页参数存在 ThreadLocal 里，
-        //    若上一步的查询因异常未真正执行 SQL，残留参数会污染 winnerGroups 的多条查询
-        //    （Tomcat 线程复用，残留会跨请求带到下一个用户的请求上）
-        clearPage();
         data.put("winnerGroups", drawService.winnerGroups());
 
         return data;

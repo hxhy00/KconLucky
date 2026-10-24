@@ -13,11 +13,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="createTime"  column="create_time" />
     </resultMap>
 
-    <insert id="insertLog" parameterType="KconVerifyLog" useGeneratedKeys="true" keyProperty="id">
-        insert into kcon_verify_log (port_no, input_phone, result, operator, create_time)
-        values (#{portNo}, #{inputPhone}, #{result}, #{operator}, now())
-    </insert>
-
     <update id="truncateLog">
         truncate table kcon_verify_log
     </update>
@@ -41,6 +36,28 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
         </where>
         order by create_time desc, id desc
+    </select>
+
+    <!-- 导出：条件与列表一致，条数上限下推到 SQL，避免全量读回后再截断 -->
+    <select id="selectVerifyLogListLimited" resultMap="KconVerifyLogResult">
+        select id, port_no, input_phone, result, operator, create_time
+        from kcon_verify_log
+        <where>
+            <if test="query.portNo != null">
+                and port_no = #{query.portNo}
+            </if>
+            <if test="query.result != null and query.result != ''">
+                and result = #{query.result}
+            </if>
+            <if test="query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                and create_time &gt;= #{query.params.beginTime}
+            </if>
+            <if test="query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                and create_time &lt;= #{query.params.endTime}
+            </if>
+        </where>
+        order by create_time desc, id desc
+        limit #{limit}
     </select>
 
 </mapper>

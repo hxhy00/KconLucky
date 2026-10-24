@@ -297,17 +297,6 @@ class KconVerifyServiceImplTest
             assertThat(captor.getValue().getOperator()).isEqualTo("staff");
             verify(grantService).recordPrizeGrant(PORT, w, "staff");
         }
-
-        @Test
-        @DisplayName("verifyAndLog 与 verify 行为一致")
-        void verifyAndLogDelegates()
-        {
-            when(winnerMapper.selectActiveByPortNo(PORT)).thenReturn(winner(KconWinner.STATUS_WON));
-            when(checkinMapper.selectByPortNo(PORT)).thenReturn(checkin());
-
-            assertThat(service.verifyAndLog(PORT, PHONE, "staff"))
-                    .containsEntry("result", KconVerifyLog.RESULT_VALID);
-        }
     }
 
     @Nested
@@ -419,7 +408,8 @@ class KconVerifyServiceImplTest
             KconVerifyLog emptyRow = new KconVerifyLog();
 
             KconVerifyLog query = new KconVerifyLog();
-            when(verifyLogMapper.selectVerifyLogList(query)).thenReturn(List.of(item, emptyRow));
+            when(verifyLogMapper.selectVerifyLogListLimited(query, 10000))
+                    .thenReturn(List.of(item, emptyRow));
 
             List<KconVerifyLogExportVo> rows = service.selectVerifyLogExportList(query);
 
@@ -436,11 +426,11 @@ class KconVerifyServiceImplTest
         }
 
         @Test
-        @DisplayName("导出条数超过 10000 时截断为 10000")
-        void exportTruncatesAtLimit()
+        @DisplayName("导出条数上限下推到 SQL（limit 10000），不再全量查回后截断")
+        void exportUsesSqlLimit()
         {
-            List<KconVerifyLog> logs = new ArrayList<>(10001);
-            for (int i = 0; i < 10001; i++)
+            List<KconVerifyLog> logs = new ArrayList<>(10000);
+            for (int i = 0; i < 10000; i++)
             {
                 KconVerifyLog item = new KconVerifyLog();
                 item.setPortNo(i + 1);
@@ -448,9 +438,11 @@ class KconVerifyServiceImplTest
                 logs.add(item);
             }
             KconVerifyLog query = new KconVerifyLog();
-            when(verifyLogMapper.selectVerifyLogList(query)).thenReturn(logs);
+            when(verifyLogMapper.selectVerifyLogListLimited(query, 10000)).thenReturn(logs);
 
             assertThat(service.selectVerifyLogExportList(query)).hasSize(10000);
+            verify(verifyLogMapper).selectVerifyLogListLimited(query, 10000);
+            verify(verifyLogMapper, never()).selectVerifyLogList(query);
         }
     }
 }

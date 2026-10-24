@@ -49,12 +49,6 @@ public interface KconWinnerMapper
      */
     List<KconWinner> selectValidByPrize(@Param("prizeId") Long prizeId);
 
-    /**
-     * winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
-     * 大屏作废接口据此把可作废范围限制在「本次抽出的这一批」内。
-     */
-    int countInSameBatch(@Param("latestId") Long latestId, @Param("winnerId") Long winnerId);
-
     int insertWinner(KconWinner winner);
 
     /**

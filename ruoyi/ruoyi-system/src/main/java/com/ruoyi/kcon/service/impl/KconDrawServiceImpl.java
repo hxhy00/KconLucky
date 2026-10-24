@@ -155,15 +155,15 @@ public class KconDrawServiceImpl implements IKconDrawService
         if (last != null)
         {
             String lastWinTime = format(last.getWinTime());
+            // 安全：本方法同时服务免登录的大屏接口（/app/screen/status）。
+            // 大屏只渲染端口号，姓名/公司/职位/操作人属于个人信息，一律不下发；
+            // 管理端需要这些字段时由 DrawAdminController#buildStatus 自行补齐。
             Map<String, Object> lw = new LinkedHashMap<>();
             lw.put("winnerId", last.getId());
             lw.put("portNo", last.getPortNo());
-            lw.put("name", last.getName());
-            lw.put("company", last.getCompany());
             lw.put("tierName", last.getTierName());
             lw.put("sessionCode", last.getSessionCode());
             lw.put("winTime", lastWinTime);
-            lw.put("operator", last.getOperator());
             data.put("lastWinner", lw);
 
             // 整批：同一档位 + 同一中奖时间就是「这一次点击抽出的全部人」。
@@ -173,12 +173,10 @@ public class KconDrawServiceImpl implements IKconDrawService
                 List<Map<String, Object>> batchViews = new ArrayList<>();
                 for (KconWinner w : winnerMapper.selectBatch(last.getPrizeId(), lastWinTime))
                 {
+                    // 同样只保留大屏实际使用的字段（winnerId / portNo）
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("winnerId", w.getId());
                     m.put("portNo", w.getPortNo());
-                    m.put("name", w.getName());
-                    m.put("company", w.getCompany());
-                    m.put("position", w.getPosition());
                     batchViews.add(m);
                 }
                 Map<String, Object> lb = new LinkedHashMap<>();
@@ -358,15 +356,7 @@ public class KconDrawServiceImpl implements IKconDrawService
      */
     private Map<String, Object> doDraw(String sessionCode, Long prizeId, String operator)
     {
-        if (sessionCode == null || sessionCode.trim().isEmpty())
-        {
-            // 未指定场次时取当前激活场次（与大屏同一口径），不能写死 AM：
-            // 否则下午场已激活、调用方漏传 sessionCode 时会抽到上午场的档位。
-            KconSession cur = resolveCurrentSession(sessionMapper.selectSessionList());
-            sessionCode = cur != null ? cur.getCode() : "AM";
-        }
-
-        // 1. 取奖品档位
+        // 1. 取奖品档位；指定了档位时，场次以档位归属为准，避免「在 AM 场次抽到 PM 的奖」。
         KconPrize prize;
         if (prizeId != null)
         {
@@ -375,9 +365,32 @@ public class KconDrawServiceImpl implements IKconDrawService
             {
                 throw new ServiceException("奖品档位不存在");
             }
+            boolean sessionBlank = sessionCode == null || sessionCode.trim().isEmpty();
+            if (sessionBlank)
+            {
+                // 调用方没传场次：沿用档位自己的场次，不能再退回到「当前激活场次」
+                sessionCode = prize.getSessionCode();
+            }
+            else if (prize.getSessionCode() != null
+                    && !sessionCode.trim().equals(prize.getSessionCode()))
+            {
+                throw new ServiceException("奖品档位不属于该场次");
+            }
+            sessionCode = sessionCode == null ? null : sessionCode.trim();
+            if (sessionCode == null || sessionCode.isEmpty())
+            {
+                sessionCode = "AM";
+            }
         }
         else
         {
+            if (sessionCode == null || sessionCode.trim().isEmpty())
+            {
+                // 未指定场次时取当前激活场次（与大屏同一口径），不能写死 AM：
+                // 否则下午场已激活、调用方漏传 sessionCode 时会抽到上午场的档位。
+                KconSession cur = resolveCurrentSession(sessionMapper.selectSessionList());
+                sessionCode = cur != null ? cur.getCode() : "AM";
+            }
             prize = prizeMapper.selectCurrentTier(sessionCode);
         }
         if (prize == null)
@@ -601,34 +614,6 @@ public class KconDrawServiceImpl implements IKconDrawService
         return voided;
     }
 
-    @Override
-    public void receive(Long winnerId, String operator)
-    {
-        KconWinner winner = winnerMapper.selectWinnerById(winnerId);
-        if (winner == null)
-        {
-            throw new ServiceException("中奖记录不存在");
-        }
-        if (winner.getStatus() != null && winner.getStatus() == KconWinner.STATUS_RECEIVED)
-        {
-            throw new ServiceException("该奖品已领取");
-        }
-        if (winner.getStatus() != null && winner.getStatus() == KconWinner.STATUS_VOID)
-        {
-            throw new ServiceException("该记录已作废，不能领取");
-        }
-        KconWinner upd = new KconWinner();
-        upd.setId(winnerId);
-        upd.setStatus(KconWinner.STATUS_RECEIVED);
-        upd.setOperator(operator);
-        int rows = winnerMapper.updateStatus(upd);
-        if (rows != 1)
-        {
-            throw new ServiceException("状态已变更，请刷新后重试");
-        }
-        log.info("标记已领取 winnerId={}", winnerId);
-    }
-
     // ---------------- 奖品档位 ----------------
 
     @Override
@@ -724,6 +709,9 @@ public class KconDrawServiceImpl implements IKconDrawService
         for (KconWinner w : list)
         {
             w.setPhoneMask(IKconCheckinService.maskPhone(w.getPhone()));
+            // 列表只回掩码：完整手机号/邮箱不随列表下发，减少批量导出式的信息泄露面
+            w.setPhone(null);
+            w.setEmail(null);
             w.setStatusText(statusText(w.getStatus()));
         }
         return list;

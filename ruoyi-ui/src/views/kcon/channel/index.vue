@@ -104,6 +104,7 @@ import {
   listChannelMapping, addChannelMapping, updateChannelMapping, delChannelMapping,
   resyncChannelMapping
 } from "@/api/kcon/channel"
+import { buildResyncReportText } from "@/utils/kcon"
 
 export default {
   name: "KconChannelMapping",
@@ -199,19 +200,11 @@ export default {
       ).then(() => {
         this.resyncing = true
         return resyncChannelMapping().then(res => {
-          const d = (res && res.data) || {}
-          const locked = d.locked || []
-          let html = `已同步 <b>${d.synced || 0}</b> 人。`
-          if (locked.length) {
-            html += `<br/>以下 <b>${locked.length}</b> 人已签到或已中奖，为避免状态矛盾未做修改，请人工核对：<br/>`
-            html += locked.slice(0, 20).map(p => {
-              const why = p.signed === 1 ? "已签到" : ""
-              const won = p.won === 1 ? (why ? "、已中奖" : "已中奖") : ""
-              return `第${p.attendeeId}号 ${p.name}（${p.channel}，${why}${won}）`
-            }).join("<br/>")
-            if (locked.length > 20) html += `<br/>… 另有 ${locked.length - 20} 人`
-          }
-          this.$alert(html, "重算完成", { dangerouslyUseHTMLString: true })
+          // 纯文本渲染：姓名、渠道来自 Excel 导入，属于不可信输入，
+          // 绝不能拼进 HTML 再交给 dangerouslyUseHTMLString（存储型 XSS）
+          this.$alert(buildResyncReportText(res && res.data), "重算完成", {
+            customStyle: { whiteSpace: "pre-line", lineHeight: "1.7", maxWidth: "560px" }
+          })
         })
       }).catch(() => {}).finally(() => { this.resyncing = false })
     }

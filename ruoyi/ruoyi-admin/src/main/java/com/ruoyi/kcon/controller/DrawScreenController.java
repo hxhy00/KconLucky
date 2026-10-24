@@ -1,7 +1,9 @@
 package com.ruoyi.kcon.controller;
 
 import com.ruoyi.common.annotation.Anonymous;
+import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.service.IKconDrawService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +43,7 @@ public class DrawScreenController
      * 带上大屏上次收到的 {@code version} 时走增量：未变化只回一个极小的响应，
      * 大屏据此跳过整份重渲染（投屏中重渲染会打断中奖动画）。
      */
+    @RateLimiter(time = 60, count = 30, limitType = LimitType.IP)
     @GetMapping("/status")
     public AjaxResult status(@RequestParam(required = false) String version)
     {

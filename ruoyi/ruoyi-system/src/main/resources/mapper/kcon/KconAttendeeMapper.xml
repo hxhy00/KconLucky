@@ -67,19 +67,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit 1
     </select>
 
-    <select id="selectByTail4" parameterType="String" resultMap="KconAttendeeResult">
-        select a.id, a.name, a.phone, a.channel, a.ticket_type, a.ticket_type_manual, a.draw_eligible,
-               a.company, a.email,
-               a.position, a.phone_tail4,
-               c.port_no as port_no,
-               c.checkin_time as checkin_time,
-               case when c.id is null then 0 else 1 end as signed
-        from kcon_attendee a
-        left join kcon_checkin c on c.attendee_id = a.id
-        where a.phone_tail4 = #{tail4}
-        order by a.id
-    </select>
-
     <select id="selectAttendeeList" parameterType="KconAttendee" resultMap="KconAttendeeResult">
         <include refid="selectAttendeeWithSignVo"/>
         <where>
@@ -271,13 +258,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <include refid="notLockedCondition"/>
         </where>
     </update>
-
-    <select id="countLockedByChannel" parameterType="String" resultType="int">
-        select count(*) from kcon_attendee a
-        where a.channel = #{channel}
-          and (exists (select 1 from kcon_checkin c where c.attendee_id = a.id)
-            or exists (select 1 from kcon_winner w where w.attendee_id = a.id and w.status &lt;&gt; 2))
-    </select>
 
     <select id="selectLockedByChannel" parameterType="String" resultType="java.util.Map">
         select a.id          as attendeeId,

@@ -62,7 +62,7 @@
       </el-table-column>
       <el-table-column label="场次" prop="sessionCode" width="100" align="center">
         <template slot-scope="scope">
-          <span v-if="scope.row.sessionCode">{{ scope.row.sessionCode }}</span>
+          <span v-if="scope.row.sessionCode">{{ sessionName(scope.row.sessionCode) }}</span>
           <span v-else class="text-muted">—</span>
         </template>
       </el-table-column>
@@ -83,6 +83,7 @@
 
 <script>
 import { listPrizeGrant } from "@/api/kcon/grant"
+import { listSessions } from "@/api/kcon/session"
 
 export default {
   name: "KconPrizeGrant",
@@ -92,6 +93,10 @@ export default {
       showSearch: true,
       total: 0,
       grantList: [],
+      // 请求序号：快速翻页/搜索时，慢返回的旧响应不能盖掉新结果
+      listSeq: 0,
+      // 场次列表：把库里的场次码映射成名称展示，避免前端硬编码 AM/PM
+      sessions: [],
       dateRange: [],
       queryParams: {
         pageNum: 1,
@@ -102,16 +107,32 @@ export default {
     }
   },
   created() {
+    this.getSessions()
     this.getList()
   },
   methods: {
+    // 场次列表从后端取，与奖品页/中奖记录页同一数据源（需求 FR-16）
+    getSessions() {
+      listSessions().then(res => {
+        this.sessions = res.data || []
+      }).catch(() => { this.sessions = [] })
+    },
+    sessionName(code) {
+      const hit = this.sessions.find(s => s.code === code)
+      return hit ? hit.name : (code || '—')
+    },
     getList() {
       this.loading = true
+      const seq = ++this.listSeq
       listPrizeGrant(this.addDateRange(this.queryParams, this.dateRange)).then(res => {
+        if (seq !== this.listSeq) return
         this.grantList = res.rows
         this.total = res.total
-        this.loading = false
-      }).catch(() => { this.loading = false })
+      }).catch(() => {
+        // request.js 已统一提示，这里只兜底
+      }).finally(() => {
+        if (seq === this.listSeq) this.loading = false
+      })
     },
     handleQuery() {
       this.queryParams.pageNum = 1

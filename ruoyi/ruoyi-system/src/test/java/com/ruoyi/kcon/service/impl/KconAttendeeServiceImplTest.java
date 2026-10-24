@@ -3,6 +3,7 @@ package com.ruoyi.kcon.service.impl;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.kcon.domain.KconAttendee;
 import com.ruoyi.kcon.domain.KconChannelMapping;
+import com.ruoyi.kcon.domain.KconCheckin;
 import com.ruoyi.kcon.mapper.KconAttendeeMapper;
 import com.ruoyi.kcon.mapper.KconCheckinMapper;
 import com.ruoyi.kcon.service.IKconChannelMappingService;
@@ -81,16 +82,34 @@ class KconAttendeeServiceImplTest
     class Query
     {
         @Test
-        @DisplayName("列表与详情都写入手机号掩码")
+        @DisplayName("列表只回掩码并清空明文，详情保留完整手机号（编辑表单回填用）")
         void masksPhone()
         {
-            KconAttendee a = attendee(1L, "13800000001", "嘉宾");
-            when(attendeeMapper.selectAttendeeList(any())).thenReturn(List.of(a));
-            when(attendeeMapper.selectAttendeeById(1L)).thenReturn(a);
+            KconAttendee listRow = attendee(1L, "13800000001", "嘉宾");
+            KconAttendee detail = attendee(1L, "13800000001", "嘉宾");
+            when(attendeeMapper.selectAttendeeList(any())).thenReturn(List.of(listRow));
+            when(attendeeMapper.selectAttendeeById(1L)).thenReturn(detail);
 
-            assertThat(service.selectAttendeeList(new KconAttendee()).get(0).getPhoneMask())
-                    .isEqualTo("138****0001");
-            assertThat(service.selectAttendeeById(1L).getPhoneMask()).isEqualTo("138****0001");
+            KconAttendee listed = service.selectAttendeeList(new KconAttendee()).get(0);
+            assertThat(listed.getPhoneMask()).isEqualTo("138****0001");
+            assertThat(listed.getPhone()).isNull();
+
+            KconAttendee single = service.selectAttendeeById(1L);
+            assertThat(single.getPhoneMask()).isEqualTo("138****0001");
+            assertThat(single.getPhone()).isEqualTo("13800000001");
+        }
+
+        @Test
+        @DisplayName("名单导出保留完整手机号，仅补掩码字段")
+        void exportKeepsFullPhone()
+        {
+            when(attendeeMapper.selectAttendeeList(any()))
+                    .thenReturn(List.of(attendee(1L, "13800000001", "嘉宾")));
+
+            KconAttendee row = service.selectAttendeeExportList(new KconAttendee()).get(0);
+
+            assertThat(row.getPhone()).isEqualTo("13800000001");
+            assertThat(row.getPhoneMask()).isEqualTo("138****0001");
         }
 
         @Test
@@ -319,6 +338,46 @@ class KconAttendeeServiceImplTest
             ArgumentCaptor<KconAttendee> captor = ArgumentCaptor.forClass(KconAttendee.class);
             verify(attendeeMapper).updateAttendee(captor.capture());
             assertThat(captor.getValue().getTicketTypeManual()).isNull();
+        }
+
+        @Test
+        @DisplayName("手机号未改时不查签到记录")
+        void unchangedPhoneSkipsCheckinLookup()
+        {
+            when(attendeeMapper.selectAttendeeById(1L)).thenReturn(attendee(1L, "13800000001", "嘉宾"));
+            when(attendeeMapper.updateAttendee(any())).thenReturn(1);
+
+            service.updateAttendee(attendee(1L, " 13800000001 ", null));
+
+            verify(checkinMapper, never()).selectByAttendeeId(any());
+        }
+
+        @Test
+        @DisplayName("改手机号但尚未签到：允许修改")
+        void changedPhoneWithoutCheckinIsAllowed()
+        {
+            when(attendeeMapper.selectAttendeeById(1L)).thenReturn(attendee(1L, "13800000001", "嘉宾"));
+            when(checkinMapper.selectByAttendeeId(1L)).thenReturn(null);
+            when(attendeeMapper.updateAttendee(any())).thenReturn(1);
+
+            service.updateAttendee(attendee(1L, "13900000009", null));
+
+            verify(attendeeMapper).updateAttendee(any());
+        }
+
+        @Test
+        @DisplayName("签到后改手机号：拒绝，避免破坏兑奖核验与产生重复签到")
+        void changedPhoneAfterCheckinIsRejected()
+        {
+            when(attendeeMapper.selectAttendeeById(1L)).thenReturn(attendee(1L, "13800000001", "嘉宾"));
+            KconCheckin checkin = new KconCheckin();
+            checkin.setAttendeeId(1L);
+            when(checkinMapper.selectByAttendeeId(1L)).thenReturn(checkin);
+
+            assertThatThrownBy(() -> service.updateAttendee(attendee(1L, "13900000009", null)))
+                    .isInstanceOf(ServiceException.class)
+                    .hasMessage("签到后不允许修改手机号，如需修改请联系管理员处理签到记录");
+            verify(attendeeMapper, never()).updateAttendee(any());
         }
 
         @Test
@@ -609,6 +668,57 @@ class KconAttendeeServiceImplTest
                     .containsEntry("mapped", true)
                     .containsEntry("benefitType", "午餐")
                     .containsEntry("drawEligible", 1);
+        }
+
+        @Test
+        @DisplayName("字段超长按实体 @Size 口径计入 blocker")
+        void blocksOverlongFields()
+        {
+            String longName = "名".repeat(65);
+            String longCompany = "司".repeat(129);
+            String longEmail = "a".repeat(129) + "@x.com";
+            String longPosition = "职".repeat(65);
+            InputStream is = csv(HEADER
+                    + longName + ",13800000001,嘉宾,,,\n"
+                    + "张三,13800000002,嘉宾," + longCompany + ",,\n"
+                    + "李四,13800000003,嘉宾,,," + longEmail + "\n"
+                    + "王五,13800000004,嘉宾,," + longPosition + ",\n");
+
+            Map<String, Object> data = service.previewImport(is, "a.csv", "append");
+
+            assertThat(data)
+                    .containsEntry("level", "BLOCK")
+                    .containsEntry("willSkip", 4)
+                    .containsEntry("willInsert", 0);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> blockers = (List<Map<String, Object>>) data.get("blockers");
+            assertThat(blockers).extracting(b -> b.get("reason")).containsExactly(
+                    "姓名长度超过 64 个字符",
+                    "公司名称长度超过 128 个字符",
+                    "邮箱长度超过 128 个字符",
+                    "职位长度超过 64 个字符");
+        }
+
+        @Test
+        @DisplayName("数据行数超过上限时整体阻塞")
+        void blocksTooManyRows()
+        {
+            StringBuilder sb = new StringBuilder(HEADER);
+            for (int i = 0; i <= 20000; i++)
+            {
+                sb.append("张三,").append(13800000000L + i).append(",嘉宾,,,\n");
+            }
+
+            Map<String, Object> data = service.previewImport(
+                    csv(sb.toString()), "a.csv", "append");
+
+            assertThat(data)
+                    .containsEntry("level", "BLOCK")
+                    .containsEntry("willInsert", 0);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> blockers = (List<Map<String, Object>>) data.get("blockers");
+            assertThat(blockers).hasSize(1);
+            assertThat((String) blockers.get(0).get("reason")).contains("行数超过上限");
         }
 
         @Test

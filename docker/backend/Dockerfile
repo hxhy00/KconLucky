@@ -34,7 +34,7 @@ ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:
 
 # mysql-client：管理端「数据迁移」功能需要调 mysqldump / mysql
 # 导出全量 .sql 备份与从 .sql 恢复（需求 AC-11），不自研 SQL 导出器。
-# 清华镜像源，避免现场/构建时走境外源。
+# apt 源为 Debian 官方 CDN（deb.debian.org），未换国内镜像；构建时如遇网络问题再评估切换
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends mysql-client; \

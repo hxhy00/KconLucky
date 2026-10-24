@@ -2,8 +2,10 @@ package com.ruoyi.kcon.service;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -73,6 +75,10 @@ public class StaffRoleGuard
     /**
      * 按岗位 key 集合解析角色 ID 数组，供建号时绑定。
      * 任一岗位缺失/重复/停用都直接报错——静默取第一个会让权限悄悄落到错误角色上。
+     *
+     * 入参先过岗位白名单：前端下拉之外的值（例如 "admin"）必须在查库之前拒绝，
+     * 否则只要猜到 role_key 就能把任意角色绑进工作人员账号。
+     * 同一 key 重复提交时去重，避免向用户角色关联表写入重复主键。
      */
     public Long[] resolveRoleIds(List<String> roleKeys)
     {
@@ -80,10 +86,19 @@ public class StaffRoleGuard
         {
             throw new ServiceException("请至少选择一个岗位");
         }
-        Long[] ids = new Long[roleKeys.size()];
-        for (int i = 0; i < roleKeys.size(); i++)
+        Set<String> keys = new LinkedHashSet<>();
+        for (String key : roleKeys)
         {
-            String key = roleKeys.get(i);
+            if (!isStaffRoleKey(key))
+            {
+                throw new ServiceException("不支持的岗位：" + key);
+            }
+            keys.add(key);
+        }
+        Long[] ids = new Long[keys.size()];
+        int i = 0;
+        for (String key : keys)
+        {
             SysRole role = resolveRole(key);
             if (role == null)
             {
@@ -93,9 +108,22 @@ public class StaffRoleGuard
             {
                 throw new ServiceException("岗位「" + role.getRoleName() + "」已停用，请先在角色管理中启用");
             }
-            ids[i] = role.getRoleId();
+            ids[i++] = role.getRoleId();
         }
         return ids;
+    }
+
+    /** 是否为允许建号的岗位 role_key */
+    private boolean isStaffRoleKey(String roleKey)
+    {
+        for (String allowed : STAFF_ROLE_KEYS)
+        {
+            if (allowed.equals(roleKey))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

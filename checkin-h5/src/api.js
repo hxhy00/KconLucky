@@ -15,8 +15,24 @@ async function request(path, options = {}) {
       ...rest,
       signal: controller.signal
     })
+    // fetch 只在网络层失败时 reject：网关 502、鉴权失败等仍会正常返回。
+    // 不查状态码就会把 HTML 错误页交给 res.json()，最终被归成「网络异常」，
+    // 掩盖真实原因，也无法给出可操作的提示。
+    if (!res.ok) {
+      const err = new Error(`服务异常（HTTP ${res.status}）`)
+      err.networkError = true
+      throw err
+    }
+    const contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || ''
+    if (!contentType.includes('application/json')) {
+      const err = new Error('服务异常，请稍后重试')
+      err.networkError = true
+      throw err
+    }
     return await res.json()
   } catch (e) {
+    // 上面主动抛出的错误保留原文案，其余统一归为网络/超时异常
+    if (e && e.networkError) throw e
     const err = new Error(e.name === 'AbortError' ? '请求超时' : '网络异常')
     err.networkError = true
     throw err

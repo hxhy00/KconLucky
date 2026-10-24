@@ -157,16 +157,11 @@ public class KconBenefitGrantServiceImpl implements IKconBenefitGrantService
     }
 
     /**
-     * 导出取数：上限 EXPORT_MAX，超限导最近 N 条；逐条做手机号兜底掩码。
+     * 导出取数：上限 EXPORT_MAX 通过 SQL limit 下推，逐条做手机号兜底掩码。
      */
     private List<KconBenefitGrant> loadForExport(KconBenefitGrant query)
     {
-        List<KconBenefitGrant> list = grantMapper.selectGrantList(query);
-        if (list.size() > EXPORT_MAX)
-        {
-            list = list.subList(0, EXPORT_MAX);
-            log.warn("发放日志导出超过上限，仅导出最近 {} 条", EXPORT_MAX);
-        }
+        List<KconBenefitGrant> list = grantMapper.selectGrantListLimited(query, EXPORT_MAX);
         for (KconBenefitGrant item : list)
         {
             fillDisplay(item);

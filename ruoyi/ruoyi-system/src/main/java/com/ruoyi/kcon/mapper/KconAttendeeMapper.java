@@ -23,11 +23,6 @@ public interface KconAttendeeMapper
     KconAttendee selectAttendeeByPhone(String phone);
 
     /**
-     * 按手机号后四位查询（可能多人），仅返回脱敏候选信息
-     */
-    List<KconAttendee> selectByTail4(String tail4);
-
-    /**
      * 条件查询列表（管理端，含签到状态）
      */
     List<KconAttendee> selectAttendeeList(KconAttendee query);
@@ -101,11 +96,6 @@ public interface KconAttendeeMapper
      * @return 实际更新行数
      */
     int resyncAll();
-
-    /**
-     * 统计某渠道下被锁定（已签到/已中奖）因而未重算的人数
-     */
-    int countLockedByChannel(String channel);
 
     /**
      * 列出被锁定的人员（供人工核对）

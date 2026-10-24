@@ -39,7 +39,7 @@ public class KconVerifyServiceImpl implements IKconVerifyService
     /**
      * 导出条数上限。日志表会随现场核验持续增长，
      * 不限量导出会一次性把全表读进内存并生成超大文件，现场机器扛不住。
-     * 超限时只导最近 N 条并打日志，提示用时间范围缩小。
+     * 上限通过 SQL 的 limit 下推，避免先把全表查回再截断。
      */
     private static final int EXPORT_MAX = 10000;
 
@@ -145,17 +145,6 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         return data;
     }
 
-    /**
-     * 兼容保留：人工核验方法签名不变，但核验动作已不再写核验日志（verifyAndLog 与
-     * verify 等价）。管理端 verify 接口已改走 verify；保留此方法仅为避免接口破坏性变更，
-     * 新代码一律调 {@link #verify}。
-     */
-    @Override
-    public Map<String, Object> verifyAndLog(Integer portNo, String phone, String operator)
-    {
-        return verify(portNo, phone, operator);
-    }
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void receive(Integer portNo, String phone, String operator)
@@ -215,17 +204,6 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(time);
     }
 
-    /**
-     * 核验日志已退役：核验动作不再留痕（写日志逻辑随 kcon_verify_log 一起下线），
-     * 发放追溯统一走 kcon_benefit_grant。查询接口与 fillDisplay/resultText 等
-     * 辅助方法保留——历史数据仍可通过该 Mapper 查询，且 ExportController 的
-     * 数据导出不再依赖本表（见 KconCheckinMapper#selectExportList）。
-     */
-    private void writeLog(Integer portNo, String phone, String result, String operator)
-    {
-        // no-op：核验留痕已下线
-    }
-
     // ---------------- 核验日志查询 ----------------
 
     @Override
@@ -244,13 +222,8 @@ public class KconVerifyServiceImpl implements IKconVerifyService
     public List<KconVerifyLogExportVo> selectVerifyLogExportList(KconVerifyLog query)
     {
         checkResultParam(query);
-        List<KconVerifyLog> list = verifyLogMapper.selectVerifyLogList(query);
-        if (list.size() > EXPORT_MAX)
-        {
-            log.warn("兑奖日志导出命中 {} 条，超过上限，本次只导出最近 {} 条，请用时间范围缩小后重试",
-                    list.size(), EXPORT_MAX);
-            list = list.subList(0, EXPORT_MAX);
-        }
+        // 上限下推到 SQL：日志表会持续增长，先全量查回再 subList 会白读大量数据
+        List<KconVerifyLog> list = verifyLogMapper.selectVerifyLogListLimited(query, EXPORT_MAX);
         // 局部变量持有 formatter，不做静态字段，避免多线程下 SimpleDateFormat 非线程安全
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         List<KconVerifyLogExportVo> vos = new ArrayList<>(list.size());

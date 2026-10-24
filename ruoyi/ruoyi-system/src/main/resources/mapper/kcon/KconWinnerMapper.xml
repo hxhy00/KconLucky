@@ -93,18 +93,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by win_time asc, id asc
     </select>
 
-    <!-- winnerId 是否与 latestId 属于同一批（同档位 + 同中奖时间）。
-         大屏免登录作废接口据此把可作废范围限制在「本次抽出的这一批」内：
-         汇总页要能单独撤掉某个人，但仍不该动得了更早的历史记录。 -->
-    <select id="countInSameBatch" resultType="int">
-        select count(*)
-        from kcon_winner a
-        join (select prize_id, win_time from kcon_winner where id = #{latestId}) b
-          on a.prize_id = b.prize_id and a.win_time = b.win_time
-        where a.id = #{winnerId}
-          and a.status != 2
-    </select>
-
     <!-- 某端口号当前有效的中奖记录（未作废） -->
     <select id="selectActiveByPortNo" parameterType="java.lang.Integer" resultMap="KconWinnerResult">
         <include refid="selectWinnerVo"/>

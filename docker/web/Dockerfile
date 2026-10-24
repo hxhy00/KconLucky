@@ -8,8 +8,9 @@
 FROM node:16-alpine AS build-admin
 WORKDIR /app
 RUN npm config set registry https://registry.npmmirror.com
+# 三端均有 package-lock.json（已核对），一律用 npm ci 保证依赖与锁文件一致、构建可复现
 COPY ruoyi-ui/package.json ruoyi-ui/package-lock.json* ./
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+RUN npm ci --legacy-peer-deps --no-audit --no-fund
 COPY ruoyi-ui/ .
 RUN npm run build:prod
 
@@ -18,7 +19,7 @@ FROM node:20-alpine AS build-checkin
 WORKDIR /app
 RUN npm config set registry https://registry.npmmirror.com
 COPY checkin-h5/package.json checkin-h5/package-lock.json* ./
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY checkin-h5/ .
 RUN npm run build
 
@@ -27,7 +28,7 @@ FROM node:20-alpine AS build-screen
 WORKDIR /app
 RUN npm config set registry https://registry.npmmirror.com
 COPY screen/package.json screen/package-lock.json* ./
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY screen/ .
 RUN npm run build
 
@@ -36,6 +37,8 @@ FROM nginx:1.27-alpine
 ENV TZ=Asia/Shanghai
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/web/nginx.conf /etc/nginx/nginx.conf
+# 安全响应头公共片段（nginx.conf http 层及各带 add_header 的 location 里 include）
+COPY docker/web/security-headers.conf /etc/nginx/security-headers.conf
 COPY docker/web/entrypoint.sh /release-and-run.sh
 COPY docker/web/index.html /opt/web-release/index.html
 COPY docker/web/kcon-mark.png /opt/web-release/kcon-mark.png

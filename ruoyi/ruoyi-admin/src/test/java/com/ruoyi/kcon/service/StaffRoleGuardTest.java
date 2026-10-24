@@ -94,6 +94,29 @@ class StaffRoleGuardTest
     }
 
     @Test
+    @DisplayName("非岗位白名单的 role_key：直接拒绝，且不查角色表")
+    void rejectsKeyOutsideWhitelistBeforeTouchingMapper()
+    {
+        assertThatThrownBy(() -> guard.resolveRoleIds(List.of("admin")))
+                .isInstanceOf(ServiceException.class)
+                .hasMessage("不支持的岗位：admin");
+
+        verifyNoInteractions(roleService);
+    }
+
+    @Test
+    @DisplayName("重复岗位去重后只解析一次，返回单个角色 ID")
+    void dedupesRepeatedRoleKeys()
+    {
+        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+
+        Long[] ids = guard.resolveRoleIds(List.of(
+                StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_CHECKIN));
+
+        assertThat(ids).containsExactly(DRAW_ROLE_ID, CHECKIN_ROLE_ID);
+    }
+
+    @Test
     @DisplayName("同一 role_key 存在多条：拒绝并提示先合并角色")
     void rejectsDuplicateRoleKey()
     {

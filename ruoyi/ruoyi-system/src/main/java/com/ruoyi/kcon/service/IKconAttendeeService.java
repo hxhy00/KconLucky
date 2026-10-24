@@ -15,6 +15,12 @@ public interface IKconAttendeeService
 {
     List<KconAttendee> selectAttendeeList(KconAttendee query);
 
+    /**
+     * 名单导出取数：与列表同一套筛选条件，但保留完整手机号
+     * （导出是受权限控制的独立动作，列表接口才做明文脱敏）。
+     */
+    List<KconAttendee> selectAttendeeExportList(KconAttendee query);
+
     KconAttendee selectAttendeeById(Long id);
 
     /**

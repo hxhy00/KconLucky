@@ -14,9 +14,19 @@ async function request(path, options = {}) {
       ...rest,
       signal: controller.signal
     })
+    // HTTP 非 2xx 说明后端/网关异常，不是网络不通；
+    // 不抛的话 res.json() 会把错误页解析成 undefined，被误报成「网络异常」。
+    // 打上 httpError 标记，catch 里原样透传，不改写成「网络异常」
+    if (!res.ok) {
+      const err = new Error('服务异常（HTTP ' + res.status + '）')
+      err.httpError = true
+      throw err
+    }
     return await res.json()
   } catch (e) {
-    // 统一成带标识的错误，调用方据此区分「后端返回的业务结果」与「结果未知」
+    // 统一成带标识的错误，调用方据此区分「后端返回的业务结果」与「结果未知」；
+    // 上面的服务异常（HTTP 非 2xx）不是网络问题，原样透传
+    if (e && e.httpError) throw e
     const err = new Error(e.name === 'AbortError' ? '请求超时' : '网络异常')
     err.networkError = true
     throw err

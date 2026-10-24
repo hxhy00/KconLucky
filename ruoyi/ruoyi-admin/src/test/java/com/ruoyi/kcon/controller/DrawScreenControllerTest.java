@@ -21,6 +21,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.ruoyi.common.annotation.RateLimiter;
+import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.service.IKconDrawService;
 
 /**
@@ -103,6 +105,19 @@ class DrawScreenControllerTest
                 .andReturn().getResponse().getStatus();
 
         assertThat(httpStatus).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("GET /status：匿名大屏接口按 IP 限流")
+    void statusIsRateLimited() throws Exception
+    {
+        RateLimiter limiter = DrawScreenController.class
+                .getDeclaredMethod("status", String.class).getAnnotation(RateLimiter.class);
+
+        assertThat(limiter).isNotNull();
+        assertThat(limiter.limitType()).isEqualTo(LimitType.IP);
+        assertThat(limiter.count()).isEqualTo(30);
+        assertThat(limiter.time()).isEqualTo(60);
     }
 
     private Map<String, Object> screenStatus()

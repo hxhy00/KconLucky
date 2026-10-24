@@ -1,6 +1,7 @@
 package com.ruoyi.kcon.mapper;
 
 import com.ruoyi.kcon.domain.KconBenefitGrant;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -18,9 +19,6 @@ public interface KconBenefitGrantMapper
      */
     int insertGrant(KconBenefitGrant grant);
 
-    /** 按参会人 + 类型判断是否已发放（发放按钮置灰与后端预检用） */
-    int countByAttendeeAndType(KconBenefitGrant query);
-
     /**
      * 条件查询发放日志（分页/导出共用）
      *   grantType           BENEFIT/PRIZE
@@ -31,6 +29,13 @@ public interface KconBenefitGrantMapper
      * 按发放时间倒序（同时间按主键倒序，保证分页排序稳定）。
      */
     List<KconBenefitGrant> selectGrantList(KconBenefitGrant query);
+
+    /**
+     * 导出用：同一套查询条件，但条数上限下推到 SQL（limit），
+     * 避免先全量查回再 subList 造成无谓的内存与网络开销。
+     */
+    List<KconBenefitGrant> selectGrantListLimited(@Param("query") KconBenefitGrant query,
+                                                  @Param("limit") int limit);
 
     int truncateGrant();
 }

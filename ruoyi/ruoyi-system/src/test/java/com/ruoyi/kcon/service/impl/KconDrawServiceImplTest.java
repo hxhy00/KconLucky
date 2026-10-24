@@ -286,10 +286,17 @@ class KconDrawServiceImplTest
             @SuppressWarnings("unchecked")
             Map<String, Object> lastWinner = (Map<String, Object>) data.get("lastWinner");
             assertThat(lastWinner).containsEntry("winnerId", 11L).containsEntry("portNo", 10);
+            // 大屏接口匿名开放：姓名/公司/职位/操作人一律不下发
+            assertThat(lastWinner).doesNotContainKeys("name", "company", "position", "operator");
             @SuppressWarnings("unchecked")
             Map<String, Object> lastBatch = (Map<String, Object>) data.get("lastBatch");
             assertThat(lastBatch).containsEntry("count", 2);
             assertThat((String) lastBatch.get("batchKey")).startsWith("3@").endsWith("@2");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> batchWinners = (List<Map<String, Object>>) lastBatch.get("winners");
+            assertThat(batchWinners).allSatisfy(w -> assertThat(w)
+                    .containsKeys("winnerId", "portNo")
+                    .doesNotContainKeys("name", "company", "position", "operator"));
             assertThat((String) data.get("version")).startsWith(PM + "|");
         }
 
@@ -330,6 +337,45 @@ class KconDrawServiceImplTest
             assertThatThrownBy(() -> service.draw(AM, 99L, "staff"))
                     .isInstanceOf(ServiceException.class)
                     .hasMessage("奖品档位不存在");
+        }
+
+        @Test
+        @DisplayName("指定档位不属于传入场次时拒绝")
+        void rejectsPrizeFromAnotherSession()
+        {
+            when(prizeMapper.selectPrizeById(3L)).thenReturn(prize(3L, PM, "三等奖", 1, 0));
+
+            assertThatThrownBy(() -> service.draw(AM, 3L, "staff"))
+                    .isInstanceOf(ServiceException.class)
+                    .hasMessage("奖品档位不属于该场次");
+            verify(winnerMapper, never()).insertWinner(any());
+        }
+
+        @Test
+        @DisplayName("未传场次时按档位所属场次抽奖")
+        void usesPrizeSessionWhenSessionBlank()
+        {
+            KconPrize p = prize(3L, PM, "三等奖", 1, 0);
+            when(prizeMapper.selectPrizeById(3L)).thenReturn(p);
+            stubDefaultDrawConfig();
+            when(checkinMapper.selectAllPorts()).thenReturn(List.of(checkin(10, 1, "S", "午餐")));
+            when(winnerMapper.selectAllWonPorts()).thenReturn(new ArrayList<>());
+            when(winnerMapper.selectActiveByPortNo(anyInt())).thenReturn(null);
+            when(checkinMapper.selectByPortNo(anyInt())).thenReturn(checkin(10, 1, "S", "午餐"));
+            when(attendeeMapper.selectAttendeeById(7L)).thenReturn(attendee());
+            when(prizeMapper.incrementDrawnCount(3L)).thenReturn(1);
+            when(sessionMapper.selectSessionList()).thenReturn(List.of(session(AM, "上午场", 1)));
+            // 抽奖用 PM 档位，但 screenStatus 仍按「当前激活场次」AM 组装状态
+            when(prizeMapper.selectCurrentTier(AM)).thenReturn(null);
+            when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
+            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
+            when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
+
+            service.draw("  ", 3L, "staff");
+
+            ArgumentCaptor<KconWinner> captor = ArgumentCaptor.forClass(KconWinner.class);
+            verify(winnerMapper).insertWinner(captor.capture());
+            assertThat(captor.getValue().getSessionCode()).isEqualTo(PM);
         }
 
         @Test
@@ -664,64 +710,6 @@ class KconDrawServiceImplTest
     }
 
     @Nested
-    @DisplayName("按中奖记录领取")
-    class Receive
-    {
-        @Test
-        @DisplayName("记录不存在时拒绝")
-        void rejectsMissing()
-        {
-            when(winnerMapper.selectWinnerById(11L)).thenReturn(null);
-
-            assertThatThrownBy(() -> service.receive(11L, "staff"))
-                    .isInstanceOf(ServiceException.class)
-                    .hasMessage("中奖记录不存在");
-        }
-
-        @Test
-        @DisplayName("已领取/已作废时拒绝")
-        void rejectsInvalidStatus()
-        {
-            when(winnerMapper.selectWinnerById(11L)).thenReturn(winner(11L, 10, KconWinner.STATUS_RECEIVED));
-            assertThatThrownBy(() -> service.receive(11L, "staff"))
-                    .isInstanceOf(ServiceException.class)
-                    .hasMessage("该奖品已领取");
-
-            when(winnerMapper.selectWinnerById(12L)).thenReturn(winner(12L, 20, KconWinner.STATUS_VOID));
-            assertThatThrownBy(() -> service.receive(12L, "staff"))
-                    .isInstanceOf(ServiceException.class)
-                    .hasMessage("该记录已作废，不能领取");
-        }
-
-        @Test
-        @DisplayName("状态已变更时提示刷新")
-        void rejectsWhenUpdateFails()
-        {
-            when(winnerMapper.selectWinnerById(11L)).thenReturn(winner(11L, 10, KconWinner.STATUS_WON));
-            when(winnerMapper.updateStatus(any())).thenReturn(0);
-
-            assertThatThrownBy(() -> service.receive(11L, "staff"))
-                    .isInstanceOf(ServiceException.class)
-                    .hasMessage("状态已变更，请刷新后重试");
-        }
-
-        @Test
-        @DisplayName("正常领取：状态置 1 并记录操作人")
-        void marksReceived()
-        {
-            when(winnerMapper.selectWinnerById(11L)).thenReturn(winner(11L, 10, KconWinner.STATUS_WON));
-            when(winnerMapper.updateStatus(any())).thenReturn(1);
-
-            service.receive(11L, "staff");
-
-            ArgumentCaptor<KconWinner> captor = ArgumentCaptor.forClass(KconWinner.class);
-            verify(winnerMapper).updateStatus(captor.capture());
-            assertThat(captor.getValue().getStatus()).isEqualTo(KconWinner.STATUS_RECEIVED);
-            assertThat(captor.getValue().getOperator()).isEqualTo("staff");
-        }
-    }
-
-    @Nested
     @DisplayName("奖品档位维护")
     class PrizeCrud
     {
@@ -866,7 +854,12 @@ class KconDrawServiceImplTest
 
             assertThat(list).extracting(KconWinner::getStatusText)
                     .containsExactly("已中奖", "已领取", "已作废", "");
-            assertThat(list).allSatisfy(w -> assertThat(w.getPhoneMask()).isEqualTo("138****0001"));
+            assertThat(list).allSatisfy(w -> {
+                assertThat(w.getPhoneMask()).isEqualTo("138****0001");
+                // 列表只回掩码，完整手机号与邮箱不下发
+                assertThat(w.getPhone()).isNull();
+                assertThat(w.getEmail()).isNull();
+            });
         }
 
         @Test

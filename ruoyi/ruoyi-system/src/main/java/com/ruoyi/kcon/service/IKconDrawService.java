@@ -105,9 +105,4 @@ public interface IKconDrawService
      * 控制台「奖项进度与中奖记录」横栏展示用。
      */
     List<Map<String, Object>> winnerGroups();
-
-    /**
-     * 标记已领取
-     */
-    void receive(Long winnerId, String operator);
 }

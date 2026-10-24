@@ -14,7 +14,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -181,9 +180,10 @@ public class MigrateController extends BaseController
     // LogAspect 的 excludeParamNames（fastjson 属性过滤器）对顶层标量参数不生效，
     // 记录请求参数会把明文密码写进 sys_oper_log.oper_param。
     // 上传文件名无审计价值（MultipartFile 本就被 isFilterObject 过滤）。
+    // 刻意不加 @RepeatSubmit：密码是顶层参数，@RepeatSubmit 会把整个请求（含明文密码）
+    // 作为缓存键写进 Redis。重复提交由前端 loading + SensitiveOperationGuard 兜底。
     @PreAuthorize("@ss.hasRole('admin')")
     @Log(title = "全量数据恢复", businessType = BusinessType.UPDATE, isSaveRequestData = false)
-    @RepeatSubmit
     @PostMapping("/restore")
     public AjaxResult restore(@RequestParam(value = "file", required = false) MultipartFile file,
                               @RequestParam(value = "password", required = false) String password) throws Exception

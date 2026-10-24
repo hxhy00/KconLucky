@@ -1,6 +1,5 @@
 package com.ruoyi.kcon.controller;
 
-import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
@@ -160,9 +159,11 @@ public class ExportController extends BaseController
     // 对 Map 的 key 不做属性排除（EXCLUDE_PROPERTIES 只对 bean 字段生效），
     // 若记录请求参数，密码会明文落进 sys_oper_log.oper_param。
     // 审计需要的信息（谁、何时、执行了清场）由 @Log 的 title 与操作人字段承载。
+    // 刻意不加 @RepeatSubmit：它会把整个请求体（含明文密码）作为重复提交的缓存键写进 Redis，
+    // 等于把密码以明文留在缓存里。重复提交由前端按钮 loading + SensitiveOperationGuard
+    // 的尝试次数限制兜底。
     @PreAuthorize("@ss.hasPermi('kcon:data:reset')")
     @Log(title = "数据清场", businessType = BusinessType.CLEAN, isSaveRequestData = false)
-    @RepeatSubmit
     @PostMapping("/reset")
     public AjaxResult reset(@RequestBody Map<String, String> body)
     {

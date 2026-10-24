@@ -10,11 +10,6 @@ import com.ruoyi.kcon.domain.KconPortPool;
 public interface KconPortPoolMapper
 {
     /**
-     * 统计空闲端口号数量
-     */
-    int countFree();
-
-    /**
      * 随机取一个空闲端口号
      */
     Integer selectRandomFreePort();
@@ -24,11 +19,6 @@ public interface KconPortPoolMapper
      * 这是并发安全的关键 —— UPDATE ... WHERE status = 0
      */
     int occupyPort(KconPortPool param);
-
-    /**
-     * 释放端口号（作废重抽等场景暂不使用，保留）
-     */
-    int releasePort(Integer portNo);
 
     /**
      * 全部释放（清场）

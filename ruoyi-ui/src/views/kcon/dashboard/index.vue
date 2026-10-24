@@ -102,6 +102,7 @@
 
 <script>
 import { dashboard, qrcodeUrl, fetchQrcodeBlob } from "@/api/kcon/attendee"
+import { isSessionExpired } from "@/utils/session-expired"
 
 export default {
   name: "KconDashboard",
@@ -113,6 +114,9 @@ export default {
       qrSrc: "",
       qrObjectUrl: "",
       timer: null,
+      // 轮询请求序号与在途标志：慢返回的旧响应不能盖掉新结果，轮询也不叠请求
+      statSeq: 0,
+      statPolling: false,
       // 路径必须与后端菜单（sql/kcon_menu.sql）注册出来的一致：
       //   一级菜单（parent_id=0, type='C'）注册为 /{path}，如 /verify、/attendee；
       //   目录（type='M'）下的子菜单注册为 /{目录path}/{子菜单path}，
@@ -144,27 +148,56 @@ export default {
   },
   methods: {
     getStat() {
+      // 上一轮未返回就跳过本轮，避免轮询请求叠加
+      if (this.statPolling) return
+      this.statPolling = true
+      const seq = ++this.statSeq
       dashboard().then(res => {
+        if (seq !== this.statSeq) return
         this.stat = res.data || {}
         this.statError = ""
       }).catch(() => {
+        if (seq !== this.statSeq) return
+        // 会话已过期：所有请求都会快速失败，静默跳过，不要每 5 秒刷一条失败提示
+        if (isSessionExpired()) return
         // 保留上一次的有效数据，同时把「这份数据已经不可信了」摆在眼前
         this.statError = "看板数据刷新失败，正在重试…（当前显示的可能是旧数据）"
+      }).finally(() => {
+        this.statPolling = false
       })
     },
     getQr() {
       qrcodeUrl().then(res => {
         this.signUrl = res.data
+      }).catch(() => {
+        this.signUrl = ""
       })
       // 二维码接口在鉴权之后，裸 <img src> 不会带 Token 会拿到 401，
       // 必须走 request 拿 blob 再转成 objectURL（离线可用，图片由后端本地生成）
       fetchQrcodeBlob().then(blob => {
+        // 401 / 后端异常时响应体是 JSON 错误，但 responseType=blob 依然会得到 Blob，
+        // 直接当图片用会渲染成破图，必须校验 MIME
+        if (!blob || !blob.type || !blob.type.startsWith("image/")) {
+          this.clearQr()
+          this.$modal.msgError("二维码加载失败，请刷新重试")
+          return
+        }
         if (this.qrObjectUrl) {
           URL.revokeObjectURL(this.qrObjectUrl)
         }
         this.qrObjectUrl = URL.createObjectURL(blob)
         this.qrSrc = this.qrObjectUrl
-      }).catch(() => {})
+      }).catch(() => {
+        this.clearQr()
+        this.$modal.msgError("二维码加载失败，请刷新重试")
+      })
+    },
+    clearQr() {
+      if (this.qrObjectUrl) {
+        URL.revokeObjectURL(this.qrObjectUrl)
+        this.qrObjectUrl = ""
+      }
+      this.qrSrc = ""
     },
     downloadQr() {
       if (!this.qrSrc) {

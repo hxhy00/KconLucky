@@ -3,8 +3,10 @@
 -- 版本：v1.0
 -- 日期：2026-10-12
 -- 数据库：MySQL 8.0
--- 说明：可重复执行（幂等）。首次启动由 docker-entrypoint-initdb.d 自动执行；
---       手动执行：mysql -h127.0.0.1 -P3307 -uroot -proot123 < sql/kcon_lucky.sql
+-- 说明：仅用于全新安装（docker-entrypoint-initdb.d 首次启动自动执行，
+--       或在【空库】上手动执行：mysql -h127.0.0.1 -P3307 -uroot -p<口令> < sql/kcon_lucky.sql）。
+--       本脚本包含 DROP TABLE + CREATE，对已有数据的库重复执行会【清空全部业务数据】，
+--       严禁在存量库上重跑。
 -- =============================================================
 
 CREATE DATABASE IF NOT EXISTS `kcon_lucky`
@@ -60,6 +62,9 @@ CREATE TABLE `kcon_checkin` (
   `create_time`  DATETIME    DEFAULT NULL            COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_phone` (`phone`),
+  -- attendee_id 列 NOT NULL 且一人一条（见上方表注释），uk_attendee 从表级兜底
+  -- 「同一参会人重复签到」，防业务层并发竞态漏判
+  UNIQUE KEY `uk_attendee` (`attendee_id`),
   UNIQUE KEY `uk_port` (`port_no`),
   KEY `idx_date` (`checkin_date`),
   KEY `idx_date_time` (`checkin_date`, `checkin_time`),

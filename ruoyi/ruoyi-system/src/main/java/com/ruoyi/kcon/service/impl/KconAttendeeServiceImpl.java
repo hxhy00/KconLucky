@@ -74,6 +74,15 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             "name", "姓名", "phone", "手机号", "channel", "渠道来源"
     );
 
+    /** 单文件最多导入行数（不含表头）：超过直接阻塞，避免超大文件拖垮现场机器 */
+    private static final int MAX_IMPORT_ROWS = 20000;
+
+    /** 字段长度上限，与 {@link KconAttendee} 的 @Size 约束保持一致 */
+    private static final int MAX_NAME_LENGTH = 64;
+    private static final int MAX_COMPANY_LENGTH = 128;
+    private static final int MAX_EMAIL_LENGTH = 128;
+    private static final int MAX_POSITION_LENGTH = 64;
+
     @Autowired
     private KconAttendeeMapper attendeeMapper;
 
@@ -89,6 +98,20 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         List<KconAttendee> list = attendeeMapper.selectAttendeeList(query);
         for (KconAttendee a : list)
         {
+            a.setPhoneMask(IKconCheckinService.maskPhone(a.getPhone()));
+            // 列表只回掩码：完整手机号仅保留在单条详情（编辑表单回填用）
+            a.setPhone(null);
+        }
+        return list;
+    }
+
+    @Override
+    public List<KconAttendee> selectAttendeeExportList(KconAttendee query)
+    {
+        List<KconAttendee> list = attendeeMapper.selectAttendeeList(query);
+        for (KconAttendee a : list)
+        {
+            // 导出需要完整手机号（打印/核对名单），仅补掩码字段，不清空明文
             a.setPhoneMask(IKconCheckinService.maskPhone(a.getPhone()));
         }
         return list;
@@ -160,8 +183,18 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
         if (attendee.getPhone() != null && !attendee.getPhone().trim().isEmpty())
         {
-            attendee.setPhone(attendee.getPhone().trim());
-            attendee.setPhoneTail4(tail4(attendee.getPhone()));
+            String phone = attendee.getPhone().trim();
+            String oldPhone = old == null ? null : old.getPhone();
+            // 签到后改手机号会破坏兑奖核验：kcon_checkin 里存的仍是旧号，
+            // 而名单改成新号后，本人按新号核验永远对不上、按旧号又查不到名单。
+            // 改号必须由管理员先处理签到记录，不能让一次普通编辑把两者的关联改断。
+            if (oldPhone != null && !phone.equals(oldPhone)
+                    && checkinMapper.selectByAttendeeId(attendee.getId()) != null)
+            {
+                throw new ServiceException("签到后不允许修改手机号，如需修改请联系管理员处理签到记录");
+            }
+            attendee.setPhone(phone);
+            attendee.setPhoneTail4(tail4(phone));
         }
         markManualTicketTypeIfChanged(attendee, old);
         int rows = attendeeMapper.updateAttendee(attendee);
@@ -262,9 +295,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         if (!parsed.blockers.isEmpty())
         {
             String first = String.valueOf(parsed.blockers.get(0).get("reason"));
+            // 只有「未配置映射」才提示去补渠道；字段超长/行数超限等直接说修正后重试
+            String hint = parsed.mappingMissing > 0
+                    ? "请先在「设置 → 渠道来源」补全该渠道后重新导入。"
+                    : "请修正后重新导入。";
             throw new ServiceException("导入已中止：" + first
-                    + "（共 " + parsed.blockers.size() + " 处）。"
-                    + "请先在「设置 → 渠道来源」补全该渠道后重新导入。");
+                    + "（共 " + parsed.blockers.size() + " 处）。" + hint);
         }
 
         // 3. replace 模式先清空
@@ -459,6 +495,14 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         }
 
         int phoneIdx = colIndex.get("phone");
+        // 行数上限：先挡住超大文件，避免逐行解析把内存和响应体撑爆
+        int dataRows = rows.size() - 1;
+        if (dataRows > MAX_IMPORT_ROWS)
+        {
+            addBlocker(parsed.blockers, 0,
+                    "行数超过上限（最多 " + MAX_IMPORT_ROWS + " 行，当前 " + dataRows + " 行）");
+            return parsed;
+        }
         Map<String, ChannelMapping> channelMappings = loadChannelMappings();
         // 文件内手机号去重：重复行按后者覆盖前者，但要在预检里提示
         Map<String, Integer> seenPhones = new HashMap<>();
@@ -506,6 +550,38 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 continue;
             }
 
+            // 选填列先取值再统一做长度校验：超长字段若直接入库会被 MySQL 截断或报错，
+            // 这里按实体 @Size 的同一口径记 blocker，预检阶段就能看见具体是哪一行。
+            String company = colIndex.containsKey("company")
+                    ? emptyToNull(cell(row, colIndex.get("company"))) : null;
+            String email = colIndex.containsKey("email")
+                    ? emptyToNull(cell(row, colIndex.get("email"))) : null;
+            String position = colIndex.containsKey("position")
+                    ? emptyToNull(cell(row, colIndex.get("position"))) : null;
+            String tooLong = null;
+            if (name.length() > MAX_NAME_LENGTH)
+            {
+                tooLong = "姓名长度超过 " + MAX_NAME_LENGTH + " 个字符";
+            }
+            else if (company != null && company.length() > MAX_COMPANY_LENGTH)
+            {
+                tooLong = "公司名称长度超过 " + MAX_COMPANY_LENGTH + " 个字符";
+            }
+            else if (email != null && email.length() > MAX_EMAIL_LENGTH)
+            {
+                tooLong = "邮箱长度超过 " + MAX_EMAIL_LENGTH + " 个字符";
+            }
+            else if (position != null && position.length() > MAX_POSITION_LENGTH)
+            {
+                tooLong = "职位长度超过 " + MAX_POSITION_LENGTH + " 个字符";
+            }
+            if (tooLong != null)
+            {
+                parsed.skipped++;
+                addBlocker(parsed.blockers, lineNo, tooLong);
+                continue;
+            }
+
             // 权益类型 / 参与抽奖完全由映射决定：
             // 6 列模板不含这两列，票务表里即使有也不再读取。
             ChannelMapping mapping = channelMappings.get(channel);
@@ -540,19 +616,9 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             a.setPhoneTail4(tail4(phone));
             a.setImportBatch(parsed.batch);
             a.setCreateBy(operator);
-
-            if (colIndex.containsKey("company"))
-            {
-                a.setCompany(emptyToNull(cell(row, colIndex.get("company"))));
-            }
-            if (colIndex.containsKey("email"))
-            {
-                a.setEmail(emptyToNull(cell(row, colIndex.get("email"))));
-            }
-            if (colIndex.containsKey("position"))
-            {
-                a.setPosition(emptyToNull(cell(row, colIndex.get("position"))));
-            }
+            a.setCompany(company);
+            a.setEmail(email);
+            a.setPosition(position);
 
             parsed.rows.add(a);
         }
@@ -875,24 +941,6 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
     private String emptyToNull(String s)
     {
         return (s == null || s.trim().isEmpty()) ? null : s.trim();
-    }
-
-    private Integer parseInt(String s)
-    {
-        if (s == null || s.trim().isEmpty())
-        {
-            return null;
-        }
-        try
-        {
-            double d = Double.parseDouble(s.trim());
-            int v = (int) d;
-            return v >= 1 ? v : null;
-        }
-        catch (NumberFormatException e)
-        {
-            return null;
-        }
     }
 
     private String tail4(String phone)

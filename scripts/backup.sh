@@ -7,8 +7,11 @@ mkdir -p data/backup
 STAMP=$(date +%Y%m%d_%H%M%S)
 OUT="data/backup/kcon_lucky_${STAMP}.sql"
 
+# 不设默认口令：未提供时直接报错退出
+: "${MYSQL_ROOT_PASSWORD:? 需要在环境变量中提供 MYSQL_ROOT_PASSWORD（可在项目根 .env 中配置后 source .env，或执行前手动 export）}"
+
 docker exec kcon-mysql mysqldump \
-  -uroot -p"${MYSQL_ROOT_PASSWORD:-root123}" \
+  -uroot -p"${MYSQL_ROOT_PASSWORD}" \
   --single-transaction --routines --triggers \
   --default-character-set=utf8mb4 \
   kcon_lucky > "$OUT"

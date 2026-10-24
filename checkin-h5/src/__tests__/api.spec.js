@@ -9,6 +9,9 @@ function lastFetch() {
 
 beforeEach(() => {
   global.fetch = vi.fn(() => Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'application/json;charset=UTF-8' : null) },
     json: () => Promise.resolve({ code: 200, data: { signed: true } })
   }))
 })
@@ -51,6 +54,32 @@ describe('签到端请求封装', () => {
     global.fetch = vi.fn(() => Promise.reject(new Error('boom')))
     await expect(queryAttendee('13800000001')).rejects.toMatchObject({
       message: '网络异常',
+      networkError: true
+    })
+  })
+
+  it('非 2xx 响应按 HTTP 状态码提示，而不是笼统的网络异常', async () => {
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: false,
+      status: 502,
+      headers: { get: () => 'text/html' },
+      json: () => Promise.resolve({})
+    }))
+    await expect(queryAttendee('13800000001')).rejects.toMatchObject({
+      message: '服务异常（HTTP 502）',
+      networkError: true
+    })
+  })
+
+  it('响应不是 JSON（如网关错误页）时给出服务异常提示', async () => {
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'text/html; charset=utf-8' },
+      json: () => { throw new SyntaxError('Unexpected token <') }
+    }))
+    await expect(lookup('13800000001')).rejects.toMatchObject({
+      message: '服务异常，请稍后重试',
       networkError: true
     })
   })

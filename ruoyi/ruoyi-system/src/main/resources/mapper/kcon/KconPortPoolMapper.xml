@@ -4,10 +4,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ruoyi.kcon.mapper.KconPortPoolMapper">
 
-    <select id="countFree" resultType="int">
-        select count(*) from kcon_port_pool where status = 0
-    </select>
-
     <!-- 随机取一个空闲号（ORDER BY RAND 在 6.5 万行上可接受，且仅签到瞬间调用） -->
     <select id="selectRandomFreePort" resultType="java.lang.Integer">
         select port_no from kcon_port_pool
@@ -24,12 +20,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         update kcon_port_pool
         set status = 1, phone = #{phone}, used_time = now()
         where port_no = #{portNo} and status = 0
-    </update>
-
-    <update id="releasePort" parameterType="java.lang.Integer">
-        update kcon_port_pool
-        set status = 0, phone = null, used_time = null
-        where port_no = #{portNo}
     </update>
 
     <update id="releaseAll">

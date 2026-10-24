@@ -28,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -235,7 +237,7 @@ class KconBenefitGrantServiceImplTest
         void benefitExportColumns()
         {
             KconBenefitGrant query = new KconBenefitGrant();
-            when(grantMapper.selectGrantList(query)).thenReturn(List.of(grantRow(PHONE)));
+            when(grantMapper.selectGrantListLimited(query, 10000)).thenReturn(List.of(grantRow(PHONE)));
 
             List<KconBenefitGrantExportVo> rows = service.selectBenefitGrantExportList(query);
 
@@ -258,7 +260,7 @@ class KconBenefitGrantServiceImplTest
             row.setTierName("一等奖");
             row.setCreateTime(null);
             KconBenefitGrant query = new KconBenefitGrant();
-            when(grantMapper.selectGrantList(query)).thenReturn(List.of(row));
+            when(grantMapper.selectGrantListLimited(query, 10000)).thenReturn(List.of(row));
 
             List<KconPrizeGrantExportVo> rows = service.selectPrizeGrantExportList(query);
 
@@ -273,19 +275,21 @@ class KconBenefitGrantServiceImplTest
         }
 
         @Test
-        @DisplayName("导出超过 10000 条时截断")
-        void exportsTruncated()
+        @DisplayName("导出上限下推到 SQL（limit 10000），不再全量查回后截断")
+        void exportsUseSqlLimit()
         {
-            List<KconBenefitGrant> rows = new ArrayList<>(10001);
-            for (int i = 0; i < 10001; i++)
+            List<KconBenefitGrant> rows = new ArrayList<>(10000);
+            for (int i = 0; i < 10000; i++)
             {
                 rows.add(grantRow(PHONE));
             }
             KconBenefitGrant query = new KconBenefitGrant();
-            when(grantMapper.selectGrantList(query)).thenReturn(rows);
+            when(grantMapper.selectGrantListLimited(query, 10000)).thenReturn(rows);
 
             assertThat(service.selectBenefitGrantExportList(query)).hasSize(10000);
             assertThat(service.selectPrizeGrantExportList(query)).hasSize(10000);
+            verify(grantMapper, times(2)).selectGrantListLimited(query, 10000);
+            verify(grantMapper, never()).selectGrantList(query);
         }
     }
 }

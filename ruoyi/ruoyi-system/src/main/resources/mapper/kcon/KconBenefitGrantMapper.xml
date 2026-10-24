@@ -28,11 +28,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{sessionCode}, #{tierName}, #{operator}, now())
     </insert>
 
-    <select id="countByAttendeeAndType" parameterType="KconBenefitGrant" resultType="int">
-        select count(*) from kcon_benefit_grant
-        where grant_type = #{grantType} and attendee_id = #{attendeeId}
-    </select>
-
     <select id="selectGrantList" parameterType="KconBenefitGrant" resultMap="KconBenefitGrantResult">
         select id, grant_type, attendee_id, port_no, name, phone_mask, item,
                session_code, tier_name, operator, create_time
@@ -55,6 +50,32 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
         </where>
         order by create_time desc, id desc
+    </select>
+
+    <!-- 导出：条件与列表一致，条数上限下推到 SQL -->
+    <select id="selectGrantListLimited" resultMap="KconBenefitGrantResult">
+        select id, grant_type, attendee_id, port_no, name, phone_mask, item,
+               session_code, tier_name, operator, create_time
+        from kcon_benefit_grant
+        <where>
+            <if test="query.grantType != null and query.grantType != ''">
+                and grant_type = #{query.grantType}
+            </if>
+            <if test="query.portNo != null">
+                and port_no = #{query.portNo}
+            </if>
+            <if test="query.name != null and query.name != ''">
+                and name like concat('%', #{query.name}, '%')
+            </if>
+            <if test="query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                and create_time &gt;= #{query.params.beginTime}
+            </if>
+            <if test="query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                and create_time &lt;= #{query.params.endTime}
+            </if>
+        </where>
+        order by create_time desc, id desc
+        limit #{limit}
     </select>
 
     <update id="truncateGrant">

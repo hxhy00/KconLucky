@@ -199,7 +199,7 @@ public class AttendeeController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, KconAttendee query)
     {
-        List<KconAttendee> list = attendeeService.selectAttendeeList(query);
+        List<KconAttendee> list = attendeeService.selectAttendeeExportList(query);
         ExcelUtil<KconAttendee> util = new ExcelUtil<>(KconAttendee.class);
         util.exportExcel(response, list, "参会名单");
     }

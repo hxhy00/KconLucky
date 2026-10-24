@@ -5,8 +5,8 @@ import com.ruoyi.common.core.domain.BaseEntity;
 /**
  * 兑奖核验日志对象 kcon_verify_log
  *
- * 手机号说明：本表的 input_phone 在「写入时」就已掩码（见 KconVerifyServiceImpl#writeLog），
- * 查询返回时再掩码一次做兜底，明文不返回后端，前端与导出只用 inputPhoneMask。
+ * 手机号说明：本表为历史日志表，写入已下线；查询返回时统一做掩码兜底，
+ * 明文不返回后端，前端与导出只用 inputPhoneMask。
  *
  * 继承 BaseEntity 是为了复用 RuoYi 标准的 params[beginTime] / params[endTime] 时间范围筛选；
  * 建表列 create_time 直接复用父类的 createTime 字段（本表没有 update_time / remark 等列）。

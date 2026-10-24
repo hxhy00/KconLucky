@@ -86,6 +86,8 @@ export default {
       total: 0,
       // 正在作废的行 id：请求在途期间该行按钮转圈，避免操作员以为没点上而反复点
       voidingId: null,
+      // 请求序号：快速翻页/筛选时，慢返回的旧响应不能盖掉新结果
+      listSeq: 0,
       queryParams: {
         pageNum: 1,
         pageSize: 10,
@@ -113,11 +115,16 @@ export default {
     },
     getList() {
       this.loading = true
+      const seq = ++this.listSeq
       listWinner(this.queryParams).then(res => {
+        if (seq !== this.listSeq) return
         this.winnerList = res.rows
         this.total = res.total
-        this.loading = false
-      }).catch(() => { this.loading = false })
+      }).catch(() => {
+        // request.js 已统一提示，这里只兜底
+      }).finally(() => {
+        if (seq === this.listSeq) this.loading = false
+      })
     },
     handleQuery() {
       this.queryParams.pageNum = 1

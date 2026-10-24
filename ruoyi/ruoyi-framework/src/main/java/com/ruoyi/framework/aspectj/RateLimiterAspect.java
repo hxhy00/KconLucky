@@ -17,7 +17,7 @@ import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.common.utils.ip.IpUtils;
+import com.ruoyi.kcon.util.KconIpUtil;
 
 /**
  * 限流处理
@@ -78,7 +78,8 @@ public class RateLimiterAspect
         StringBuffer stringBuffer = new StringBuffer(rateLimiter.key());
         if (rateLimiter.limitType() == LimitType.IP)
         {
-            stringBuffer.append(IpUtils.getIpAddr()).append("-");
+            // 只信 nginx 写入的 X-Real-IP：XFF 可由客户端伪造，用它做限流 key 等于没限
+            stringBuffer.append(KconIpUtil.resolveClientIp()).append("-");
         }
         MethodSignature signature = (MethodSignature) point.getSignature();
         Method method = signature.getMethod();

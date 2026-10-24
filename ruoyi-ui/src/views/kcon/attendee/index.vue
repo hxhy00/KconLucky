@@ -321,6 +321,8 @@ import {
   importAttendee, previewImport, resetAttendeeTicketType, grantBenefit
 } from "@/api/kcon/attendee"
 import { optionselectChannelMapping } from "@/api/kcon/channel"
+import { isSessionExpired } from "@/utils/session-expired"
+import { fileToken, isValidPreview } from "@/utils/kcon"
 
 // 静默增量轮询间隔
 const POLL_INTERVAL = 10000
@@ -345,6 +347,10 @@ export default {
       importFile: null,
       // 预检结果为 null 时不允许导入：必须先看到解析报告再落库
       preview: null,
+      // 列表请求序号：丢弃过期响应，避免慢返回的旧结果盖掉新结果
+      listSeq: 0,
+      // 预检请求序号：文件变更后，在途的旧文件预检响应必须作废
+      previewSeq: 0,
       // 渠道下拉选项（来源：渠道来源映射表）
       channelOptions: [],
       timer: null,
@@ -384,7 +390,7 @@ export default {
       if (!this.preview) return ""
       const lv = this.preview.level
       if (lv === "BLOCK") {
-        return `预检未通过：${this.preview.blockers.length} 处阻塞问题，补全后才能导入`
+        return `预检未通过：${(this.preview.blockers || []).length} 处阻塞问题，补全后才能导入`
       }
       if (lv === "WARN") {
         return "预检通过，但有需要确认的提示"
@@ -433,11 +439,17 @@ export default {
       this.fetchList().finally(() => { this.polling = false })
     },
     fetchList() {
+      const seq = ++this.listSeq
       return listAttendee(this.queryParams).then(res => {
+        // 已有更新的请求发出（搜索 / 分页 / 轮询）：丢弃本轮过期响应
+        if (seq !== this.listSeq) return
         this.mergeRows(res.rows || [])
         this.total = res.total
         this.listError = ""
       }).catch(() => {
+        if (seq !== this.listSeq) return
+        // 会话已过期时请求会快速失败：静默跳过，避免常驻提示一直闪
+        if (isSessionExpired()) return
         // 不再依赖 request.js 的一次性红条（轮询失败每 10 秒一条会刷屏），
         // 改为页面内常驻提示，让「数据已经多久没更新」这件事可见
         this.listError = "名单自动刷新失败，正在重试…（当前显示的可能是旧数据）"
@@ -484,6 +496,8 @@ export default {
       if (q.channel && row.channel !== q.channel) return false
       if (q.ticketType && row.ticketType !== q.ticketType) return false
       if (q.signed !== null && q.signed !== undefined && Number(q.signed) !== Number(row.signed || 0)) return false
+      if (q.drawEligible !== null && q.drawEligible !== undefined &&
+          Number(q.drawEligible) !== Number(row.drawEligible || 0)) return false
       return true
     },
     handleQuery() {
@@ -503,7 +517,8 @@ export default {
     reset() {
       this.form = {
         id: null, name: null, phone: null, channel: null,
-        ticketType: null, drawEligible: 1, company: null, email: null,
+        // 默认不参与抽奖：与文档口径一致，选中渠道后由映射覆盖
+        ticketType: null, drawEligible: 0, company: null, email: null,
         position: null
       }
       this.resetForm("form")
@@ -541,6 +556,8 @@ export default {
         this.form = res.data
         this.title = "补录 / 修改信息"
         this.open = true
+      }).catch(() => {
+        this.$modal.msgError("获取参会人信息失败，请重试")
       })
     },
     // 把权益类型恢复为「跟随渠道来源映射」：清掉人工标记并按映射回填
@@ -591,6 +608,8 @@ export default {
           }
           // 静默对账：取回服务端写入的 update_time（版本号）与签到状态
           this.refreshQuietly()
+        }).catch(() => {
+          this.$modal.msgError(isEdit ? "修改失败，请重试" : "新增失败，请重试")
         }).finally(() => { this.submitting = false })
       })
     },
@@ -613,10 +632,11 @@ export default {
     },
     // 权益发放：需已签到、一人一条、发放后不可撤销（按钮已对未签到/已发放置灰）
     handleGrant(row) {
-      const tip = `确认为「${row.name}」发放权益？<br/><br/>
-        <b>权益内容：</b>${row.ticketType || '（未配置）'}<br/>
-        <b>端口号：</b>${row.portNo}<br/><br/>
-        <span style="color:#d4342a">发放后不可撤销；同一人重复发放会被系统拦截。</span>`
+      // 纯文本：$modal.confirm 不渲染 HTML，姓名/权益类型也不能拼标签
+      const tip = `确认为「${row.name}」发放权益？` +
+        `权益内容：${row.ticketType || '（未配置）'}；` +
+        `端口号：${row.portNo}。` +
+        `发放后不可撤销；同一人重复发放会被系统拦截。`
       this.$modal.confirm(tip).then(() => {
         return grantBenefit(row.id)
       }).then(() => {
@@ -648,6 +668,8 @@ export default {
     // 文件或模式一变，旧报告立即作废：否则会拿上一次的结论给这一次背书
     resetPreview() {
       this.preview = null
+      // 序号递增让在途的旧预检响应作废（换文件 / 移除文件 / 关闭弹窗都会走到这里）
+      this.previewSeq++
       this.previewing = false
     },
     onFileChange(file) {
@@ -666,17 +688,32 @@ export default {
         this.$modal.msgWarning("请先选择文件")
         return
       }
+      // 在途时重复点击不再发请求，避免同一文件被解析多次
+      if (this.previewing) return
+      const token = fileToken(this.importFile)
+      const seq = ++this.previewSeq
       const fd = new FormData()
       fd.append("file", this.importFile)
       fd.append("mode", this.importMode)
 
       this.previewing = true
       previewImport(fd).then(res => {
-        this.preview = res.data || {}
+        // 文件已变更：这是一份旧文件的报告，直接丢弃
+        if (seq !== this.previewSeq) return
+        const data = res.data
+        // 空对象/缺字段曾被当成「预检通过 0 行」而放行，必须先校验结构
+        if (!isValidPreview(data)) {
+          this.preview = null
+          this.$modal.msgWarning("预检结果异常，请重试")
+          return
+        }
+        // 记住这份报告对应的文件，提交前再核对一次
+        this.preview = { ...data, fileToken: token }
       }).catch(() => {
+        if (seq !== this.previewSeq) return
         this.preview = null
       }).finally(() => {
-        this.previewing = false
+        if (seq === this.previewSeq) this.previewing = false
       })
     },
     submitImport() {
@@ -686,6 +723,15 @@ export default {
       }
       if (!this.preview) {
         this.$modal.msgWarning("请先预检，确认解析结果无误")
+        return
+      }
+      // 预检后又换了文件：旧报告不能给新文件背书
+      if (this.preview.fileToken !== fileToken(this.importFile)) {
+        this.$modal.msgError("文件已变更，请重新预检")
+        return
+      }
+      if (!isValidPreview(this.preview)) {
+        this.$modal.msgWarning("预检结果异常，请重试")
         return
       }
       // 未配置映射的渠道直接拒绝，不再提供强制导入：
