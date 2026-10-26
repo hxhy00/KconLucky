@@ -139,8 +139,8 @@ services:
       # 初始管理员（admin 表为空时写入），≤3 个，email 或 email:姓名
       KCON_ADMIN_EMAILS: ${KCON_GIFT_ADMIN_EMAILS:?请在 .env 中设置 KCON_GIFT_ADMIN_EMAILS}
       KCON_SYSTEM_EMAIL: ${KCON_SYSTEM_EMAIL:-kcon@knownsec.com}
-      # 生产禁止回显验证码
-      KCON_DEMO_CODE: "0"
+      # 生产禁止回显验证码；渗透测试期间可临时设为 1，测试结束必须改回 0
+      KCON_DEMO_CODE: ${KCON_DEMO_CODE:-0}
       # 二期真实发信：配置 KCON_SMTP_HOST 后自动切换 SMTP
       KCON_SMTP_HOST: ${KCON_SMTP_HOST:-}
       KCON_SMTP_PORT: ${KCON_SMTP_PORT:-465}
