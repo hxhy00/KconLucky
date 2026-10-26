@@ -130,12 +130,12 @@ public class ExportController extends BaseController
 
     /**
      * 观众签到页地址（扫码入口）。
-     * 根路径 / 为入口分流页，签到页固定部署在 /sign/。
+     * 四端统一挂在 nginx 的 /kconluck2026/ 前缀下，签到页固定为 /kconluck2026/sign/。
      */
     private String checkinUrl()
     {
         String lanIp = System.getenv().getOrDefault("LAN_IP", "127.0.0.1");
-        return "http://" + lanIp + "/sign/";
+        return "http://" + lanIp + "/kconluck2026/sign/";
     }
 
     /**

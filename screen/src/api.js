@@ -1,4 +1,7 @@
-const BASE = import.meta.env.PROD ? '/prod-api' : '/dev-api'
+// 生产环境走 nginx 同源反代（默认 /prod-api，挂子路径时为 /kconluck2026/prod-api）；
+// 开发环境走 vite proxy /dev-api
+const BASE = import.meta.env.VITE_API_BASE ||
+  (import.meta.env.PROD ? '/prod-api' : '/dev-api')
 
 // 现场网络抖动很常见：fetch 默认不超时，请求会一直挂着，
 // 大屏停在「抽奖中…」，操作员无从判断后端到底有没有落库。
