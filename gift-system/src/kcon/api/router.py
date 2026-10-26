@@ -54,6 +54,10 @@ ROUTE_MAP: Dict[Tuple[str, str], Tuple[str, bool, bool]] = {
 PAGES: Dict[str, str] = {
     "/": "index.html",
     "/login": "login.html",
+    # 对外路径：避免与下游 KconLucky 的 /admin/ 冲突
+    "/gift-admin": "admin.html",
+    "/gift-approver": "approver.html",
+    # 本地开发兼容路径（对外由 Nginx 只暴露 /gift-admin 与 /gift-approver）
     "/admin": "admin.html",
     "/approver": "approver.html",
     "/mailbox": "mailbox.html",

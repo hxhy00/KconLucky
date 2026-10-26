@@ -124,6 +124,8 @@ class TestRouter:
         assert router.match_route("POST", "/api/nope") is None
     def test_match_page_static(self):
         assert router.match_page("/login") == "login.html"
+        assert router.match_page("/gift-admin") == "admin.html"
+        assert router.match_page("/gift-approver") == "approver.html"
     def test_match_page_prefix(self):
         assert router.match_page("/r/abc") == "referrer_register.html"
         assert router.match_page("/t/abc") == "ticket_register.html"
