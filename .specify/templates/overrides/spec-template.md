@@ -111,11 +111,11 @@
 ### Mock 清单
 
 <!--
-  本项目所有 mock 统一登记在 docs/06-Mock台账.md，此处只做引用。
+  本项目所有 mock 统一登记在 docs/07-Mock台账.md，此处只做引用。
   无 mock 时写「无」。
 -->
 
-- 无 / 见 `docs/06-Mock台账.md` 第 N 条：[一句话说明]
+- 无 / 见 `docs/07-Mock台账.md` 第 N 条：[一句话说明]
 
 ### Key Entities *(include if feature involves data)*
 
@@ -149,4 +149,4 @@
 - [ ] 库表变更已回写 `docs/02-数据库设计.md`，并产出幂等迁移脚本
 - [ ] 接口变更已回写 `docs/03-接口设计.md`
 - [ ] 部署/环境变量变更已回写 `docs/04-部署运行.md`
-- [ ] Mock 条目已登记或已清理 `docs/06-Mock台账.md`
+- [ ] Mock 条目已登记或已清理 `docs/07-Mock台账.md`

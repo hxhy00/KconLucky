@@ -38,7 +38,7 @@ specify self upgrade
 | `docs/03-接口设计.md` | HTTP 接口契约（路径 / 入参 / 出参） | 权威 |
 | `docs/04-部署运行.md` | 部署、运行、环境变量 | 权威 |
 | `docs/05-功能缺口.md` | 已修复缺口与回归检查清单 | 权威 |
-| `docs/06-Mock台账.md` | Mock 登记表 | 权威 |
+| `docs/07-Mock台账.md` | Mock 登记表 | 权威 |
 | `specs/<NNN>-<slug>/` | **单个 feature** 的 spec / plan / tasks | 派生，按需回写 `docs/` |
 
 **冲突裁决顺序**：`.specify/memory/constitution.md`（章程） > `docs/` 现有规约 > `specs/` 内约定 > 代码现状。

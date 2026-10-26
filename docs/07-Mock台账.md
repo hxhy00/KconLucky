@@ -30,11 +30,11 @@
 代码中使用统一前缀注释，并指向本台账条目编号：
 
 ```java
-// MOCK: 见 docs/06-Mock台账.md 第 <N> 条 —— <一句话说明>
+// MOCK: 见 docs/07-Mock台账.md 第 <N> 条 —— <一句话说明>
 ```
 
 ```javascript
-// MOCK: 见 docs/06-Mock台账.md 第 <N> 条 —— <一句话说明>
+// MOCK: 见 docs/07-Mock台账.md 第 <N> 条 —— <一句话说明>
 ```
 
 ## 四、禁止事项

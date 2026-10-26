@@ -180,7 +180,8 @@ cd screen && npm install && npm run dev
 | [`docs/03-接口设计.md`](docs/03-接口设计.md) | 接口契约 |
 | [`docs/04-部署运行.md`](docs/04-部署运行.md) | 部署、发布、迁移、故障排查、安全基线 |
 | [`docs/05-功能缺口.md`](docs/05-功能缺口.md) | 已知功能缺口 |
-| [`docs/06-Mock台账.md`](docs/06-Mock台账.md) | 未验证 Mock 记录 |
+| [`docs/06-渗透测试说明.md`](docs/06-渗透测试说明.md) | 交付外部渗透测试团队的说明（入口、账号、边界） |
+| [`docs/07-Mock台账.md`](docs/07-Mock台账.md) | 未验证 Mock 记录 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 分支模型、提交规范、发布流程 |
 | `specs/` | 按序号的特性规格（需求 + 计划 + 任务） |
 

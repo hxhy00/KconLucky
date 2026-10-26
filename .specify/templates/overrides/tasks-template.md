@@ -13,7 +13,7 @@
 > - 每条任务尽量带上 `FR-x` 引用，便于 `/speckit.analyze` 做需求覆盖度检查。
 > - 涉及库表变更的任务必须**同时**包含：改 `sql/kcon_lucky.sql` + 新增幂等迁移脚本 + 回写 `docs/02`。
 > - 涉及接口变更的任务必须包含回写 `docs/03`；涉及部署/环境变量必须回写 `docs/04`。
-> - Mock 任务必须包含「登记到 `docs/06-Mock台账.md`」或「清理台账条目」。
+> - Mock 任务必须包含「登记到 `docs/07-Mock台账.md`」或「清理台账条目」。
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -30,7 +30,7 @@
 - **签到端 H5**：`checkin-h5/`
 - **抽奖大屏**：`screen/`
 - **数据库脚本**：`sql/kcon_lucky.sql`（新装基线）、`sql/kcon_migrate_v<N>.sql`（幂等迁移）
-- **文档基线**：`docs/01-需求规格.md` … `docs/05-功能缺口.md`、`docs/06-Mock台账.md`
+- **文档基线**：`docs/01-需求规格.md` … `docs/05-功能缺口.md`、`docs/07-Mock台账.md`
 
 ---
 
@@ -70,7 +70,7 @@
 - [ ] T008 [US1] [FR-x] 后端：`ruoyi/ruoyi-system/src/main/java/com/ruoyi/system/service/impl/…`（依赖 T006、T007）
 - [ ] T009 [US1] [FR-x] 接口：`ruoyi/ruoyi-admin/src/main/java/com/ruoyi/web/controller/kcon/…`，并回写 `docs/03-接口设计.md`
 - [ ] T010 [P] [US1] [FR-x] 前端：`ruoyi-ui/src/api/kcon/…` + `ruoyi-ui/src/views/kcon/…`
-- [ ] T011 [US1] [FR-x] Mock 处理：登记到 `docs/06-Mock台账.md` 或删除代码中 `MOCK:` 标记与台账条目
+- [ ] T011 [US1] [FR-x] Mock 处理：登记到 `docs/07-Mock台账.md` 或删除代码中 `MOCK:` 标记与台账条目
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -104,7 +104,7 @@
 - [ ] TXXX [P] 回写 `docs/03-接口设计.md`（新增/变更接口）
 - [ ] TXXX [P] 回写 `docs/04-部署运行.md`（部署与环境变量变更）
 - [ ] TXXX [P] 回写 `docs/05-功能缺口.md`（本 feature 的实测记录）
-- [ ] TXXX [P] 清理 `docs/06-Mock台账.md` 中已被真实实现替换的条目
+- [ ] TXXX [P] 清理 `docs/07-Mock台账.md` 中已被真实实现替换的条目
 - [ ] TXXX 对照 `docs/01-需求规格.md` 的 AC 逐条打勾，形成验收单
 - [ ] TXXX 按 Conventional Commits 提交到 `main`，只 commit 不 push
 

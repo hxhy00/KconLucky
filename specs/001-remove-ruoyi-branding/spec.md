@@ -177,6 +177,6 @@
 - [ ] 库表变更已回写 `docs/02-数据库设计.md`，并产出幂等迁移脚本（**本 feature 无结构变更**，仅初始化数据；无需迁移脚本，但需说明）
 - [ ] 接口变更已回写 `docs/03-接口设计.md`（**本 feature 无接口变更**，Swagger 标题改动不属接口契约变更）
 - [ ] 部署/环境变量变更已回写 `docs/04-部署运行.md`（`.env.development` / `.env.staging` 的 TITLE 改动需说明）
-- [ ] Mock 条目已登记或已清理 `docs/06-Mock台账.md`（**本 feature 无 mock**）
+- [ ] Mock 条目已登记或已清理 `docs/07-Mock台账.md`（**本 feature 无 mock**）
 - [ ] 「品牌残留保留清单」已产出（FR-57），可随 `docs/05-功能缺口.md` 或本文档附录归置
 - [ ] 回归验证：`docs/05-功能缺口.md` 的 15 项缺口复测通过（SC-6）

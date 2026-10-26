@@ -41,8 +41,8 @@
 
 ## 四、Mock 归口
 
-`docs/06-Mock台账.md` 是**唯一**的 mock 登记处，`specs/` 内不另开 mock 清单。
-spec/plan/tasks 中出现的 mock，写成「见 `docs/06-Mock台账.md` 第 N 条」并同步登记。
+`docs/07-Mock台账.md` 是**唯一**的 mock 登记处，`specs/` 内不另开 mock 清单。
+spec/plan/tasks 中出现的 mock，写成「见 `docs/07-Mock台账.md` 第 N 条」并同步登记。
 
 ## 五、已知的机制差异与处理方式
 
