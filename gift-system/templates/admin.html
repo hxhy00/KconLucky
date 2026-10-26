@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>管理后台 · KCon2026 赠票系统</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">KCon <small>奕智</small></div>
+      <div class="spacer"></div>
+      <span class="who">管理员 <b id="whoName">--</b></span>
+      <a href="/mailbox" class="btn ghost sm">📬 邮件</a>
+      <button class="btn ghost sm" onclick="logout()">退出</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>系统管理后台</h1>
+      <p>管理赠票渠道、查看全局数据与统计</p>
+    </div>
+    <div class="grid grid-4 mb-16">
+      <div class="stat cyan">
+        <div class="k">渠道总数</div>
+        <div class="v" id="k1">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">推荐人总数</div>
+        <div class="v" id="k2">--</div>
+      </div>
+      <div class="stat pink">
+        <div class="k">注册成功</div>
+        <div class="v" id="k3">--</div>
+      </div>
+      <div class="stat ok">
+        <div class="k">已签到</div>
+        <div class="v" id="k4">--</div>
+      </div>
+    </div>
+    <div class="grid grid-4 mb-24">
+      <div class="stat">
+        <div class="k">总配额</div>
+        <div class="v" id="k5">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">已使用</div>
+        <div class="v" id="k6">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">剩余配额</div>
+        <div class="v" id="k7">--</div>
+      </div>
+      <div class="stat cyan">
+        <div class="k">签到率</div>
+        <div class="v" id="k8">--<small>%</small></div>
+      </div>
+    </div>
+    <div class="grid grid-2 mb-24" style="align-items:start;">
+      <div class="card glow">
+        <div class="card-title">新建赠票渠道</div>
+        <div id="cAlert" class="alert"></div>
+        <div class="field"><label>渠道名称<span class="req">*</span></label><input id="f_name" class="input"
+            placeholder="如：知道创宇安全团队"></div>
+        <div class="field"><label>渠道审批员姓名<span class="req">*</span></label><input id="f_aname" class="input"
+            placeholder="如：张三"></div>
+        <div class="field"><label>渠道审批员邮箱<span class="req">*</span></label><input id="f_aemail" class="input"
+            type="email" placeholder="approver@example.com"></div>
+        <div class="grid grid-2" style="gap:12px;">
+          <div class="field"><label>赠票配额<span class="req">*</span></label><input id="f_quota" class="input"
+              type="number" value="100" min="1" max="9999"></div>
+          <div class="field"><label>推荐人单人上限<span class="req">*</span></label><input id="f_cap" class="input"
+              type="number" value="20" min="1" max="100"></div>
+        </div>
+        <div class="field"><label>渠道备注</label><input id="f_remark" class="input" placeholder="选填"></div>
+        <button id="createBtn" class="btn block">创建渠道并发送开通邮件</button>
+      </div>
+      <div class="card">
+        <div class="card-title">渠道数据总览</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>渠道</th>
+                <th>审批员</th>
+                <th>配额</th>
+                <th>推荐人</th>
+                <th>注册</th>
+                <th>签到</th>
+              </tr>
+            </thead>
+            <tbody id="chBody">
+              <tr>
+                <td colspan="6" class="empty">加载中…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">渠道管理</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>渠道名称</th>
+              <th>审批员</th>
+              <th>审批员邮箱</th>
+              <th>配额</th>
+              <th>单人上限</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="listBody">
+            <tr>
+              <td colspan="9" class="empty">加载中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card mt-24">
+      <div class="card-title">管理员账户</div>
+      <div class="hint mb-16">最多 3 个启用管理员；不能停用最后一个启用管理员；仅已停用账号可删除。管理员由运维通过 KCON_ADMIN_EMAILS 初始化。</div>
+      <div id="aAlert" class="alert"></div>
+      <div class="grid grid-2" style="gap:12px;max-width:560px;">
+        <div class="field"><label>管理员邮箱<span class="req">*</span></label><input id="a_email" class="input" type="email"
+            placeholder="ops@example.com"></div>
+        <div class="field"><label>姓名</label><input id="a_name" class="input" placeholder="选填，默认「管理员」"></div>
+      </div>
+      <button id="addAdminBtn" class="btn mb-24">新增管理员</button>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>邮箱</th>
+              <th>姓名</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="admBody">
+            <tr>
+              <td colspan="6" class="empty">加载中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/common.js"></script>
+  <script>
+    requireRole('admin');
+    API.get('/api/me').then(r => { if (r.ok) $('#whoName').textContent = r.user.name; });
+    function showC(msg, type) {
+      const a = $('#cAlert'); a.className = 'alert show ' + (type || 'err'); a.textContent = msg;
+    }
+    async function load() {
+      const r = await API.get('/api/admin/stats');
+      if (!r.ok) return;
+      const t = r.total;
+      $('#k1').textContent = t.channel_count;
+      $('#k2').textContent = t.referrer_count;
+      $('#k3').textContent = t.approved_count;
+      $('#k4').textContent = t.checked_in_count;
+      $('#k5').textContent = t.quota_total;
+      $('#k6').textContent = t.quota_used;
+      $('#k7').textContent = t.quota_remaining;
+      $('#k8').innerHTML = t.checkin_rate + '<small>%</small>';
+      // 总览
+      $('#chBody').innerHTML = r.channels.length ? r.channels.map(c => `
+    <tr>
+      <td class="bold">${c.name}</td>
+      <td>${c.approver_name || '--'}</td>
+      <td class="mono">${c.quota}</td>
+      <td>${c.referrer_count}</td>
+      <td class="cyan">${c.used_count}</td>
+      <td class="pink">${c.checked_in_count}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">暂无渠道</td></tr>';
+      // 列表
+      $('#listBody').innerHTML = r.channels.length ? r.channels.map(c => `
+    <tr>
+      <td class="mono">${c.id}</td>
+      <td class="bold">${c.name}</td>
+      <td>${c.approver_name || '--'}</td>
+      <td class="mono small">${c.approver_email || '--'}</td>
+      <td class="mono">${c.quota}</td>
+      <td class="mono">${c.referrer_cap}</td>
+      <td>${badge('channel', c.status)}</td>
+      <td class="dim small">${fmtTime(c.created_at)}</td>
+      <td>
+        <button class="btn ghost sm" onclick="copyText('${location.origin}/r/${c.code}')">复制注册链接</button>
+        ${c.status === 1 ? `<button class="btn danger sm" onclick="suspend(${c.id})">停用</button>` : ''}
+      </td>
+    </tr>`).join('') : '<tr><td colspan="9" class="empty">暂无渠道</td></tr>';
+    }
+    async function suspend(id) {
+      if (!confirm('确定停用该渠道？停用后所有链接立即失效，历史数据保留。')) return;
+      const r = await API.post('/api/admin/channel/suspend', { id });
+      toast(r.msg, r.ok ? 'ok' : 'err');
+      load();
+    }
+    $('#createBtn').onclick = async () => {
+      const d = {
+        name: $('#f_name').value.trim(),
+        approver_name: $('#f_aname').value.trim(),
+        approver_email: $('#f_aemail').value.trim(),
+        quota: parseInt($('#f_quota').value) || 0,
+        referrer_cap: parseInt($('#f_cap').value) || 20,
+        remark: $('#f_remark').value.trim(),
+      };
+      if (!d.name || !d.approver_name || !d.approver_email) return showC('请填写完整信息');
+      const r = await API.post('/api/admin/channels', d);
+      showC(r.msg, r.ok ? 'ok' : 'err');
+      if (r.ok) {
+        $('#f_name').value = ''; $('#f_aname').value = ''; $('#f_aemail').value = ''; $('#f_remark').value = '';
+        load();
+      }
+    };
+    load();
+    // ==================== 管理员账户管理 ====================
+    function showA(msg, type) {
+      const a = $('#aAlert'); a.className = 'alert show ' + (type || 'err'); a.textContent = msg;
+    }
+    async function loadAdmins() {
+      const r = await API.get('/api/admin/admins');
+      if (!r.ok) return;
+      $('#admBody').innerHTML = r.data.length ? r.data.map(a => `
+    <tr>
+      <td class="mono">${a.id}</td>
+      <td class="mono small">${a.email || '--'}</td>
+      <td>${a.name}</td>
+      <td>${a.status === 1 ? '<span class="badge ok">启用</span>' : '<span class="badge dim">停用</span>'}</td>
+      <td class="dim small">${fmtTime(a.created_at)}</td>
+      <td>
+        ${a.status === 1 ? `<button class="btn ghost sm" onclick="disableAdmin(${a.id})">停用</button>` : ''}
+        ${a.status === 0 ? `<button class="btn danger sm" onclick="deleteAdmin(${a.id})">删除</button>` : ''}
+      </td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">暂无管理员</td></tr>';
+    }
+    async function disableAdmin(id) {
+      if (!confirm('确定停用该管理员？停用后其无法登录系统。')) return;
+      const r = await API.post('/api/admin/admins/disable', { id });
+      showA(r.msg, r.ok ? 'ok' : 'err');
+      loadAdmins();
+    }
+    async function deleteAdmin(id) {
+      if (!confirm('确定删除该管理员账号？此操作不可恢复。')) return;
+      const r = await API.post('/api/admin/admins/delete', { id });
+      showA(r.msg, r.ok ? 'ok' : 'err');
+      loadAdmins();
+    }
+    $('#addAdminBtn').onclick = async () => {
+      const d = { email: $('#a_email').value.trim(), name: $('#a_name').value.trim() };
+      if (!d.email) return showA('请填写管理员邮箱');
+      const r = await API.post('/api/admin/admins', d);
+      showA(r.msg, r.ok ? 'ok' : 'err');
+      if (r.ok) { $('#a_email').value = ''; $('#a_name').value = ''; }
+      loadAdmins();
+    };
+    loadAdmins();
+  </script>
+</body>
+
+</html>

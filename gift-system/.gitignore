@@ -1,0 +1,19 @@
+# 数据与产物
+data/
+reports/
+*.csv
+*.db
+*.db-wal
+*.db-shm
+
+# 本地配置（含管理员邮箱与 SMTP 凭据）
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 注意：tests/ 下如有 CSV 夹具，可用如下方式保留：
+# !tests/**/*.csv
