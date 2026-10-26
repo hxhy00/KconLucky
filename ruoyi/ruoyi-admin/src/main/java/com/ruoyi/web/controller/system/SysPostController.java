@@ -120,6 +120,7 @@ public class SysPostController extends BaseController
     /**
      * 获取岗位选择框列表
      */
+    @PreAuthorize("@ss.hasPermi('system:post:list')")
     @GetMapping("/optionselect")
     public AjaxResult optionselect()
     {

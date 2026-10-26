@@ -668,6 +668,17 @@ class TestServerEndpoints:
         base, _ = live
         r, s, _ = self._req(base, "GET", "/static/nope.css")
         assert s == 404
+    def test_static_path_traversal_blocked(self, live):
+        """静态资源不得用 .. / 编码穿越读到目录外文件（源码、SQLite 库）。"""
+        base, _ = live
+        for p in (
+            "/static/../data/kcon.db",
+            "/static/../../src/kcon/config.py",
+            "/static/%2e%2e/data/kcon.db",
+            "/static/..%2Fdata%2Fkcon.db",
+        ):
+            _, s, _ = self._req(base, "GET", p)
+            assert s == 404, p
     def test_page_not_found(self, live):
         base, _ = live
         r, s, _ = self._req(base, "GET", "/nope")

@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import sys
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -54,6 +55,24 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+    def _send_static(self, rel: str) -> None:
+        """静态资源：只允许 static 目录内的普通文件。
+
+        请求路径可能携带 `..`、绝对路径或符号链接指到目录外，统一 resolve
+        后做根目录前缀校验；任何逃逸按「文件不存在」处理，避免被读走源码、
+        SQLite 数据库或其他文件。
+        """
+        root = STATIC_DIR.resolve()
+        try:
+            target = (root / rel).resolve()
+        except (OSError, RuntimeError):
+            self._send_json({"ok": False, "msg": "文件不存在"}, 404)
+            return
+        if target != root and root not in target.parents:
+            self._send_json({"ok": False, "msg": "文件不存在"}, 404)
+            return
+        self._send_file(target)
+
     def _send_file(self, path: Path) -> None:
         if not path.exists() or not path.is_file():
             self._send_json({"ok": False, "msg": "文件不存在"}, 404)
@@ -124,7 +143,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         # 静态资源
         if path.startswith("/static/"):
             rel = path[len("/static/"):]
-            self._send_file(STATIC_DIR / rel)
+            self._send_static(rel)
             return
         # 健康检查
         if path == "/healthz":
@@ -192,7 +211,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         except ApiError as exc:
             self._send_json({"ok": False, "msg": exc.message}, exc.status)
         except Exception as exc:  # noqa: BLE001
-            self._send_json({"ok": False, "msg": f"服务异常：{exc}"}, 500)
+            # 不回显异常原文：sqlite 绑定错误、属性错误等会把表结构、字段名、
+            # 文件路径泄露出去。细节只写服务端日志，客户端只拿到通用文案。
+            print(f"[kcon] {self.command} {self.path} failed: {exc!r}", file=sys.stderr)
+            self._send_json({"ok": False, "msg": "服务异常，请稍后重试"}, 500)
 
     def _invoke(self, method, handler_name: str, sid, body, need_body: bool,
                 need_ip: bool):

@@ -122,6 +122,7 @@ public class SysDictTypeController extends BaseController
     /**
      * 获取字典选择框列表
      */
+    @PreAuthorize("@ss.hasPermi('system:dict:list')")
     @GetMapping("/optionselect")
     public AjaxResult optionselect()
     {
