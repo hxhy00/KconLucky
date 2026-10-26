@@ -600,6 +600,13 @@ class TestServerEndpoints:
         base, _ = live
         r, s, _ = self._req(base, "OPTIONS", "/api/auth/login")
         assert s == 200
+
+    def test_page_content_type_is_html(self, live):
+        """页面必须以 text/html 返回，否则浏览器会当成文件下载。"""
+        base, _ = live
+        with urllib.request.urlopen(base + "/login", timeout=5) as resp:
+            assert resp.headers.get_content_type() == "text/html"
+            assert "登录" in resp.read().decode("utf-8")
     def test_static_file(self, live):
         base, _ = live
         r, s, h = self._req(base, "GET", "/static/css/style.css")
