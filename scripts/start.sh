@@ -19,12 +19,16 @@ done
 
 LAN_IP=$(grep -E '^LAN_IP=' .env | cut -d= -f2)
 PORT=$(grep -E '^WEB_PORT=' .env | cut -d= -f2)
+PREFIX=$(grep -E '^KCON_BASE_PATH=' .env | cut -d= -f2)
+PREFIX=${PREFIX%/}
 echo ""
 echo "============================================"
 echo " 启动完成"
-echo " 管理端：   http://${LAN_IP}:${PORT}/admin/"
-echo " 签到 H5：  http://${LAN_IP}:${PORT}/sign/"
-echo " 抽奖大屏： http://${LAN_IP}:${PORT}/screen/"
+echo " 入口页：   http://${LAN_IP}:${PORT}${PREFIX}/"
+echo " 管理端：   http://${LAN_IP}:${PORT}${PREFIX}/admin/"
+echo " 签到 H5：  http://${LAN_IP}:${PORT}${PREFIX}/sign/"
+echo " 抽奖大屏： http://${LAN_IP}:${PORT}${PREFIX}/screen/"
+echo " 赠票系统： http://${LAN_IP}:${PORT}${PREFIX}/login"
 echo " 账号：     见 docs/04-部署运行.md（首次登录后请立即修改初始口令）"
 echo "============================================"
 docker compose ps
