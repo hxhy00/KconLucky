@@ -18,6 +18,10 @@ SYSTEM_EMAIL = "kcon@knownsec.com"
 def md5_email(email: str) -> str:
     """邮箱转 MD5（小写去空格）。"""
     return hashlib.md5(email.strip().lower().encode("utf-8")).hexdigest()
+def normalize_base_path(value: str) -> str:
+    """规范化子路径前缀：无值返回空串，否则形如 "/kconluck2026"（无尾斜杠）。"""
+    v = (value or "").strip().strip("/")
+    return f"/{v}" if v else ""
 def _parse_admin_env(value: str) -> Dict[str, str]:
     """解析 KCON_ADMIN_EMAILS：逗号分隔，支持 email 或 email:name。返回 md5 → name。"""
     whitelist: Dict[str, str] = {}
@@ -100,6 +104,8 @@ class AppConfig:
     smtp_password: str = ""
     # 是否在接口响应里回显验证码：仅本地 Demo/测试开启；生产必须关闭
     demo_code: bool = False
+    # 子路径部署前缀（如挂到 knownsec.com/kconluck2026/）。空串表示挂在根路径。
+    base_path: str = ""
     def __post_init__(self):
         if not self.db_path:
             self.db_path = str(DATA_DIR / "kcon.db")
@@ -127,4 +133,5 @@ def load_config() -> AppConfig:
         smtp_user=os.getenv("KCON_SMTP_USER", ""),
         smtp_password=os.getenv("KCON_SMTP_PASSWORD", ""),
         demo_code=os.getenv("KCON_DEMO_CODE", "0") == "1",
+        base_path=normalize_base_path(os.getenv("KCON_BASE_PATH", "")),
     )

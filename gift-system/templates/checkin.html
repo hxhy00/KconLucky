@@ -1,58 +1,62 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>签到台 · KCon2026</title>
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>签到台 · KCon2026</title>
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
+
 <body>
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="logo">KCon <small>签到台</small></div>
-    <div class="spacer"></div>
-    <a href="/mailbox" class="btn ghost sm">📬 邮件</a>
-    <a href="/" class="btn ghost sm">首页</a>
-  </div>
-</div>
-<div class="wrap" style="max-width:680px;">
-  <div class="page-head">
-    <h1>现场签到</h1>
-    <p>扫描参会人注册码二维码，或手动输入注册码</p>
-  </div>
-  <div class="card">
-    <div class="card-title">扫码 / 输码</div>
-    <div class="scan-box" id="scanBox">
-      <div class="ico">📷</div>
-      <div class="bold mb-8">扫描注册码二维码</div>
-      <div class="muted small mb-16">将二维码对准摄像头，或使用扫码枪</div>
-      <button id="scanBtn" class="btn">启动摄像头扫码</button>
-      <video id="video" class="hidden" style="width:100%;max-width:420px;border-radius:10px;margin-top:16px;" playsinline></video>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">KCon <small>签到台</small></div>
+      <div class="spacer"></div>
+      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
+      <a href="{{base}}/" class="btn ghost sm">首页</a>
     </div>
-    <div class="mt-24">
-      <label class="small muted mb-8" style="display:block;">或手动输入注册码</label>
-      <div class="flex gap-8">
-        <input id="codeInput" class="input flex-1 mono" placeholder="输入二维码上的注册码" style="text-transform:uppercase;">
-        <button id="queryBtn" class="btn">查询</button>
+  </div>
+  <div class="wrap" style="max-width:680px;">
+    <div class="page-head">
+      <h1>现场签到</h1>
+      <p>扫描参会人注册码二维码，或手动输入注册码</p>
+    </div>
+    <div class="card">
+      <div class="card-title">扫码 / 输码</div>
+      <div class="scan-box" id="scanBox">
+        <div class="ico">📷</div>
+        <div class="bold mb-8">扫描注册码二维码</div>
+        <div class="muted small mb-16">将二维码对准摄像头，或使用扫码枪</div>
+        <button id="scanBtn" class="btn">启动摄像头扫码</button>
+        <video id="video" class="hidden" style="width:100%;max-width:420px;border-radius:10px;margin-top:16px;"
+          playsinline></video>
       </div>
-      <div class="hint">演示提示：注册码可在邮件出箱的 M-05 / M-06 邮件中找到</div>
+      <div class="mt-24">
+        <label class="small muted mb-8" style="display:block;">或手动输入注册码</label>
+        <div class="flex gap-8">
+          <input id="codeInput" class="input flex-1 mono" placeholder="输入二维码上的注册码" style="text-transform:uppercase;">
+          <button id="queryBtn" class="btn">查询</button>
+        </div>
+        <div class="hint">演示提示：注册码可在邮件出箱的 M-05 / M-06 邮件中找到</div>
+      </div>
     </div>
+    <div id="result"></div>
   </div>
-  <div id="result"></div>
-</div>
-<script src="/static/js/common.js"></script>
-<script>
-let currentCode = '';
-let stream = null, scanning = false;
-function renderError(msg) {
-  $('#result').innerHTML = `<div class="result-card err">
+  <script src="{{base}}/static/js/common.js"></script>
+  <script>
+    let currentCode = '';
+    let stream = null, scanning = false;
+    function renderError(msg) {
+      $('#result').innerHTML = `<div class="result-card err">
     <div class="name">⚠️ 无法签到</div>
     <div class="meta">${msg}</div>
   </div>`;
-}
-function renderInfo(d) {
-  const checked = d.status === 4;
-  $('#result').innerHTML = `<div class="result-card ${checked ? 'err' : 'ok'}">
+    }
+    function renderInfo(d) {
+      const checked = d.status === 4;
+      $('#result').innerHTML = `<div class="result-card ${checked ? 'err' : 'ok'}">
     <div class="name">${d.name}</div>
     <div class="meta mb-16">${d.company}</div>
     <div class="table-wrap mb-16">
@@ -65,68 +69,69 @@ function renderInfo(d) {
       </table>
     </div>
     ${checked
-      ? `<div class="alert err show">该参会人已完成签到，请勿重复发放材料</div>`
-      : `<button class="btn block" onclick="doConfirm()">确认签到并发材料</button>`}
+          ? `<div class="alert err show">该参会人已完成签到，请勿重复发放材料</div>`
+          : `<button class="btn block" onclick="doConfirm()">确认签到并发材料</button>`}
   </div>`;
-}
-async function query(code) {
-  if (!code) return toast('请输入注册码', 'err');
-  currentCode = code.trim().toUpperCase();
-  const r = await API.post('/api/checkin/lookup', { code: currentCode });
-  if (!r.ok) return renderError(r.msg);
-  renderInfo(r.data);
-}
-async function doConfirm() {
-  const r = await API.post('/api/checkin/confirm', { code: currentCode });
-  if (!r.ok) return renderError(r.msg);
-  toast(r.msg, 'ok');
-  await query(currentCode);
-}
-$('#queryBtn').onclick = () => query($('#codeInput').value);
-$('#codeInput').onkeydown = e => { if (e.key === 'Enter') $('#queryBtn').click(); };
-// 摄像头扫码
-$('#scanBtn').onclick = async () => {
-  if (scanning) { stopScan(); return; }
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const v = $('#video');
-    v.srcObject = stream; v.classList.remove('hidden'); await v.play();
-    $('#scanBtn').textContent = '停止扫码';
-    $('#scanBox').classList.add('active');
-    scanning = true;
-    if ('BarcodeDetector' in window) {
-      const det = new BarcodeDetector({ formats: ['qr_code'] });
-      const tick = async () => {
-        if (!scanning) return;
-        try {
-          const codes = await det.detect(v);
-          if (codes.length) {
-            const raw = codes[0].rawValue || '';
-            const m = raw.match(/\/c\/([A-Za-z0-9]+)/);
-            const code = m ? m[1] : raw;
-            stopScan();
-            $('#codeInput').value = code;
-            query(code);
-            return;
-          }
-        } catch (e) {}
-        requestAnimationFrame(tick);
-      };
-      tick();
-    } else {
-      toast('当前浏览器不支持自动识别，请手动输入注册码', 'info');
     }
-  } catch (e) {
-    toast('无法访问摄像头：' + e.message, 'err');
-  }
-};
-function stopScan() {
-  scanning = false;
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  $('#video').classList.add('hidden');
-  $('#scanBtn').textContent = '启动摄像头扫码';
-  $('#scanBox').classList.remove('active');
-}
-</script>
+    async function query(code) {
+      if (!code) return toast('请输入注册码', 'err');
+      currentCode = code.trim().toUpperCase();
+      const r = await API.post('/api/checkin/lookup', { code: currentCode });
+      if (!r.ok) return renderError(r.msg);
+      renderInfo(r.data);
+    }
+    async function doConfirm() {
+      const r = await API.post('/api/checkin/confirm', { code: currentCode });
+      if (!r.ok) return renderError(r.msg);
+      toast(r.msg, 'ok');
+      await query(currentCode);
+    }
+    $('#queryBtn').onclick = () => query($('#codeInput').value);
+    $('#codeInput').onkeydown = e => { if (e.key === 'Enter') $('#queryBtn').click(); };
+    // 摄像头扫码
+    $('#scanBtn').onclick = async () => {
+      if (scanning) { stopScan(); return; }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const v = $('#video');
+        v.srcObject = stream; v.classList.remove('hidden'); await v.play();
+        $('#scanBtn').textContent = '停止扫码';
+        $('#scanBox').classList.add('active');
+        scanning = true;
+        if ('BarcodeDetector' in window) {
+          const det = new BarcodeDetector({ formats: ['qr_code'] });
+          const tick = async () => {
+            if (!scanning) return;
+            try {
+              const codes = await det.detect(v);
+              if (codes.length) {
+                const raw = codes[0].rawValue || '';
+                const m = raw.match(/\/c\/([A-Za-z0-9]+)/);
+                const code = m ? m[1] : raw;
+                stopScan();
+                $('#codeInput').value = code;
+                query(code);
+                return;
+              }
+            } catch (e) { }
+            requestAnimationFrame(tick);
+          };
+          tick();
+        } else {
+          toast('当前浏览器不支持自动识别，请手动输入注册码', 'info');
+        }
+      } catch (e) {
+        toast('无法访问摄像头：' + e.message, 'err');
+      }
+    };
+    function stopScan() {
+      scanning = false;
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      $('#video').classList.add('hidden');
+      $('#scanBtn').textContent = '启动摄像头扫码';
+      $('#scanBox').classList.remove('active');
+    }
+  </script>
 </body>
+
 </html>

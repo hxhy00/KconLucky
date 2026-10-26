@@ -133,6 +133,8 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       # 对外地址（默认走 80 反代）；链接与页面跳转以此为准
       KCON_SITE_URL: ${GIFT_SITE_URL:-http://123.57.9.62}
+      # 子路径部署前缀（如挂到 knownsec.com/kconluck2026/）；留空表示根路径
+      KCON_BASE_PATH: ${KCON_BASE_PATH:-}
       KCON_DB_PATH: /app/data/kcon.db
       # 初始管理员（admin 表为空时写入），≤3 个，email 或 email:姓名
       KCON_ADMIN_EMAILS: ${KCON_GIFT_ADMIN_EMAILS:?请在 .env 中设置 KCON_GIFT_ADMIN_EMAILS}

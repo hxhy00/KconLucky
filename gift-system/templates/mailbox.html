@@ -1,73 +1,79 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>邮件出箱 · KCon2026</title>
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>邮件出箱 · KCon2026</title>
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
+
 <body>
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="logo">KCon <small>邮件出箱</small></div>
-    <div class="spacer"></div>
-    <a href="/" class="btn ghost sm">首页</a>
-    <a href="/login" class="btn ghost sm">登录</a>
-  </div>
-</div>
-<div class="wrap" style="max-width:900px;">
-  <div class="page-head">
-    <h1>邮件出箱</h1>
-    <p>Demo 模式下所有邮件都会落在这里，点击可查看 KCon2026 主视觉渲染效果</p>
-  </div>
-  <div class="flex gap-8 mb-16" style="flex-wrap:wrap;">
-    <button class="btn ghost sm" onclick="filterTpl('')">全部</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-01')">M-01 开通</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-02')">M-02 推荐人审批</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-03')">M-03 专属链接</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-04')">M-04 赠票审批</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-05')">M-05 注册成功</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-06')">M-06 注册通知</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-07')">M-07 已签到</button>
-    <button class="btn ghost sm" onclick="filterTpl('M-08')">M-08 签到汇总</button>
-    <button class="btn ghost sm" onclick="filterTpl('CODE')">验证码</button>
-  </div>
-  <div class="mail-list" id="mailList"><div class="empty">加载中…</div></div>
-</div>
-<div class="modal-mask" id="mailModal" onclick="if(event.target===this)closeMail()">
-  <div class="modal">
-    <div class="modal-head">
-      <h3 id="mailTitle">邮件预览</h3>
-      <span class="close-x" onclick="closeMail()">×</span>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">KCon <small>邮件出箱</small></div>
+      <div class="spacer"></div>
+      <a href="{{base}}/" class="btn ghost sm">首页</a>
+      <a href="{{base}}/login" class="btn ghost sm">登录</a>
     </div>
-    <div class="modal-body"><iframe id="mailFrame"></iframe></div>
   </div>
-</div>
-<script src="/static/js/common.js"></script>
-<script>
-let ALL = [];
-let curFilter = '';
-async function load() {
-  const r = await API.get('/api/mailbox');
-  ALL = r.data || [];
-  render();
-}
-function filterTpl(t) { curFilter = t; render(); }
-function render() {
-  const list = curFilter ? ALL.filter(m => m.template === curFilter) : ALL;
-  if (!list.length) {
-    $('#mailList').innerHTML = '<div class="empty"><div class="ico">📭</div>暂无邮件，请先走一遍业务流程</div>';
-    return;
-  }
-  $('#mailList').innerHTML = list.map(m => `
+  <div class="wrap" style="max-width:900px;">
+    <div class="page-head">
+      <h1>邮件出箱</h1>
+      <p>Demo 模式下所有邮件都会落在这里，点击可查看 KCon2026 主视觉渲染效果</p>
+    </div>
+    <div class="flex gap-8 mb-16" style="flex-wrap:wrap;">
+      <button class="btn ghost sm" onclick="filterTpl('')">全部</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-01')">M-01 开通</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-02')">M-02 推荐人审批</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-03')">M-03 专属链接</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-04')">M-04 赠票审批</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-05')">M-05 注册成功</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-06')">M-06 注册通知</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-07')">M-07 已签到</button>
+      <button class="btn ghost sm" onclick="filterTpl('M-08')">M-08 签到汇总</button>
+      <button class="btn ghost sm" onclick="filterTpl('CODE')">验证码</button>
+    </div>
+    <div class="mail-list" id="mailList">
+      <div class="empty">加载中…</div>
+    </div>
+  </div>
+  <div class="modal-mask" id="mailModal" onclick="if(event.target===this)closeMail()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="mailTitle">邮件预览</h3>
+        <span class="close-x" onclick="closeMail()">×</span>
+      </div>
+      <div class="modal-body"><iframe id="mailFrame"></iframe></div>
+    </div>
+  </div>
+  <script src="{{base}}/static/js/common.js"></script>
+  <script>
+    let ALL = [];
+    let curFilter = '';
+    async function load() {
+      const r = await API.get('/api/mailbox');
+      ALL = r.data || [];
+      render();
+    }
+    function filterTpl(t) { curFilter = t; render(); }
+    function render() {
+      const list = curFilter ? ALL.filter(m => m.template === curFilter) : ALL;
+      if (!list.length) {
+        $('#mailList').innerHTML = '<div class="empty"><div class="ico">📭</div>暂无邮件，请先走一遍业务流程</div>';
+        return;
+      }
+      $('#mailList').innerHTML = list.map(m => `
     <div class="mail-item" onclick="openMail(${m.id})">
       <span class="mail-tpl">${m.template}</span>
       <span class="mail-sub">${m.subject}</span>
       <span class="mail-to">→ ${m.to_email}</span>
       <span class="dim small">${fmtTime(m.created_at)}</span>
     </div>`).join('');
-}
-load();
-</script>
+    }
+    load();
+  </script>
 </body>
+
 </html>

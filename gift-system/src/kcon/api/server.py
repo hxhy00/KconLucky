@@ -33,6 +33,9 @@ class RequestHandler(BaseHTTPRequestHandler):
     server_version = "KConProd/1.0"
     # 由 make_server 注入
     handlers: Handlers = None
+    # 子路径部署前缀挂在 server 实例上（base_path），避免多实例间串值
+    def _base_path(self) -> str:
+        return getattr(self.server, "base_path", "") or ""
     # ---------- 响应工具 ----------
     def _send_json(self, obj: Dict[str, Any], status: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -56,6 +59,10 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "msg": "文件不存在"}, 404)
             return
         data = path.read_bytes()
+        if path.suffix.lower() == ".html":
+            # 页面模板用 {{base}} 占位：挂到 /kconluck2026/ 之类子路径时，
+            # 静态资源与站内链接才能指回本系统，而不是打到站点根。
+            data = data.replace(b"{{base}}", self._base_path().encode("utf-8"))
         self.send_response(200)
         self.send_header("Content-Type",
                          MIME_TYPES.get(path.suffix.lower(), "application/octet-stream"))
@@ -64,6 +71,21 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
     # ---------- 请求工具 ----------
+    def _route_path(self) -> Optional[str]:
+        """剥离子路径前缀后返回路由路径。
+
+        带前缀与不带前缀都接受：官网反代（透传或剥离前缀）两种接法都能工作，
+        本机 IP 直连也仍可用于排障与回滚。
+        """
+        path = urllib.parse.urlparse(self.path).path
+        base = self._base_path()
+        if not base:
+            return path
+        if path == base or path == base + "/":
+            return "/"
+        if path.startswith(base + "/"):
+            return path[len(base):]
+        return path
     def _read_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
@@ -95,7 +117,10 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self._send_json({"ok": True})
     def do_GET(self) -> None:
-        path = urllib.parse.urlparse(self.path).path
+        path = self._route_path()
+        if path is None:
+            self._send_json({"ok": False, "msg": "接口不存在"}, 404)
+            return
         # 静态资源
         if path.startswith("/static/"):
             rel = path[len("/static/"):]
@@ -146,7 +171,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         except ApiError as exc:
             self._send_json({"ok": False, "msg": exc.message}, exc.status)
     def do_POST(self) -> None:
-        path = urllib.parse.urlparse(self.path).path
+        path = self._route_path()
+        if path is None:
+            self._send_json({"ok": False, "msg": "接口不存在"}, 404)
+            return
         route = router.match_route("POST", path)
         if not route:
             self._send_json({"ok": False, "msg": "接口不存在"}, 404)
@@ -207,6 +235,7 @@ def make_server(host: str = "0.0.0.0", port: int = 8848,
     handlers = Handlers(c, sessions, limiter)
     RequestHandler.handlers = handlers
     server = ThreadingHTTPServer((host, port), RequestHandler)
+    server.base_path = c.config.base_path
     server.container = c
     server.sessions = sessions
     server.limiter = limiter

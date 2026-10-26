@@ -1,38 +1,43 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>审批 · KCon2026</title>
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>审批 · KCon2026</title>
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
+
 <body>
-<div class="auth-wrap">
-  <div class="auth-card" style="max-width:520px;">
-    <div class="brand">
-      <div class="t">KCon</div>
-      <div class="s"><b>奕智</b> · 审批确认</div>
+  <div class="auth-wrap">
+    <div class="auth-card" style="max-width:520px;">
+      <div class="brand">
+        <div class="t">KCon</div>
+        <div class="s"><b>奕智</b> · 审批确认</div>
+      </div>
+      <div id="alert" class="alert"></div>
+      <div id="content">
+        <div class="empty">加载中…</div>
+      </div>
     </div>
-    <div id="alert" class="alert"></div>
-    <div id="content"><div class="empty">加载中…</div></div>
   </div>
-</div>
-<script src="/static/js/common.js"></script>
-<script>
-const TOKEN = location.pathname.replace('/approve/', '').split('/')[1] || location.pathname.split('/').pop();
-function show(msg, type) {
-  const a = $('#alert'); a.className = 'alert show ' + (type || 'err'); a.textContent = msg;
-}
-(async () => {
-  const r = await API.post('/api/approve/info', { token: TOKEN });
-  if (!r.ok) {
-    $('#content').innerHTML = `<div class="center"><div style="font-size:52px;margin-bottom:16px;">⚠️</div>
+  <script src="{{base}}/static/js/common.js"></script>
+  <script>
+    const TOKEN = location.pathname.split('/approve/')[1] || '';
+    function show(msg, type) {
+      const a = $('#alert'); a.className = 'alert show ' + (type || 'err'); a.textContent = msg;
+    }
+    (async () => {
+      const r = await API.post('/api/approve/info', { token: TOKEN });
+      if (!r.ok) {
+        $('#content').innerHTML = `<div class="center"><div style="font-size:52px;margin-bottom:16px;">⚠️</div>
       <div class="bold">${r.msg}</div></div>`;
-    return;
-  }
-  const d = r.data;
-  const isRef = r.type === 'referrer';
-  $('#content').innerHTML = `
+        return;
+      }
+      const d = r.data;
+      const isRef = r.type === 'referrer';
+      $('#content').innerHTML = `
     <div class="card-title">${isRef ? '推荐人注册申请' : '赠票注册申请'}</div>
     <div class="table-wrap mb-16">
       <table>
@@ -55,17 +60,18 @@ function show(msg, type) {
       <button class="btn danger flex-1" onclick="doApprove('reject')">拒绝</button>
     </div>
     <div class="hint center mt-16">此链接一次性有效，操作后立即失效</div>`;
-})();
-async function doApprove(action) {
-  const r = await API.post('/api/approve/do', { token: TOKEN, action });
-  if (!r.ok) return show(r.msg);
-  $('#content').innerHTML = `<div class="center">
+    })();
+    async function doApprove(action) {
+      const r = await API.post('/api/approve/do', { token: TOKEN, action });
+      if (!r.ok) return show(r.msg);
+      $('#content').innerHTML = `<div class="center">
     <div style="font-size:52px;margin-bottom:16px;">${action === 'approve' ? '✅' : '🚫'}</div>
     <div class="bold" style="font-size:16px;">${r.msg}</div>
     <p class="muted small mt-8">相关邮件已发送，请查收。</p>
-    <a href="/mailbox" class="btn ghost mt-16">查看邮件出箱</a>
+    <a href="{{base}}/mailbox" class="btn ghost mt-16">查看邮件出箱</a>
   </div>`;
-}
-</script>
+    }
+  </script>
 </body>
+
 </html>

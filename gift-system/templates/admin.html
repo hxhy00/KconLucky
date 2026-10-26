@@ -5,7 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>管理后台 · KCon2026 赠票系统</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
 <body>
@@ -14,7 +15,7 @@
       <div class="logo">KCon <small>奕智</small></div>
       <div class="spacer"></div>
       <span class="who">管理员 <b id="whoName">--</b></span>
-      <a href="/mailbox" class="btn ghost sm">📬 邮件</a>
+      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
       <button class="btn ghost sm" onclick="logout()">退出</button>
     </div>
   </div>
@@ -157,7 +158,7 @@
       </div>
     </div>
   </div>
-  <script src="/static/js/common.js"></script>
+  <script src="{{base}}/static/js/common.js"></script>
   <script>
     requireRole('admin');
     API.get('/api/me').then(r => { if (r.ok) $('#whoName').textContent = r.user.name; });
@@ -198,7 +199,7 @@
       <td>${badge('channel', c.status)}</td>
       <td class="dim small">${fmtTime(c.created_at)}</td>
       <td>
-        <button class="btn ghost sm" onclick="copyText('${location.origin}/r/${c.code}')">复制注册链接</button>
+        <button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/r/${c.code}')">复制注册链接</button>
         ${c.status === 1 ? `<button class="btn danger sm" onclick="suspend(${c.id})">停用</button>` : ''}
       </td>
     </tr>`).join('') : '<tr><td colspan="9" class="empty">暂无渠道</td></tr>';

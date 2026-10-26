@@ -586,6 +586,44 @@ class TestServerEndpoints:
         yield f"http://127.0.0.1:{port}", c
         srv.shutdown()
         srv.server_close()
+    @pytest.fixture
+    def mounted(self, tmp_path):
+        """挂在 /kconluck2026/ 子路径下的实例（对应 knownsec.com 的挂载方式）。"""
+        cfg = AppConfig(site_url="http://127.0.0.1:0",
+                        db_path=str(tmp_path / "mnt.db"),
+                        base_path="/kconluck2026")
+        c = Container(config=cfg, clock=FixedClock(), random_source=SeqRandom(),
+                      mailer=FakeMailer(), qr_generator=FakeQrCodeGenerator())
+        srv = make_server("127.0.0.1", 0, c)
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        time.sleep(0.2)
+        yield f"http://127.0.0.1:{port}", c
+        srv.shutdown()
+        srv.server_close()
+    def test_subpath_page_rewrites_assets(self, mounted):
+        """子路径部署：页面里的静态资源与站内链接必须带前缀。"""
+        base, _ = mounted
+        with urllib.request.urlopen(base + "/kconluck2026/login", timeout=5) as resp:
+            assert resp.headers.get_content_type() == "text/html"
+            html = resp.read().decode("utf-8")
+        assert 'window.KCON_BASE = "/kconluck2026"' in html
+        assert 'href="/kconluck2026/static/css/style.css"' in html
+        assert 'href="/static/' not in html
+    def test_subpath_api_reachable(self, mounted):
+        """子路径下的 API 剥前缀后要命中路由（未登录是 401，而不是 404）。"""
+        base, _ = mounted
+        _, s, _ = self._req(base, "GET", "/kconluck2026/api/me")
+        assert s == 401
+    def test_subpath_static_file(self, mounted):
+        base, _ = mounted
+        _, s, _ = self._req(base, "GET", "/kconluck2026/static/css/style.css")
+        assert s == 200
+    def test_root_path_still_served_when_mounted(self, mounted):
+        """配了子路径后根路径仍保留：官网反代剥离前缀、本机直连排障都依赖它。"""
+        base, _ = mounted
+        _, s, _ = self._req(base, "GET", "/login")
+        assert s == 200
     def _req(self, base, method, path, data=None, sid=None):
         headers = {"Content-Type": "application/json"}
         if sid:

@@ -1,4 +1,7 @@
 /* ===== KCon2026 Demo 公共工具 ===== */
+/* 子路径部署前缀：由页面注入 window.KCON_BASE（如 "/kconluck2026"），根路径部署时为空 */
+const KCON_BASE = window.KCON_BASE || '';
+const LOGIN_URL = KCON_BASE + '/login';
 const API = {
   sid: localStorage.getItem('kcon_sid') || '',
   async req(path, data, method) {
@@ -8,8 +11,8 @@ const API = {
       opt.headers['Content-Type'] = 'application/json';
       opt.body = JSON.stringify(data);
     }
-    const r = await fetch(path, opt);
-    if (r.status === 401) { location.href = '/login'; throw new Error('未登录'); }
+    const r = await fetch(KCON_BASE + path, opt);
+    if (r.status === 401) { location.href = LOGIN_URL; throw new Error('未登录'); }
     return await r.json();
   },
   get(p) { return this.req(p, null, 'GET'); },
@@ -71,17 +74,17 @@ function badge(kind, status) {
   return `<span class="badge ${m[1]}">${m[0]}</span>`;
 }
 function logout() {
-  API.post('/api/auth/logout', {}).finally(() => { API.clear(); location.href = '/login'; });
+  API.post('/api/auth/logout', {}).finally(() => { API.clear(); location.href = LOGIN_URL; });
 }
 function requireRole(role) {
   API.get('/api/me').then(r => {
-    if (!r.ok || r.role !== role) { location.href = '/login'; }
-  }).catch(() => { location.href = '/login'; });
+    if (!r.ok || r.role !== role) { location.href = LOGIN_URL; }
+  }).catch(() => { location.href = LOGIN_URL; });
 }
 function openMail(id) {
   const mask = $('#mailModal');
   if (!mask) return;
-  $('#mailFrame').src = `/api/mailbox/${id}/view`;
+  $('#mailFrame').src = `${KCON_BASE}/api/mailbox/${id}/view`;
   mask.classList.add('show');
 }
 function closeMail() {

@@ -5,7 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>登录 · KCon2026 赠票系统</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
 <body>
@@ -30,11 +31,11 @@
       </div>
       <button id="loginBtn" class="btn block mt-8">登 录</button>
       <div class="center mt-16 small dim">
-        <a href="/mailbox">📬 查看邮件出箱（Demo）</a>
+        <a href="{{base}}/mailbox">📬 查看邮件出箱（Demo）</a>
       </div>
     </div>
   </div>
-  <script src="/static/js/common.js"></script>
+  <script src="{{base}}/static/js/common.js"></script>
   <script>
     let countdown = 0, timer = null;
     function showAlert(msg, type) {
@@ -63,7 +64,7 @@
       const r = await API.post('/api/auth/login', { email, code });
       if (!r.ok) return showAlert(r.msg);
       API.setSid(r.sid);
-      location.href = r.role === 'admin' ? '/gift-admin' : '/gift-approver';
+      location.href = KCON_BASE + (r.role === 'admin' ? '/gift-admin' : '/gift-approver');
     };
     $('#code').onkeydown = e => { if (e.key === 'Enter') $('#loginBtn').click(); };
   </script>

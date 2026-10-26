@@ -1,108 +1,181 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>渠道工作台 · KCon2026 赠票系统</title>
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>渠道工作台 · KCon2026 赠票系统</title>
+  <script>window.KCON_BASE = "{{base}}";</script>
+  <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
+
 <body>
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="logo">KCon <small>奕智</small></div>
-    <div class="spacer"></div>
-    <span class="who">审批员 <b id="whoName">--</b></span>
-    <a href="/mailbox" class="btn ghost sm">📬 邮件</a>
-    <button class="btn ghost sm" onclick="logout()">退出</button>
-  </div>
-</div>
-<div class="wrap">
-  <div class="page-head">
-    <h1 id="chTitle">渠道工作台</h1>
-    <p id="chSub">审批推荐人、查看本渠道数据</p>
-  </div>
-  <!-- 推荐人注册链接 -->
-  <div class="card glow mb-24">
-    <div class="card-title">推荐人注册链接（分发给推荐人）</div>
-    <div class="linkbox">
-      <span id="regUrl" style="flex:1;">--</span>
-      <button class="btn sm" onclick="copyText($('#regUrl').textContent)">复制</button>
-      <a id="regOpen" class="btn ghost sm" target="_blank">打开</a>
-    </div>
-    <div class="hint">推荐人打开此链接填写信息申请成为推荐人，需您审批通过后才会收到专属赠票链接。</div>
-  </div>
-  <!-- 统计 -->
-  <div class="grid grid-4 mb-24">
-    <div class="stat cyan"><div class="k">推荐人数</div><div class="v" id="k1">--</div></div>
-    <div class="stat"><div class="k">邀请总数</div><div class="v" id="k2">--</div></div>
-    <div class="stat pink"><div class="k">注册成功</div><div class="v" id="k3">--</div></div>
-    <div class="stat ok"><div class="k">已签到</div><div class="v" id="k4">--</div></div>
-  </div>
-  <div class="grid grid-4 mb-24">
-    <div class="stat"><div class="k">渠道配额</div><div class="v" id="k5">--</div></div>
-    <div class="stat"><div class="k">已使用</div><div class="v" id="k6">--</div></div>
-    <div class="stat"><div class="k">剩余</div><div class="v" id="k7">--</div></div>
-    <div class="stat cyan"><div class="k">签到率</div><div class="v" id="k8">--<small>%</small></div></div>
-  </div>
-  <!-- 待审批推荐人 -->
-  <div class="card mb-24">
-    <div class="card-title">待审批推荐人 <span id="pendCount" class="badge wait" style="margin-left:8px;">0</span></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>姓名</th><th>公司</th><th>部门</th><th>手机</th><th>邮箱</th><th>申请时间</th><th>操作</th></tr></thead>
-        <tbody id="pendBody"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
-      </table>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">KCon <small>奕智</small></div>
+      <div class="spacer"></div>
+      <span class="who">审批员 <b id="whoName">--</b></span>
+      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
+      <button class="btn ghost sm" onclick="logout()">退出</button>
     </div>
   </div>
-  <!-- 已通过推荐人 -->
-  <div class="card mb-24">
-    <div class="card-title">推荐人列表</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>姓名</th><th>公司</th><th>部门</th><th>手机</th><th>邮箱</th><th>状态</th><th>已发放</th><th>邀请数</th><th>签到数</th><th>操作</th></tr></thead>
-        <tbody id="refBody"><tr><td colspan="10" class="empty">加载中…</td></tr></tbody>
-      </table>
+  <div class="wrap">
+    <div class="page-head">
+      <h1 id="chTitle">渠道工作台</h1>
+      <p id="chSub">审批推荐人、查看本渠道数据</p>
+    </div>
+    <!-- 推荐人注册链接 -->
+    <div class="card glow mb-24">
+      <div class="card-title">推荐人注册链接（分发给推荐人）</div>
+      <div class="linkbox">
+        <span id="regUrl" style="flex:1;">--</span>
+        <button class="btn sm" onclick="copyText($('#regUrl').textContent)">复制</button>
+        <a id="regOpen" class="btn ghost sm" target="_blank">打开</a>
+      </div>
+      <div class="hint">推荐人打开此链接填写信息申请成为推荐人，需您审批通过后才会收到专属赠票链接。</div>
+    </div>
+    <!-- 统计 -->
+    <div class="grid grid-4 mb-24">
+      <div class="stat cyan">
+        <div class="k">推荐人数</div>
+        <div class="v" id="k1">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">邀请总数</div>
+        <div class="v" id="k2">--</div>
+      </div>
+      <div class="stat pink">
+        <div class="k">注册成功</div>
+        <div class="v" id="k3">--</div>
+      </div>
+      <div class="stat ok">
+        <div class="k">已签到</div>
+        <div class="v" id="k4">--</div>
+      </div>
+    </div>
+    <div class="grid grid-4 mb-24">
+      <div class="stat">
+        <div class="k">渠道配额</div>
+        <div class="v" id="k5">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">已使用</div>
+        <div class="v" id="k6">--</div>
+      </div>
+      <div class="stat">
+        <div class="k">剩余</div>
+        <div class="v" id="k7">--</div>
+      </div>
+      <div class="stat cyan">
+        <div class="k">签到率</div>
+        <div class="v" id="k8">--<small>%</small></div>
+      </div>
+    </div>
+    <!-- 待审批推荐人 -->
+    <div class="card mb-24">
+      <div class="card-title">待审批推荐人 <span id="pendCount" class="badge wait" style="margin-left:8px;">0</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>公司</th>
+              <th>部门</th>
+              <th>手机</th>
+              <th>邮箱</th>
+              <th>申请时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="pendBody">
+            <tr>
+              <td colspan="7" class="empty">加载中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- 已通过推荐人 -->
+    <div class="card mb-24">
+      <div class="card-title">推荐人列表</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>公司</th>
+              <th>部门</th>
+              <th>手机</th>
+              <th>邮箱</th>
+              <th>状态</th>
+              <th>已发放</th>
+              <th>邀请数</th>
+              <th>签到数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="refBody">
+            <tr>
+              <td colspan="10" class="empty">加载中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- 赠票接收人 -->
+    <div class="card">
+      <div class="card-title">赠票接收人</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>单位</th>
+              <th>手机</th>
+              <th>邮箱</th>
+              <th>推荐人</th>
+              <th>状态</th>
+              <th>注册码</th>
+              <th>签到时间</th>
+            </tr>
+          </thead>
+          <tbody id="rcpBody">
+            <tr>
+              <td colspan="8" class="empty">加载中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
-  <!-- 赠票接收人 -->
-  <div class="card">
-    <div class="card-title">赠票接收人</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>姓名</th><th>单位</th><th>手机</th><th>邮箱</th><th>推荐人</th><th>状态</th><th>注册码</th><th>签到时间</th></tr></thead>
-        <tbody id="rcpBody"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-<script src="/static/js/common.js"></script>
-<script>
-requireRole('approver');
-let CHANNEL_ID = null;
-async function load() {
-  const o = await API.get('/api/approver/overview');
-  if (!o.ok) return;
-  CHANNEL_ID = o.channel.id;
-  $('#whoName').textContent = o.approver.name;
-  $('#chTitle').textContent = o.channel.name;
-  $('#chSub').textContent = `渠道工作台 · 配额 ${o.channel.quota} 张 · 单人上限 ${o.channel.referrer_cap} 张`;
-  $('#regUrl').textContent = o.register_url;
-  $('#regOpen').href = o.register_url;
-  const s = o.stats;
-  $('#k1').textContent = s.referrer_count;
-  $('#k2').textContent = s.invited_count;
-  $('#k3').textContent = s.approved_count;
-  $('#k4').textContent = s.checked_in_count;
-  $('#k5').textContent = s.quota;
-  $('#k6').textContent = s.quota_used;
-  $('#k7').textContent = s.quota_remaining;
-  $('#k8').innerHTML = s.checkin_rate + '<small>%</small>';
-  // 推荐人
-  const rr = await API.get('/api/approver/referrers');
-  const list = rr.data || [];
-  const pending = list.filter(r => r.status === 1);
-  $('#pendCount').textContent = pending.length;
-  $('#pendBody').innerHTML = pending.length ? pending.map(r => `
+  <script src="{{base}}/static/js/common.js"></script>
+  <script>
+    requireRole('approver');
+    let CHANNEL_ID = null;
+    async function load() {
+      const o = await API.get('/api/approver/overview');
+      if (!o.ok) return;
+      CHANNEL_ID = o.channel.id;
+      $('#whoName').textContent = o.approver.name;
+      $('#chTitle').textContent = o.channel.name;
+      $('#chSub').textContent = `渠道工作台 · 配额 ${o.channel.quota} 张 · 单人上限 ${o.channel.referrer_cap} 张`;
+      $('#regUrl').textContent = o.register_url;
+      $('#regOpen').href = o.register_url;
+      const s = o.stats;
+      $('#k1').textContent = s.referrer_count;
+      $('#k2').textContent = s.invited_count;
+      $('#k3').textContent = s.approved_count;
+      $('#k4').textContent = s.checked_in_count;
+      $('#k5').textContent = s.quota;
+      $('#k6').textContent = s.quota_used;
+      $('#k7').textContent = s.quota_remaining;
+      $('#k8').innerHTML = s.checkin_rate + '<small>%</small>';
+      // 推荐人
+      const rr = await API.get('/api/approver/referrers');
+      const list = rr.data || [];
+      const pending = list.filter(r => r.status === 1);
+      $('#pendCount').textContent = pending.length;
+      $('#pendBody').innerHTML = pending.length ? pending.map(r => `
     <tr>
       <td class="bold">${r.name}</td>
       <td>${r.company}</td>
@@ -115,7 +188,7 @@ async function load() {
         <button class="btn danger sm" onclick="approve(${r.id},'reject')">拒绝</button>
       </td>
     </tr>`).join('') : '<tr><td colspan="7" class="empty"><div class="ico">✓</div>暂无待审批推荐人</td></tr>';
-  $('#refBody').innerHTML = list.length ? list.map(r => `
+      $('#refBody').innerHTML = list.length ? list.map(r => `
     <tr>
       <td class="bold">${r.name}</td>
       <td>${r.company}</td>
@@ -126,12 +199,12 @@ async function load() {
       <td class="cyan bold">${r.issued_count}</td>
       <td>${r.invited_count}</td>
       <td class="pink">${r.checked_in_count}</td>
-      <td>${r.status === 2 ? `<button class="btn ghost sm" onclick="copyText('${location.origin}/t/${r.code}')">复制赠票链接</button>` : '--'}</td>
+      <td>${r.status === 2 ? `<button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/t/${r.code}')">复制赠票链接</button>` : '--'}</td>
     </tr>`).join('') : '<tr><td colspan="10" class="empty">暂无推荐人</td></tr>';
-  // 接收人
-  const rc = await API.get('/api/approver/recipients');
-  const rl = rc.data || [];
-  $('#rcpBody').innerHTML = rl.length ? rl.map(x => `
+      // 接收人
+      const rc = await API.get('/api/approver/recipients');
+      const rl = rc.data || [];
+      $('#rcpBody').innerHTML = rl.length ? rl.map(x => `
     <tr>
       <td class="bold">${x.name}</td>
       <td>${x.company}</td>
@@ -142,14 +215,15 @@ async function load() {
       <td class="mono small cyan">${x.reg_code || '--'}</td>
       <td class="dim small">${x.checked_at ? fmtTime(x.checked_at) : '--'}</td>
     </tr>`).join('') : '<tr><td colspan="8" class="empty">暂无赠票接收人</td></tr>';
-}
-async function approve(id, action) {
-  const r = await API.post('/api/approver/referrer/approve', { id, action });
-  toast(r.msg, r.ok ? 'ok' : 'err');
-  if (r.ok) load();
-}
-load();
-setInterval(load, 15000);
-</script>
+    }
+    async function approve(id, action) {
+      const r = await API.post('/api/approver/referrer/approve', { id, action });
+      toast(r.msg, r.ok ? 'ok' : 'err');
+      if (r.ok) load();
+    }
+    load();
+    setInterval(load, 15000);
+  </script>
 </body>
+
 </html>
