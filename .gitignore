@@ -64,3 +64,8 @@ Thumbs.db
 *.orig
 # playwright-cli 会话快照（本地调试产物，不入库）
 .playwright-cli/
+
+# ---- 参考资料 ----
+# 原始交付包（kcon-prod.zip）、需求文档、演示名单等：
+# 体积大、非代码资产，且含参会人样例数据，不入版本库。
+参考文件/
