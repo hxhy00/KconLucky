@@ -75,6 +75,15 @@ class RequestHandler(BaseHTTPRequestHandler):
     def _sid(self) -> Optional[str]:
         return self.headers.get("X-Session") or None
     def _client_ip(self) -> str:
+        """真实客户端 IP：优先取 Nginx 设置的 X-Real-IP。
+
+        本服务只在内网监听，公网请求必经前置 Nginx；Nginx 会用
+        `$remote_addr` 覆盖 X-Real-IP，因此该头可信。直接取 socket
+        对端会得到反代容器 IP，导致全站共享一个限流桶。
+        """
+        real_ip = (self.headers.get("X-Real-IP") or "").strip()
+        if real_ip:
+            return real_ip
         return self.client_address[0] if self.client_address else ""
     def log_message(self, fmt: str, *args) -> None:
         """静默日志（生产可接入 logger）。"""
