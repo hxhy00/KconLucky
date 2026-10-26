@@ -37,11 +37,26 @@ class Handlers:
             raise ApiError(msg, 429)
     # ==================== 认证（4） ====================
     def send_code(self, body: Dict[str, Any], ip: str = "") -> Dict[str, Any]:
-        """发送验证码。仅 demo_code 开启时回显明文，生产默认不回显。"""
-        email = (body.get("email") or "").strip()
+        """发送验证码。
+
+        - 只给已存在的管理员/审批员发信，未知邮箱返回同样的提示但不发信，
+          避免被当成任意邮箱轰炸器，也不泄露账号是否存在；
+        - 仅 demo_code 开启时回显明文，生产默认不回显。
+        """
+        from ..config import md5_email
+        email = (body.get("email") or "").strip().lower()
         ok, msg, code = self.c.auth.send_verify_code(email)
-        resp: Dict[str, Any] = {"ok": ok, "msg": msg}
-        if ok and self.c.config.demo_code:
+        if not ok:
+            return {"ok": False, "msg": msg}
+        known = (self.c.repos.admin.find_by_md5(md5_email(email))
+                 or self.c.repos.approver.find_by_email(email))
+        if known:
+            sent, _ = self.c.mailer.send(
+                "CODE", email, "【KCon2026】登录验证码", {"code": code})
+            if not sent:
+                return {"ok": False, "msg": "验证码发送失败，请稍后重试"}
+        resp: Dict[str, Any] = {"ok": True, "msg": "验证码已发送"}
+        if self.c.config.demo_code and known:
             resp["demo_code"] = code
         return resp
     def login(self, body: Dict[str, Any]) -> Dict[str, Any]:

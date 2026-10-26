@@ -147,6 +147,21 @@ class TestHandlersAuth:
         assert r["ok"] is True
         assert "demo_code" not in r
         c.config.demo_code = True
+
+    def test_send_code_sends_mail_to_known_admin(self, api):
+        """已知管理员会真实投递验证码邮件（假邮件器计数）。"""
+        h, c, *_ = api
+        r = h.send_code({"email": "admin@kcon.com"})
+        assert r["ok"] is True
+        assert c.mailer.count("CODE") == 1
+
+    def test_send_code_skips_unknown_email(self, api):
+        """未知邮箱返回同样提示但不发信，避免被用作邮件轰炸器。"""
+        h, c, *_ = api
+        r = h.send_code({"email": "nobody@test.com"})
+        assert r["ok"] is True
+        assert "demo_code" not in r
+        assert c.mailer.count("CODE") == 0
     def test_login_failure(self, api):
         h, *_ = api
         r = h.login({"email": "admin@kcon.com", "code": "000000"})
