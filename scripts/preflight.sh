@@ -26,7 +26,7 @@ case "$DBPW" in
 esac
 
 DEMO=$(env_get KCON_DEMO_CODE)
-[ "${DEMO:-0}" = "0" ] && pass "KCON_DEMO_CODE=0（不回显验证码）" || fail "KCON_DEMO_CODE=${DEMO}，活动前必须改回 0"
+[ -z "$DEMO" ] && pass "KCON_DEMO_CODE 未配置（赠票侧车已移除）" || warn "KCON_DEMO_CODE 仍在 .env 中，赠票侧车已移除，可删除该项"
 
 LAN=$(env_get LAN_IP)
 case "$LAN" in
@@ -36,17 +36,15 @@ esac
 
 PREFIX=$(env_get KCON_BASE_PATH)
 PREFIX=${PREFIX%/}
-SITE=$(env_get GIFT_SITE_URL)
-[ -n "$SITE" ] && pass "GIFT_SITE_URL=${SITE}" || warn "GIFT_SITE_URL 为空，邮件里的链接不可用"
 
 echo "== 2. 容器状态 =="
-for c in kcon-web kcon-backend kcon-mysql kcon-redis kcon-gift; do
+for c in kcon-web kcon-backend kcon-mysql kcon-redis; do
   st=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)
   [ "$st" = "running" ] && pass "$c running" || fail "$c=$st"
 done
 
 echo "== 3. 入口连通性（本机回环） =="
-for p in "${PREFIX}/" "${PREFIX}/admin/" "${PREFIX}/sign/" "${PREFIX}/screen/" "${PREFIX}/login"; do
+for p in "${PREFIX}/" "${PREFIX}/admin/" "${PREFIX}/sign/" "${PREFIX}/screen/"; do
   code=$(curl -sL -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1${p}" 2>/dev/null || echo 000)
   [ "$code" = "200" ] && pass "${p} → 200" || fail "${p} → ${code}"
 done
@@ -61,15 +59,6 @@ if [ "${db:-x}" = "0" ]; then
   pass "无渗透测试账号残留"
 else
   fail "仍有 ${db:-?} 个渗透测试账号（1990000000x），活动前必须删除"
-fi
-
-mail=$(docker exec kcon-gift python -c \
-  "import sqlite3;print(sqlite3.connect('/app/data/kcon.db').execute(\"SELECT COUNT(*) FROM admin WHERE email='1912452912@qq.com'\").fetchone()[0])" \
-  2>/dev/null | tr -d ' \r')
-if [ "${mail:-x}" = "0" ]; then
-  pass "无赠票测试邮箱残留"
-else
-  warn "赠票系统仍有测试邮箱 1912452912@qq.com"
 fi
 
 echo "== 5. 资源 =="

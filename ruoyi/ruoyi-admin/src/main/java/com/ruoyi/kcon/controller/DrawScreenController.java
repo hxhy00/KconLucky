@@ -42,8 +42,14 @@ public class DrawScreenController
      * 3.1 当前场次 + 统计 + 当前应抽档位。
      * 带上大屏上次收到的 {@code version} 时走增量：未变化只回一个极小的响应，
      * 大屏据此跳过整份重渲染（投屏中重渲染会打断中奖动画）。
+     *
+     * 限流口径必须覆盖大屏自身轮询：大屏 1.5s 一拍 = 40 次/分钟，
+     * 曾经只给 30 次/分钟，大屏跑 45 秒就把自己限流到 500，
+     * 前端连续失败 3 次亮「与后端失去连接」，下个窗口又恢复——
+     * 现场表现就是大屏周期性「未连接」。放宽到 100 次/分钟：
+     * 正常轮询（40/min）留足余量，仍能挡住批量枚举端口号的脚本。
      */
-    @RateLimiter(time = 60, count = 30, limitType = LimitType.IP)
+    @RateLimiter(time = 60, count = 100, limitType = LimitType.IP)
     @GetMapping("/status")
     public AjaxResult status(@RequestParam(required = false) String version)
     {

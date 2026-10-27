@@ -145,5 +145,6 @@ xss:
   enabled: true
   # 排除链接（多个用逗号分隔）
   excludes: /system/notice
-  # 匹配链接
-  urlPatterns: /system/*,/monitor/*,/tool/*
+  # 匹配链接：必须覆盖 KCon 业务路径（/admin/* 管理端写接口、/app/* 免登录签到）。
+  # 此前只有若依原生三段，主业务接口（如名单导入的姓名/公司字段）完全不受 XSS 过滤保护
+  urlPatterns: /system/*,/monitor/*,/tool/*,/admin/*,/app/*

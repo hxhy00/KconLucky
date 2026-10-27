@@ -25,7 +25,7 @@ import {
 } from '@/api/kcon/prize'
 import { listSessions } from '@/api/kcon/session'
 import {
-  listStaff, listStaffRoles, addStaff, resetStaffPwd, changeStaffStatus, delStaff
+  listStaff, listStaffRoles, addStaff, updateStaff, resetStaffPwd, changeStaffStatus, delStaff
 } from '@/api/kcon/staff'
 
 /** 取最近一次 request 调用的参数 */
@@ -237,13 +237,19 @@ describe('场次与工作人员 API', () => {
     expect(lastCall()).toEqual({ url: '/admin/session/list', method: 'get' })
   })
 
-  it('工作人员列表 / 岗位 / 建号', () => {
+  it('工作人员列表 / 身份 / 建号 / 编辑', () => {
     listStaff({ pageNum: 1 })
     expect(lastCall()).toEqual({ url: '/admin/staff/list', method: 'get', params: { pageNum: 1 } })
     listStaffRoles()
     expect(lastCall()).toEqual({ url: '/admin/staff/roles', method: 'get' })
     addStaff({ name: '张三' })
     expect(lastCall()).toEqual({ url: '/admin/staff', method: 'post', data: { name: '张三' } })
+    updateStaff({ userId: 3, nickName: '张三', roleKeys: ['admin'] })
+    expect(lastCall()).toEqual({
+      url: '/admin/staff',
+      method: 'put',
+      data: { userId: 3, nickName: '张三', roleKeys: ['admin'] }
+    })
   })
 
   it('重置密码 / 启停 / 删除', () => {

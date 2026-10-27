@@ -182,8 +182,6 @@ const shortfall = ref(0)
 // 揭晓动画进行中：轮询发现的「新中奖」其实正是本次抽出的同一批，不要来打断
 let revealing = false
 
-let timer = null
-let ticker = null
 let lastWinnerId = null
 
 // 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
@@ -202,6 +200,13 @@ const MAX_PENDING_BATCHES = 5
 let failStreak = 0        // 连续失败次数（单次抖动不闪遮罩）
 let firstLoadDone = false // 首次加载只记录不展示，避免刷新后凭空弹出上一轮结果
 const offline = ref(false)
+// 连续失败后的轮询间隔退避：1.5s → 3s → 6s → 12s（封顶）。
+// 后端短时不可达时降低请求频率，避免 1.5s 一拍的请求全部超时堆积，
+// 也避免恢复瞬间的请求风暴；成功一次即复位
+let pollInterval = 1500
+const POLL_MAX_INTERVAL = 12000
+// 轮询句柄改用递归 setTimeout：固定 setInterval 在退避时无法改间隔
+let pollTimer = null
 
 // 自绘提示 / 确认层，替代原生 alert / confirm
 // （投屏上弹系统原生弹窗会带出域名和灰色系统样式，观众也会看到）
@@ -343,6 +348,7 @@ async function loadStatus(force = false) {
       statusLoaded = true
       failStreak = 0
       offline.value = false
+      pollInterval = 1500
       const d = res.data || {}
       // 增量：后端说没变化就什么都不做。
       // 大屏在投屏，整份重渲染会打断中奖动画，也让画面看起来在闪。
@@ -355,13 +361,21 @@ async function loadStatus(force = false) {
       // 业务失败（不是网络异常）：以前这里什么都不做，画面停在旧数据上，
       // 操作员看到的场次/奖池数全是过期的，却没有任何提示。
       // 计入失败连击，连续业务失败同样亮离线遮罩。
-      failStreak += 1
-      if (failStreak >= 3 && res.code !== 4001) offline.value = true
+      // 限流（429）本质是服务端自保而非「连接断了」，不计入断连判定，
+      // 且顺带退避一轮，避免限流期间继续高频打
+      if (res.code === 429) {
+        pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
+      } else {
+        failStreak += 1
+        if (failStreak >= 3 && res.code !== 4001) offline.value = true
+      }
     }
   } catch (e) {
     // 单次抖动不闪遮罩；连续失败才判定为断开，恢复后自动消失
     failStreak += 1
     if (failStreak >= 3) offline.value = true
+    // 失败退避：指数加倍轮询间隔，恢复后复位（上面 code===200 分支）
+    pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
   } finally {
     // 只有最新那个请求才有资格复位标记，否则会把后来者的在途状态提前清掉
     if (seq === statusReqSeq) statusInflight = false
@@ -594,11 +608,19 @@ onMounted(() => {
   loadStatus()
   // 管理端「抽奖控制台」点抽奖后，大屏靠这条轮询感知新批次并开始滚动揭晓。
   // 间隔越短延迟越低、请求量越大；现场内网下 1.5s 完全扛得住，主持人手感更跟手。
-  timer = setInterval(loadStatus, 1500)
+  // 用递归 setTimeout 而非 setInterval：连续失败时按 pollInterval 退避
+  // （1.5s → 3s → 6s → 12s 封顶），成功即复位；fixed interval 做不到这点
+  const scheduleNext = () => {
+    pollTimer = setTimeout(async () => {
+      await loadStatus()
+      scheduleNext()
+    }, pollInterval)
+  }
+  scheduleNext()
 })
 
 onUnmounted(() => {
-  clearInterval(timer)
+  clearTimeout(pollTimer)
   stopRolling()
 })
 </script>

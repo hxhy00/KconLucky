@@ -155,9 +155,13 @@ public class SysLoginService
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("user.password.not.match")));
             throw new UserPasswordNotMatchException();
         }
-        // IP黑名单校验
+        // IP黑名单校验。
+        // 用 KconIpUtil 而非 IpUtils：后者取 X-Forwarded-For 首段，而 nginx 配置是
+        // $proxy_add_x_forwarded_for（客户端自带值排首位），攻击者每次换一个 XFF
+        // 即可绕过黑名单并伪造登录日志 IP；KconIpUtil 只信 nginx 覆盖写入的 X-Real-IP
+        String clientIp = com.ruoyi.kcon.util.KconIpUtil.resolveClientIp();
         String blackStr = configService.selectConfigByKey("sys.login.blackIPList");
-        if (IpUtils.isMatchedIp(blackStr, IpUtils.getIpAddr()))
+        if (IpUtils.isMatchedIp(blackStr, clientIp))
         {
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("login.blocked")));
             throw new BlackListException();
@@ -171,6 +175,8 @@ public class SysLoginService
      */
     public void recordLoginInfo(Long userId)
     {
-        userService.updateLoginInfo(userId, IpUtils.getIpAddr(), DateUtils.getNowDate());
+        // 与黑名单同一口径：只信 X-Real-IP，登录 IP 日志不可被客户端伪造
+        userService.updateLoginInfo(userId,
+                com.ruoyi.kcon.util.KconIpUtil.resolveClientIp(), DateUtils.getNowDate());
     }
 }
