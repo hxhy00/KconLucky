@@ -115,6 +115,41 @@ class TestReferrerGaps:
             "ORPHANTOKEN000000000000000000001", "approve")
         assert ok is False and msg == "推荐人不存在"
 
+class TestChannelUpdate:
+    def test_update_ok(self, container, channel_factory):
+        ch = channel_factory()
+        ok, msg = container.channel.update(ch["id"], "新名称", 200, 30, "备注x")
+        assert ok is True, msg
+        c = container.repos.channel.find_by_id(ch["id"])
+        assert c["name"] == "新名称" and c["quota"] == 200 and c["referrer_cap"] == 30
+        assert c["remark"] == "备注x"
+    def test_update_missing(self, container):
+        ok, msg = container.channel.update(999, "名", 100, 20, "")
+        assert ok is False and msg == "渠道不存在"
+    def test_update_duplicate_name(self, container, channel_factory):
+        ch1 = channel_factory(approver_email="a1@test.com")
+        ch2 = channel_factory(name="另一渠道", approver_email="a2@test.com")
+        ok, msg = container.channel.update(ch2["id"], ch1["name"], 100, 20, "")
+        assert ok is False and msg == "渠道名称已存在"
+    def test_update_quota_below_used(self, container, channel_factory,
+                                     referrer_factory, recipient_factory):
+        ch = channel_factory(approver_email="a3@test.com")
+        ref = referrer_factory(channel=ch)
+        rc = recipient_factory(referrer=ref)  # 已审批 → used=1
+        ok, msg = container.channel.update(ch["id"], ch["name"], 0, 20, "")
+        assert ok is False and "配额" in msg
+    def test_update_suspended_rejected(self, container, channel_factory):
+        ch = channel_factory(approver_email="a4@test.com")
+        container.channel.suspend(ch["id"])
+        ok, msg = container.channel.update(ch["id"], "改名", 100, 20, "")
+        assert ok is False and "仅启用中" in msg
+    def test_update_invalid_fields(self, container, channel_factory):
+        ch = channel_factory(approver_email="a5@test.com")
+        ok, msg = container.channel.update(ch["id"], "", 100, 20, "")
+        assert ok is False
+        ok, msg = container.channel.update(ch["id"], "有效名称", 99999, 20, "")
+        assert ok is False and "配额" in msg
+
     def test_approve_referrer_mark_used_fails(self, container, referrer_factory):
         ref = referrer_factory(approve=False)
         token = container.repos.token.find_active(1, ref["id"])

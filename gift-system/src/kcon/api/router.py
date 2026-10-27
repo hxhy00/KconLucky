@@ -12,6 +12,7 @@ ROUTES: List[Tuple[str, str, str, bool, bool]] = [
     ("GET", "/api/admin/channels", "admin_channels", False, False),
     ("POST", "/api/admin/channels", "admin_create_channel", True, False),
     ("POST", "/api/admin/channel/suspend", "admin_suspend_channel", True, False),
+    ("POST", "/api/admin/channel/update", "admin_update_channel", True, False),
     ("POST", "/api/admin/channel/delete", "admin_delete_channel", True, False),
     # 注：v1 不创建签到员账号（现场签到由下游 KconLucky 系统负责），
     # /api/admin/staff 不对外暴露，处理器仅保留给历史测试。

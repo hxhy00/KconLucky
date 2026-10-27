@@ -58,6 +58,11 @@ class ChannelRepo:
     def update_status(self, cid: int, status: int, updated_at: str) -> int:
         return self.db.execute_rowcount(
             "UPDATE channel SET status=?, updated_at=? WHERE id=?", (status, updated_at, cid))
+    def update_info(self, cid: int, name: str, quota: int, referrer_cap: int,
+                    remark: str, updated_at: str) -> int:
+        return self.db.execute_rowcount(
+            "UPDATE channel SET name=?, quota=?, referrer_cap=?, remark=?, updated_at=? "
+            "WHERE id=?", (name, quota, referrer_cap, remark, updated_at, cid))
     def list_all(self) -> List[dict]:
         return self.db.query_all("""
             SELECT c.*, a.name AS approver_name, a.email AS approver_email,
@@ -72,6 +77,11 @@ class ChannelRepo:
         n1 = self.db.scalar("SELECT COUNT(*) FROM referrer WHERE channel_id=?", (cid,)) or 0
         n2 = self.db.scalar("SELECT COUNT(*) FROM recipient WHERE channel_id=?", (cid,)) or 0
         return n1 + n2
+    def sum_used(self, cid: int) -> int:
+        """渠道已使用配额（与 list_all 的 used_count 同口径：已审批 + 已签到）。"""
+        return self.db.scalar(
+            "SELECT COUNT(*) FROM recipient WHERE channel_id=? AND status IN (2,4)",
+            (cid,)) or 0
 class ApproverRepo:
     """审批员仓储。"""
     def __init__(self, db: Database):

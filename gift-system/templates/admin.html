@@ -173,6 +173,32 @@
       <div class="modal-body"><iframe id="mailFrame"></iframe></div>
     </div>
   </div>
+  <!-- 渠道编辑弹窗 -->
+  <div class="modal-mask" id="chModal" onclick="if(event.target===this)closeChModal()">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-head">
+        <h3 id="chModalTitle">编辑渠道</h3>
+        <span class="close-x" onclick="closeChModal()">×</span>
+      </div>
+      <div class="modal-body">
+        <div id="chModalAlert" class="alert"></div>
+        <div id="chEditFields">
+          <div class="field"><label>渠道名称<span class="req">*</span></label><input id="e_name" class="input"></div>
+          <div class="grid grid-2" style="gap:12px;">
+            <div class="field"><label>赠票配额<span class="req">*</span></label><input id="e_quota" class="input" type="number" min="1" max="9999"></div>
+            <div class="field"><label>推荐人单人上限<span class="req">*</span></label><input id="e_cap" class="input" type="number" min="1" max="100"></div>
+          </div>
+          <div class="field"><label>渠道备注</label><input id="e_remark" class="input" placeholder="选填"></div>
+        </div>
+        <div id="chApproverFields" hidden>
+          <div class="alert info">更换审批员后：原审批员立即失效、旧审批链接作废，待审批申请将重新发给新审批员。</div>
+          <div class="field"><label>新审批员姓名<span class="req">*</span></label><input id="e_aname" class="input" placeholder="如：张三"></div>
+          <div class="field"><label>新审批员邮箱<span class="req">*</span></label><input id="e_aemail" class="input" type="email" placeholder="approver@example.com"></div>
+        </div>
+        <button id="chModalSave" class="btn block">保存</button>
+      </div>
+    </div>
+  </div>
   <script src="{{base}}/static/js/common.js"></script>
   <script>
     requireRole('admin');
@@ -252,9 +278,11 @@
     }
 
     // ==================== 渠道管理 ====================
+    let CH_CACHE = [];
     async function loadChannels() {
       const r = await API.get('/api/admin/stats');
       if (!r.ok) return;
+      CH_CACHE = r.channels;
       $('#listBody').innerHTML = r.channels.length ? r.channels.map(c => `
     <tr>
       <td class="mono">${c.id}</td>
@@ -265,15 +293,76 @@
       <td class="mono">${c.referrer_cap}</td>
       <td>${badge('channel', c.status)}</td>
       <td class="dim small">${fmtTime(c.created_at)}</td>
-      <td>
-        <button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/r/${esc(c.code)}')">复制注册链接</button>
-        ${c.status === 1 ? `<button class="btn danger sm" onclick="suspend(${c.id})">停用</button>` : ''}
+      <td style="white-space:nowrap;">
+        <button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/r/${esc(c.code)}')">复制链接</button>
+        ${c.status === 1 ? `<button class="btn ghost sm" onclick="openChEdit(${c.id})">编辑</button>
+        <button class="btn ghost sm" onclick="openChApprover(${c.id})">换审批员</button>
+        <button class="btn danger sm" onclick="suspend(${c.id})">停用</button>`
+        : `<button class="btn danger sm" onclick="deleteChannel(${c.id})">删除</button>`}
       </td>
     </tr>`).join('') : '<tr><td colspan="9" class="empty">暂无渠道</td></tr>';
     }
+    // ---- 编辑 / 换审批员 弹窗 ----
+    let chModalMode = 'edit', chModalId = 0;
+    function chModalShow(title) {
+      $('#chModalTitle').textContent = title;
+      $('#chModalAlert').className = 'alert';
+      $('#chModal').classList.add('show');
+    }
+    function closeChModal() { $('#chModal').classList.remove('show'); }
+    function openChEdit(id) {
+      const c = CH_CACHE.find(x => x.id === id);
+      if (!c) return;
+      chModalMode = 'edit'; chModalId = id;
+      $('#chEditFields').hidden = false; $('#chApproverFields').hidden = true;
+      $('#e_name').value = c.name; $('#e_quota').value = c.quota;
+      $('#e_cap').value = c.referrer_cap; $('#e_remark').value = c.remark || '';
+      chModalShow('编辑渠道 #' + id);
+    }
+    function openChApprover(id) {
+      const c = CH_CACHE.find(x => x.id === id);
+      if (!c) return;
+      chModalMode = 'approver'; chModalId = id;
+      $('#chEditFields').hidden = true; $('#chApproverFields').hidden = false;
+      $('#e_aname').value = ''; $('#e_aemail').value = '';
+      chModalShow('更换审批员 · ' + c.name);
+    }
+    $('#chModalSave').onclick = async () => {
+      if (chModalMode === 'edit') {
+        const d = {
+          id: chModalId,
+          name: $('#e_name').value.trim(),
+          quota: parseInt($('#e_quota').value) || 0,
+          referrer_cap: parseInt($('#e_cap').value) || 0,
+          remark: $('#e_remark').value.trim(),
+        };
+        if (!d.name) { $('#chModalAlert').className = 'alert show err'; $('#chModalAlert').textContent = '请填写渠道名称'; return; }
+        const r = await API.post('/api/admin/channel/update', d);
+        $('#chModalAlert').className = 'alert show ' + (r.ok ? 'ok' : 'err');
+        $('#chModalAlert').textContent = r.msg;
+        if (r.ok) { closeChModal(); loadChannels(); }
+      } else {
+        const d = {
+          channel_id: chModalId,
+          approver_name: $('#e_aname').value.trim(),
+          approver_email: $('#e_aemail').value.trim(),
+        };
+        if (!d.approver_name || !d.approver_email) { $('#chModalAlert').className = 'alert show err'; $('#chModalAlert').textContent = '请填写新审批员姓名与邮箱'; return; }
+        const r = await API.post('/api/admin/approver/replace', d);
+        $('#chModalAlert').className = 'alert show ' + (r.ok ? 'ok' : 'err');
+        $('#chModalAlert').textContent = r.msg;
+        if (r.ok) { closeChModal(); loadChannels(); }
+      }
+    };
     async function suspend(id) {
       if (!confirm('确定停用该渠道？停用后所有链接立即失效，历史数据保留。')) return;
       const r = await API.post('/api/admin/channel/suspend', { id });
+      toast(r.msg, r.ok ? 'ok' : 'err');
+      loadChannels();
+    }
+    async function deleteChannel(id) {
+      if (!confirm('确定删除该渠道？仅无关联数据的渠道可删除；有数据的渠道请使用停用。')) return;
+      const r = await API.post('/api/admin/channel/delete', { id });
       toast(r.msg, r.ok ? 'ok' : 'err');
       loadChannels();
     }

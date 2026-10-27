@@ -13,22 +13,25 @@
   <div class="console-layout">
     <aside class="console-side">
       <div class="side-logo">KCon <small>渠道工作台</small></div>
-      <nav class="console-nav">
+      <nav class="console-nav" id="nav">
         <div class="nav-group">渠道</div>
-        <a href="{{base}}/gift-approver" class="active">📊 渠道工作台</a>
-        <a href="{{base}}/mailbox">📬 邮件出箱</a>
+        <a href="#workbench" data-tab="workbench" class="active">📊 渠道工作台</a>
+        <a href="#mailbox" data-tab="mailbox">📬 邮件出箱</a>
         <div class="nav-group">账号</div>
         <a href="javascript:void(0)" onclick="logout()">🚪 退出登录</a>
       </nav>
     </aside>
     <div class="console-main">
       <header class="console-top">
-        <span class="crumb">赠票系统 / <b>渠道工作台</b></span>
+        <span class="crumb">赠票系统 / <b id="crumbName">渠道工作台</b></span>
         <span class="spacer"></span>
         <span class="who">审批员 <b id="whoName">--</b></span>
         <button class="btn ghost sm" onclick="logout()">退出</button>
       </header>
       <main class="console-content">
+
+        <!-- ==================== Tab: 渠道工作台 ==================== -->
+        <section id="tab-workbench" class="tab-pane">
     <div class="page-head">
       <h1 id="chTitle">渠道工作台</h1>
       <p id="chSub">审批推荐人、查看本渠道数据</p>
@@ -156,7 +159,35 @@
         </table>
       </div>
     </div>
+        </section>
+
+        <!-- ==================== Tab: 邮件出箱 ==================== -->
+        <section id="tab-mailbox" class="tab-pane" hidden>
+          <div class="page-head">
+            <h1>邮件出箱</h1>
+            <p>发给您（本渠道审批员）的邮件都在这里，点击可查看；审批链接可从此复制</p>
+          </div>
+          <div class="flex gap-8 mb-16" style="flex-wrap:wrap;">
+            <button class="btn ghost sm" onclick="filterTpl('')">全部</button>
+            <button class="btn ghost sm" onclick="filterTpl('M-02')">M-02 推荐人审批</button>
+            <button class="btn ghost sm" onclick="filterTpl('M-01')">M-01 开通</button>
+            <button class="btn ghost sm" onclick="filterTpl('CODE')">验证码</button>
+          </div>
+          <div class="mail-list" id="mailList">
+            <div class="empty">--</div>
+          </div>
+        </section>
+
       </main>
+    </div>
+  </div>
+  <div class="modal-mask" id="mailModal" onclick="if(event.target===this)closeMail()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="mailTitle">邮件预览</h3>
+        <span class="close-x" onclick="closeMail()">×</span>
+      </div>
+      <div class="modal-body"><iframe id="mailFrame"></iframe></div>
     </div>
   </div>
   <script src="{{base}}/static/js/common.js"></script>
@@ -232,6 +263,50 @@
       toast(r.msg, r.ok ? 'ok' : 'err');
       if (r.ok) load();
     }
+
+    // ==================== Tab 路由（按需加载） ====================
+    const TABS = {
+      workbench: { name: '渠道工作台', load: () => {}, loaded: false },
+      mailbox:   { name: '邮件出箱', load: loadMailbox,   loaded: false },
+    };
+    let curTab = null;
+    function switchTab(key) {
+      const t = TABS[key];
+      if (!t || curTab === key) return;
+      curTab = key;
+      $$('.tab-pane').forEach(p => p.hidden = p.id !== 'tab-' + key);
+      $$('#nav a[data-tab]').forEach(a => a.classList.toggle('active', a.dataset.tab === key));
+      $('#crumbName').textContent = t.name;
+      if (!t.loaded) { t.loaded = true; t.load(); }
+      location.hash = key;
+    }
+    $$('#nav a[data-tab]').forEach(a => a.onclick = e => { e.preventDefault(); switchTab(a.dataset.tab); });
+    const initial = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'workbench';
+    switchTab(initial);
+
+    // ==================== 邮件出箱（仅本渠道审批员的邮件） ====================
+    let ALL = [], curFilter = '';
+    async function loadMailbox() {
+      const r = await API.get('/api/mailbox');
+      ALL = r.data || [];
+      renderMail();
+    }
+    function filterTpl(t) { curFilter = t; renderMail(); }
+    function renderMail() {
+      const list = curFilter ? ALL.filter(m => m.template === curFilter) : ALL;
+      if (!list.length) {
+        $('#mailList').innerHTML = '<div class="empty"><div class="ico">📭</div>暂无邮件</div>';
+        return;
+      }
+      $('#mailList').innerHTML = list.map(m => `
+    <div class="mail-item" onclick="openMail(${m.id})">
+      <span class="mail-tpl">${esc(m.template)}</span>
+      <span class="mail-sub">${esc(m.subject)}</span>
+      <span class="mail-to">→ ${esc(m.to_email)}</span>
+      <span class="dim small">${fmtTime(m.created_at)}</span>
+    </div>`).join('');
+    }
+
     load();
     setInterval(load, 15000);
   </script>

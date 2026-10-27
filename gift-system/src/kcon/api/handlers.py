@@ -103,6 +103,15 @@ class Handlers:
         self._auth(sid, ["admin"])
         ok, msg = self.c.channel.suspend(int(body.get("id", 0)))
         return {"ok": ok, "msg": msg}
+    def admin_update_channel(self, sid: Optional[str],
+                             body: Dict[str, Any]) -> Dict[str, Any]:
+        """编辑渠道基础信息（名称/配额/单人上限/备注）。"""
+        self._auth(sid, ["admin"])
+        ok, msg = self.c.channel.update(
+            int(body.get("id", 0)), body.get("name", ""),
+            body.get("quota", 0), body.get("referrer_cap", 0),
+            body.get("remark", ""))
+        return {"ok": ok, "msg": msg}
     def admin_delete_channel(self, sid: Optional[str],
                              body: Dict[str, Any]) -> Dict[str, Any]:
         """删除渠道。"""

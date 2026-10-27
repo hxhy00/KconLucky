@@ -64,6 +64,47 @@ class ChannelService:
             "login_url": f"{self.config.site_url}/login",
         })
         return True, f"渠道「{name}」创建成功，已发送开通邮件"
+    def update(self, channel_id: int, name: str, quota, referrer_cap,
+               remark: str) -> Tuple[bool, str]:
+        """编辑渠道基础信息（名称/配额/单人上限/备注）。不动审批员与渠道码。"""
+        channel = self.repos.channel.find_by_id(channel_id)
+        if not channel:
+            return False, "渠道不存在"
+        if channel["status"] != ChannelStatus.ACTIVE:
+            return False, "仅启用中的渠道可编辑"
+        for ok, msg in (
+            validators.validate_channel_name(name),
+            validators.validate_quota(quota),
+            validators.validate_cap(referrer_cap),
+            validators.validate_remark(remark),
+        ):
+            if not ok:
+                return False, msg
+        name = name.strip()
+        quota_int = int(quota)
+        cap_int = int(referrer_cap)
+        if name != channel["name"] and self.repos.channel.find_by_name(name):
+            return False, "渠道名称已存在"
+        # 配额只能上调或 ≥ 已用（used 含已审批+已签到），否则会把已发出去的票变成超发
+        delta = quota_int - channel["quota"]
+        if delta < 0:
+            used = self.repos.channel.sum_used(channel_id)
+            if quota_int < used:
+                return False, f"配额不能低于已使用数量（{used}）"
+        # 上调时校验总量上限（与 create 同一规则）
+        if delta > 0:
+            ok, msg = rules.check_total_ticket_limit(
+                self.repos.channel.sum_quota(), delta)
+            if not ok:
+                return False, msg
+        self.repos.channel.update_info(channel_id, name, quota_int, cap_int,
+                                       remark or "", self.clock.now_str())
+        self.repos.audit.log("admin", None, "update_channel", "channel",
+                             channel_id,
+                             f"{channel['name']} -> {name}; quota {channel['quota']}->{quota_int}; "
+                             f"cap {channel['referrer_cap']}->{cap_int}",
+                             "", self.clock.now_str())
+        return True, "渠道信息已更新"
     def suspend(self, channel_id: int) -> Tuple[bool, str]:
         """停用渠道（软删除）。"""
         channel = self.repos.channel.find_by_id(channel_id)
