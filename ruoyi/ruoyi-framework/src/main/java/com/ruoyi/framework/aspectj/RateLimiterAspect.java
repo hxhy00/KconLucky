@@ -59,7 +59,10 @@ public class RateLimiterAspect
             Long number = redisTemplate.execute(limitScript, keys, count, time);
             if (StringUtils.isNull(number) || number.intValue() > count)
             {
-                throw new ServiceException("访问过于频繁，请稍候再试");
+                // 429 Too Many Requests：此前抛 500 会被前端当成「服务端故障」，
+                // 大屏这类高频轮询端点一旦触发限流就被误判成「与后端失去连接」；
+                // 独立状态码让调用方可以区分「被限流」与「真故障」
+                throw new ServiceException("访问过于频繁，请稍候再试", 429);
             }
             log.info("限制请求'{}',当前请求'{}',缓存key'{}'", count, number.intValue(), combineKey);
         }

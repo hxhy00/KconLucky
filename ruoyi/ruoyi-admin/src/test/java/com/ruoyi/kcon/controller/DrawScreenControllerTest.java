@@ -116,7 +116,9 @@ class DrawScreenControllerTest
 
         assertThat(limiter).isNotNull();
         assertThat(limiter.limitType()).isEqualTo(LimitType.IP);
-        assertThat(limiter.count()).isEqualTo(30);
+        // 100 次/分钟：大屏自身 1.5s 一拍轮询 = 40 次/分钟，阈值必须覆盖自身流量
+        // 并留余量，否则大屏跑 45 秒就把自己限流成 500/429，误亮「未连接」遮罩
+        assertThat(limiter.count()).isEqualTo(100);
         assertThat(limiter.time()).isEqualTo(60);
     }
 
