@@ -1,4 +1,4 @@
-/* ===== KCon2026 Demo 公共工具 ===== */
+/* ===== KCon2026 赠票系统 · 公共工具 ===== */
 /* 子路径部署前缀：由页面注入 window.KCON_BASE（如 "/kconluck2026"），根路径部署时为空 */
 const KCON_BASE = window.KCON_BASE || '';
 const LOGIN_URL = KCON_BASE + '/login';
