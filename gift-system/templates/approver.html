@@ -9,17 +9,26 @@
   <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
-<body>
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="logo">KCon <small>奕智</small></div>
-      <div class="spacer"></div>
-      <span class="who">审批员 <b id="whoName">--</b></span>
-      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
-      <button class="btn ghost sm" onclick="logout()">退出</button>
-    </div>
-  </div>
-  <div class="wrap">
+<body class="console">
+  <div class="console-layout">
+    <aside class="console-side">
+      <div class="side-logo">KCon <small>渠道工作台</small></div>
+      <nav class="console-nav">
+        <div class="nav-group">渠道</div>
+        <a href="{{base}}/gift-approver" class="active">📊 渠道工作台</a>
+        <a href="{{base}}/mailbox">📬 邮件出箱</a>
+        <div class="nav-group">账号</div>
+        <a href="javascript:void(0)" onclick="logout()">🚪 退出登录</a>
+      </nav>
+    </aside>
+    <div class="console-main">
+      <header class="console-top">
+        <span class="crumb">赠票系统 / <b>渠道工作台</b></span>
+        <span class="spacer"></span>
+        <span class="who">审批员 <b id="whoName">--</b></span>
+        <button class="btn ghost sm" onclick="logout()">退出</button>
+      </header>
+      <main class="console-content">
     <div class="page-head">
       <h1 id="chTitle">渠道工作台</h1>
       <p id="chSub">审批推荐人、查看本渠道数据</p>
@@ -146,6 +155,8 @@
           </tbody>
         </table>
       </div>
+    </div>
+      </main>
     </div>
   </div>
   <script src="{{base}}/static/js/common.js"></script>

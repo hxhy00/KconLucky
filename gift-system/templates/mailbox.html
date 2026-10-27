@@ -9,16 +9,25 @@
   <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
-<body>
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="logo">KCon <small>邮件出箱</small></div>
-      <div class="spacer"></div>
-      <a href="{{base}}/" class="btn ghost sm">首页</a>
-      <a href="{{base}}/login" class="btn ghost sm">登录</a>
-    </div>
-  </div>
-  <div class="wrap" style="max-width:900px;">
+<body class="console">
+  <div class="console-layout">
+    <aside class="console-side">
+      <div class="side-logo">KCon <small>邮件出箱</small></div>
+      <nav class="console-nav">
+        <div class="nav-group">系统</div>
+        <a href="{{base}}/gift-admin">📊 管理后台</a>
+        <a href="{{base}}/mailbox" class="active">📬 邮件出箱</a>
+        <div class="nav-group">账号</div>
+        <a href="{{base}}/login">🔑 登录</a>
+      </nav>
+    </aside>
+    <div class="console-main">
+      <header class="console-top">
+        <span class="crumb">赠票系统 / <b>邮件出箱</b></span>
+        <span class="spacer"></span>
+        <a href="{{base}}/" class="btn ghost sm">首页</a>
+      </header>
+      <main class="console-content">
     <div class="page-head">
       <h1>邮件出箱</h1>
       <p>Demo 模式下所有邮件都会落在这里，点击可查看 KCon2026 主视觉渲染效果</p>
@@ -37,6 +46,8 @@
     </div>
     <div class="mail-list" id="mailList">
       <div class="empty">加载中…</div>
+    </div>
+      </main>
     </div>
   </div>
   <div class="modal-mask" id="mailModal" onclick="if(event.target===this)closeMail()">

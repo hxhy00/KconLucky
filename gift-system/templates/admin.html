@@ -9,21 +9,29 @@
   <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
-<body>
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="logo">KCon <small>奕智</small></div>
-      <div class="spacer"></div>
-      <span class="who">管理员 <b id="whoName">--</b></span>
-      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
-      <button class="btn ghost sm" onclick="logout()">退出</button>
-    </div>
-  </div>
-  <div class="wrap">
-    <div class="page-head">
-      <h1>系统管理后台</h1>
-      <p>管理赠票渠道、查看全局数据与统计</p>
-    </div>
+<body class="console">
+  <div class="console-layout">
+    <aside class="console-side">
+      <div class="side-logo">KCon <small>赠票管理</small></div>
+      <nav class="console-nav">
+        <div class="nav-group">概览</div>
+        <a href="{{base}}/gift-admin" class="active">📊 数据总览</a>
+        <a href="{{base}}/mailbox">📬 邮件出箱</a>
+        <div class="nav-group">赠票管理</div>
+        <a href="javascript:void(0)" onclick="document.getElementById('f_name').focus()">📋 渠道管理</a>
+        <a href="javascript:void(0)" onclick="document.getElementById('a_email').focus()">👤 管理员账户</a>
+        <div class="nav-group">账号</div>
+        <a href="javascript:void(0)" onclick="logout()">🚪 退出登录</a>
+      </nav>
+    </aside>
+    <div class="console-main">
+      <header class="console-top">
+        <span class="crumb">赠票系统 / <b>数据总览</b></span>
+        <span class="spacer"></span>
+        <span class="who">管理员 <b id="whoName">--</b></span>
+        <button class="btn ghost sm" onclick="logout()">退出</button>
+      </header>
+      <main class="console-content">
     <div class="grid grid-4 mb-16">
       <div class="stat cyan">
         <div class="k">渠道总数</div>
@@ -156,6 +164,8 @@
           </tbody>
         </table>
       </div>
+    </div>
+      </main>
     </div>
   </div>
   <script src="{{base}}/static/js/common.js"></script>
