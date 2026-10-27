@@ -156,40 +156,6 @@ class DrawAdminControllerTest
     }
 
     @Test
-    @DisplayName("POST /void：作废指定中奖记录后回传最新状态")
-    void voidDelegatesAndReturnsStatus() throws Exception
-    {
-        stubLoginUser();
-        stubStatus(null);
-
-        mockMvc.perform(post("/admin/draw/void")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"winnerId\":33}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.sessionCode").value("AM"));
-
-        verify(drawService).voidWinner(33L, OPERATOR);
-    }
-
-    @Test
-    @DisplayName("POST /void：缺 winnerId / 格式错误分别给出明确提示")
-    void voidRejectsMissingOrMalformedWinnerId() throws Exception
-    {
-        mockMvc.perform(post("/admin/draw/void")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(jsonPath("$.msg").value("参数缺失：winnerId"));
-
-        mockMvc.perform(post("/admin/draw/void")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"winnerId\":\"abc\"}"))
-                .andExpect(jsonPath("$.msg").value("winnerId 格式错误"));
-
-        verify(drawService, never()).voidWinner(any(), any());
-    }
-
-    @Test
     @DisplayName("POST /void-batch：sessionCode 传数字不会 500，按字符串透传")
     void voidBatchAcceptsNumericSessionCode() throws Exception
     {
@@ -229,13 +195,14 @@ class DrawAdminControllerTest
     @DisplayName("作废接口使用独立的 kcon:winner:void 权限，不再复用抽奖操作权限")
     void voidEndpointsRequireWinnerVoidPermission() throws Exception
     {
-        PreAuthorize single = DrawAdminController.class
-                .getDeclaredMethod("doVoid", Map.class).getAnnotation(PreAuthorize.class);
+        // 单条作废端点 doVoid 已删除（前端从未调用，单条作废走 VerifyController），
+        // 这里只校验保留的整批撤回端点
         PreAuthorize batch = DrawAdminController.class
                 .getDeclaredMethod("doVoidBatch", Map.class).getAnnotation(PreAuthorize.class);
 
-        assertThat(single.value()).isEqualTo("@ss.hasPermi('kcon:winner:void')");
         assertThat(batch.value()).isEqualTo("@ss.hasPermi('kcon:winner:void')");
+        assertThat(DrawAdminController.class.getDeclaredMethods())
+                .noneMatch(m -> "doVoid".equals(m.getName()));
     }
 
     @Test

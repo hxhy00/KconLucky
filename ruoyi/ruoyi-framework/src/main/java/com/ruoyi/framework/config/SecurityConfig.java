@@ -99,12 +99,14 @@ public class SecurityConfig
             // 注解标记允许匿名访问的url
             .authorizeHttpRequests((requests) -> {
                 permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
-                // 对于登录login 注册register 验证码captchaImage 允许匿名访问
-                requests.requestMatchers("/login", "/register", "/captchaImage").permitAll()
+                // 登录 login 与验证码 captchaImage 允许匿名访问。
+                // 原生的 /register 注册链路（Controller/Service/前端页面）已整体移除：
+                // 现场账号一律由超管在「用户管理」创建，开放注册是多余的攻击面
+                requests.requestMatchers("/login", "/captchaImage").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/*.html", "/**.html", "/**.css", "/**.js", "/profile/**").permitAll()
-                    .requestMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**", "/druid/**").permitAll()
-                    // 除上面外的所有请求全部需要鉴权认证
+                    // swagger/druid 控制台已在 application.yml 中关闭（enabled:false），
+                    // 这里不再放行：既然后端不启用，就不该给匿名留门
                     .anyRequest().authenticated();
             })
             // 添加Logout filter

@@ -84,39 +84,11 @@ public class DrawAdminController extends BaseController
     }
 
     /**
-     * 作废上一次中奖 { "winnerId": 33 }，号码回池可重抽
-     *
-     * 作废是防作弊的最后一道闸：抽奖台操作员若同时能作废，就能把已抽出的记录撤回重抽，
-     * 因此这里用独立的 {@code kcon:winner:void} 权限，不再与抽奖操作共用。
-     */
-    @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
-    @Log(title = "抽奖控制台-作废中奖", businessType = BusinessType.OTHER)
-    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
-    @RepeatSubmit
-    @PostMapping("/void")
-    public AjaxResult doVoid(@RequestBody Map<String, Object> body)
-    {
-        if (body == null || body.get("winnerId") == null)
-        {
-            return error("参数缺失：winnerId");
-        }
-        Long winnerId;
-        try
-        {
-            winnerId = Long.valueOf(String.valueOf(body.get("winnerId")));
-        }
-        catch (NumberFormatException e)
-        {
-            return error("winnerId 格式错误");
-        }
-        drawService.voidWinner(winnerId, getUsername());
-        return success(buildStatus());
-    }
-
-    /**
      * 撤回最近一档 { "sessionCode": "PM" }：把该场次最后一次抽出的整批全部作废，号码回池
      *
-     * 与单条作废同理，必须使用 {@code kcon:winner:void}，抽奖台操作员不得自带撤回能力。
+     * 与作废同理，必须使用 {@code kcon:winner:void}，抽奖台操作员不得自带撤回能力。
+     * 原先另有单条作废端点 POST /void，但前端只用整批撤回（void-batch），
+     * 单条端点从未被任何调用方使用，已删除——留着一个无人走查的写入口没有意义。
      */
     @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
     @Log(title = "抽奖控制台-撤回最近一档", businessType = BusinessType.OTHER)
