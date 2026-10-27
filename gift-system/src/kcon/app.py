@@ -4,8 +4,8 @@ from .config import AppConfig, load_config, md5_email
 from .infra.clock import Clock, SystemClock
 from .infra.database import Database
 from .infra.external_checkin import ExternalCheckinAdapter, NullExternalCheckin
-from .infra.mailer import Mailer, OutboxMailer, SmtpMailer
-from .infra.qrcode_gen import PillowQrCodeGenerator, QrCodeGenerator
+from .infra.mailer import AsyncMailer, Mailer, OutboxMailer, SmtpMailer
+from .infra.qrcode_gen import NullQrCodeGenerator, QrCodeGenerator
 from .infra.random_source import RandomSource, SecureRandom
 from .infra.repositories import Repositories
 from .service.auth_service import AuthService
@@ -42,17 +42,18 @@ class Container:
         self.repos = Repositories(self.db)
         if init_schema:
             _seed_admins(self.repos, self.config)
-        self.qr = qr_generator or PillowQrCodeGenerator()
+        self.qr = qr_generator or NullQrCodeGenerator()
         self.external = external_adapter or NullExternalCheckin()
         if mailer is not None:
             self.mailer = mailer
         elif self.config.smtp_host:
-            # 生产：SMTP 真发（企业邮箱）
-            self.mailer = SmtpMailer(
+            # 生产：SMTP 真发（企业邮箱），包一层异步——请求路径只入队，
+            # 后台线程投递 + 失败重试，避免 SMTP 慢阻塞用户请求线程
+            self.mailer = AsyncMailer(SmtpMailer(
                 self.repos.email, self.config.site_name,
                 self.config.site_theme, self.config.system_email, self.clock,
                 host=self.config.smtp_host, port=self.config.smtp_port,
-                user=self.config.smtp_user, password=self.config.smtp_password)
+                user=self.config.smtp_user, password=self.config.smtp_password))
         else:
             # 默认：出箱模式（邮件落库，可在 /mailbox 页面查看）
             self.mailer = OutboxMailer(

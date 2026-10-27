@@ -84,6 +84,21 @@ class ApproverRepo:
             "SELECT * FROM approver WHERE channel_id=? AND status=1", (channel_id,))
     def email_exists(self, email: str) -> bool:
         return self.db.query_one("SELECT id FROM approver WHERE lower(email)=?", (email.lower(),)) is not None
+    def email_exists_any(self, email: str) -> Optional[dict]:
+        """按邮箱查审批员（含已停用行）。
+
+        approver.email 全局唯一，换审批员时必须用此方法判断归属：
+        只查启用行会在「A→B→A」场景把已停用的本渠道历史行当作可新建，
+        触发 UNIQUE 约束崩溃。
+        """
+        return self.db.query_one(
+            "SELECT id, channel_id, status FROM approver WHERE lower(email)=?",
+            (email.lower(),))
+    def activate(self, aid: int, name: str, at: str) -> int:
+        """复用历史行：重置姓名并重新启用（换审批员回填场景）。"""
+        return self.db.execute_rowcount(
+            "UPDATE approver SET name=?, status=1, last_login_at=NULL WHERE id=?",
+            (name, aid))
     def insert(self, channel_id: int, name: str, email: str, created_at: str) -> int:
         return self.db.execute(
             "INSERT INTO approver(channel_id,name,email,status,created_at) VALUES(?,?,?,1,?)",
@@ -163,6 +178,20 @@ class RecipientRepo:
             return self.db.execute_rowcount(
                 "UPDATE recipient SET status=?, approved_at=? WHERE id=?", (status, at, rid))
         return self.db.execute_rowcount("UPDATE recipient SET status=? WHERE id=?", (status, rid))
+    def update_status_from(self, rid: int, from_status: int, to_status: int,
+                           at: Optional[str] = None) -> int:
+        """条件更新状态机：仅当当前状态为 from_status 时迁移，返回影响行数。
+
+        并发审批的原子判据：rows=0 说明已被其他请求处理（或状态不符），
+        避免 check-then-act 竞态超发配额。
+        """
+        if to_status == 2 and at:
+            return self.db.execute_rowcount(
+                "UPDATE recipient SET status=?, approved_at=? WHERE id=? AND status=?",
+                (to_status, at, rid, from_status))
+        return self.db.execute_rowcount(
+            "UPDATE recipient SET status=? WHERE id=? AND status=?",
+            (to_status, rid, from_status))
     def count_used_by_channel(self, channel_id: int) -> int:
         return self.db.scalar(
             "SELECT COUNT(*) FROM recipient WHERE channel_id=? AND status IN (2,4)",

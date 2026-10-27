@@ -54,16 +54,10 @@ def _parse_admin_env_plain(value: str) -> Dict[str, str]:
         if email:
             plain[email.lower()] = name
     return plain
-# 管理员白名单：生产从 KCON_ADMIN_EMAILS 读取；默认演示白名单仅用于测试/Demo 兜底
-# （admin 表为空时才作为种子写入，不参与登录判定）。
-ADMIN_EMAILS_DEFAULT: Dict[str, str] = {
-    "admin@kcon.com": "系统管理员",
-    "boss@kcon.com": "运营负责人",
-    "ops@kcon.com": "技术负责人",
-}
-ADMIN_WHITELIST: Dict[str, str] = {
-    md5_email(e): n for e, n in ADMIN_EMAILS_DEFAULT.items()
-}
+# 管理员白名单：生产由 KCON_ADMIN_EMAILS 提供（docker-compose 已强制必填）。
+# 不设内置演示名单：未配置时 admin 表为空即无管理员，不存在可猜测的演示账号。
+ADMIN_EMAILS_DEFAULT: Dict[str, str] = {}
+ADMIN_WHITELIST: Dict[str, str] = {}
 # 验证码参数
 CODE_LENGTH = 6
 CODE_TTL_SECONDS = 600
@@ -126,8 +120,8 @@ def load_config() -> AppConfig:
         site_url=os.getenv("KCON_SITE_URL", f"http://127.0.0.1:{port}"),
         db_path=os.getenv("KCON_DB_PATH", str(DATA_DIR / "kcon.db")),
         system_email=os.getenv("KCON_SYSTEM_EMAIL", SYSTEM_EMAIL),
-        admin_whitelist=_parse_admin_env(os.getenv("KCON_ADMIN_EMAILS", "")) or dict(ADMIN_WHITELIST),
-        admin_emails=_parse_admin_env_plain(os.getenv("KCON_ADMIN_EMAILS", "")) or dict(ADMIN_EMAILS_DEFAULT),
+        admin_whitelist=_parse_admin_env(os.getenv("KCON_ADMIN_EMAILS", "")),
+        admin_emails=_parse_admin_env_plain(os.getenv("KCON_ADMIN_EMAILS", "")),
         smtp_host=os.getenv("KCON_SMTP_HOST", ""),
         smtp_port=smtp_port,
         smtp_user=os.getenv("KCON_SMTP_USER", ""),

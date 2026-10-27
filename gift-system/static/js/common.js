@@ -22,6 +22,13 @@ const API = {
 };
 function $(sel, root) { return (root || document).querySelector(sel); }
 function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+/* HTML 转义：所有服务端数据（用户可输入的姓名/公司/部门等）插入 innerHTML 前必须过 esc()，
+   防止存储型 XSS —— 公开注册接口无需登录，company 可携带 <img onerror=...> 之类载荷 */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
 function el(tag, attrs, html) {
   const e = document.createElement(tag);
   if (attrs) for (const k in attrs) {
@@ -43,7 +50,9 @@ function toast(msg, type) {
     style: `padding:12px 22px;border-radius:8px;font-size:13px;font-weight:600;color:#fff;
             background:${colors[type] || colors.info};box-shadow:0 8px 24px rgba(0,0,0,.5);
             opacity:0;transform:translateY(-10px);transition:.25s;`
-  }, msg);
+  });
+  // msg 可能携带服务端拼入的用户输入（如「该邮箱已被其他渠道使用」含用户数据），用 textContent 防注入
+  t.textContent = msg;
   box.appendChild(t);
   requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
   setTimeout(() => {
@@ -81,11 +90,23 @@ function requireRole(role) {
     if (!r.ok || r.role !== role) { location.href = LOGIN_URL; }
   }).catch(() => { location.href = LOGIN_URL; });
 }
-function openMail(id) {
+async function openMail(id) {
   const mask = $('#mailModal');
   if (!mask) return;
-  $('#mailFrame').src = `${KCON_BASE}/api/mailbox/${id}/view`;
+  const frame = $('#mailFrame');
+  frame.srcdoc = '<p style="font-family:sans-serif;color:#888;padding:24px;">加载中…</p>';
   mask.classList.add('show');
+  // iframe 导航带不了 X-Session 自定义头（会 401），改 fetch 取回 HTML 后用 srcdoc 展示；
+  // srcdoc 文档为独立源且继承父页 CSP，邮件内脚本不会拿到本站会话
+  try {
+    const r = await fetch(KCON_BASE + '/api/mailbox/' + encodeURIComponent(id) + '/view', {
+      headers: { 'X-Session': API.sid }
+    });
+    if (!r.ok) { frame.srcdoc = '<p style="font-family:sans-serif;color:#e33;padding:24px;">无法加载邮件（' + r.status + '）</p>'; return; }
+    frame.srcdoc = await r.text();
+  } catch (e) {
+    frame.srcdoc = '<p style="font-family:sans-serif;color:#e33;padding:24px;">网络异常，请稍后重试</p>';
+  }
 }
 function closeMail() {
   const mask = $('#mailModal');

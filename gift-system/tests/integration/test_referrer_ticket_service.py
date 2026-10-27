@@ -94,7 +94,7 @@ class TestReferrerApprove:
     def test_approve_wrong_type(self, container, referrer_factory):
         # 构造一个 type=2 的令牌，用推荐人审批接口处理
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         ok, msg, _ = container.referrer.approve(token["token"], "approve")
@@ -173,34 +173,41 @@ class TestTicketRegister:
         assert fake_mailer.count("M-04") == 1
     def test_register_invalid_referrer(self, container):
         ok, msg = container.ticket.register("badcode", "王参会", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert msg == "该邀请链接已失效"
     def test_register_referrer_not_approved(self, container, referrer_factory):
         ref = referrer_factory(approve=False)
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert msg == "该邀请链接已失效"
     def test_register_channel_suspended(self, container, referrer_factory):
         ref = referrer_factory()
         container.channel.suspend(ref["channel_id"])
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert msg == "该渠道已停用"
     def test_register_invalid_name(self, container, referrer_factory):
         ref = referrer_factory()
         ok, msg = container.ticket.register(ref["code"], "王", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert "姓名需" in msg
     def test_register_invalid_company(self, container, referrer_factory):
         ref = referrer_factory()
         ok, msg = container.ticket.register(ref["code"], "王参会", "单",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert "公司需" in msg
+    def test_register_missing_mobile(self, container, referrer_factory):
+        # 手机号是主系统名单业务主键，选填会导致导出时静默丢人，必须必填
+        ref = referrer_factory()
+        ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
+                                            "", "rc@test.com")
+        assert ok is False
+        assert msg == "手机号不能为空"
     def test_register_invalid_mobile(self, container, referrer_factory):
         ref = referrer_factory()
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
@@ -210,7 +217,7 @@ class TestTicketRegister:
     def test_register_invalid_email(self, container, referrer_factory):
         ref = referrer_factory()
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
-                                            "", "bad")
+                                            "13900139000", "bad")
         assert ok is False
         assert msg == "邮箱格式不正确"
     def test_register_duplicate_other_referrer(self, container, referrer_factory,
@@ -226,14 +233,14 @@ class TestTicketRegister:
         container.referrer.approve(token["token"], "approve")
         ref2 = container.repos.referrer.find_by_id(ref2["id"])
         ok, msg = container.ticket.register(ref2["code"], "王参会2", "参会单位2",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert "该邮箱已由「李推荐」推荐注册" in msg
     def test_register_duplicate_same_referrer(self, container, recipient_factory):
         rc = recipient_factory(email="rc@test.com")
         ref = container.repos.referrer.find_by_id(rc["referrer_id"])
         ok, msg = container.ticket.register(ref["code"], "王参会2", "参会单位2",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert "您已为该邮箱提交过申请" in msg
     def test_register_referrer_cap_reached(self, container, referrer_factory):
@@ -242,7 +249,7 @@ class TestTicketRegister:
         container.db.execute("UPDATE referrer SET issued_count=? WHERE id=?",
                              (ch["referrer_cap"], ref["id"]))
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert "赠票已发完" in msg
     def test_register_channel_quota_reached(self, container, referrer_factory):
@@ -255,13 +262,13 @@ class TestTicketRegister:
             (ref["id"], ch["id"], "已用", "单位", "", "used@test.com",
              container.clock.now_str()))
         ok, msg = container.ticket.register(ref["code"], "王参会", "参会单位",
-                                            "", "rc@test.com")
+                                            "13900139000", "rc@test.com")
         assert ok is False
         assert msg == "本渠道赠票已发完，请联系渠道负责人"
 class TestTicketApprove:
     def test_approve_success(self, container, referrer_factory, fake_mailer):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         ok, msg, result = container.ticket.approve(token["token"], "approve")
@@ -296,7 +303,7 @@ class TestTicketApprove:
         assert ok is False
     def test_approve_expired_token(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         container.clock.advance(8 * 24 * 3600)
@@ -305,7 +312,7 @@ class TestTicketApprove:
         assert msg == "链接已过期"
     def test_approve_already_processed(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         container.db.execute("UPDATE recipient SET status=2 WHERE id=?", (rc["id"],))
@@ -314,7 +321,7 @@ class TestTicketApprove:
         assert msg == "该申请已处理"
     def test_reject_success(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         ok, msg, result = container.ticket.approve(token["token"], "reject")
@@ -323,7 +330,7 @@ class TestTicketApprove:
         assert container.repos.recipient.find_by_id(rc["id"])["status"] == RecipientStatus.REJECTED
     def test_approve_cap_reached_at_approve_time(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         ch = container.repos.channel.find_by_id(ref["channel_id"])
@@ -334,7 +341,7 @@ class TestTicketApprove:
         assert "赠票已发完" in msg
     def test_approve_quota_reached_at_approve_time(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "参会单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "参会单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         ch = container.repos.channel.find_by_id(ref["channel_id"])

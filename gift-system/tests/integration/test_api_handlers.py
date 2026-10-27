@@ -14,7 +14,7 @@ from kcon.api.middleware import AuthContext, RateLimiter, SessionStore
 from kcon.api import router
 from kcon.api.server import make_server
 from kcon.app import Container
-from kcon.config import AppConfig
+from kcon.config import AppConfig, md5_email
 from kcon.infra.clock import FixedClock
 from kcon.infra.mailer import FakeMailer
 from kcon.infra.qrcode_gen import FakeQrCodeGenerator
@@ -47,6 +47,8 @@ class SeqRandom(SequenceRandom):
 def api(tmp_path):
     """构造 Handlers + 容器。"""
     cfg = AppConfig(site_url="http://t.local", db_path=str(tmp_path / "api.db"),
+                    admin_whitelist={md5_email("admin@kcon.com"): "系统管理员"},
+                    admin_emails={"admin@kcon.com": "系统管理员"},
                     demo_code=True)
     c = Container(config=cfg, clock=FixedClock(), random_source=SeqRandom(),
                   mailer=FakeMailer(), qr_generator=FakeQrCodeGenerator())
@@ -423,7 +425,7 @@ class TestHandlersApprove:
         h.approve_do({"token": token["token"], "action": "approve"})
         ref = c.repos.referrer.find_by_id(ref["id"])
         h.ticket_register({"referrer_code": ref["code"], "name": "王参会",
-                           "company": "单位", "mobile": "", "email": "rc@test.com"})
+                           "company": "单位", "mobile": "13900139000", "email": "rc@test.com"})
         rc = c.repos.recipient.find_by_email("rc@test.com")
         tk2 = c.repos.token.find_active(2, rc["id"])
         r = h.approve_info({"token": tk2["token"]})
@@ -444,7 +446,7 @@ class TestHandlersApprove:
         h.approve_do({"token": token["token"], "action": "approve"})
         ref = c.repos.referrer.find_by_id(ref["id"])
         h.ticket_register({"referrer_code": ref["code"], "name": "王参会",
-                           "company": "单位", "mobile": "", "email": "rc@test.com"})
+                           "company": "单位", "mobile": "13900139000", "email": "rc@test.com"})
         rc = c.repos.recipient.find_by_email("rc@test.com")
         tk2 = c.repos.token.find_active(2, rc["id"])
         import sqlite3
@@ -474,7 +476,7 @@ class TestHandlersApprove:
         h.approve_do({"token": token["token"], "action": "approve"})
         ref = c.repos.referrer.find_by_id(ref["id"])
         h.ticket_register({"referrer_code": ref["code"], "name": "王参会",
-                           "company": "单位", "mobile": "", "email": "rc@test.com"})
+                           "company": "单位", "mobile": "13900139000", "email": "rc@test.com"})
         rc = c.repos.recipient.find_by_email("rc@test.com")
         tk2 = c.repos.token.find_active(2, rc["id"])
         r = h.approve_do({"token": tk2["token"], "action": "approve"})
@@ -506,7 +508,7 @@ class TestHandlersCheckin:
         h.approve_do({"token": token["token"], "action": "approve"})
         ref = c.repos.referrer.find_by_id(ref["id"])
         h.ticket_register({"referrer_code": ref["code"], "name": "王参会",
-                           "company": "单位", "mobile": "", "email": "rc@test.com"})
+                           "company": "单位", "mobile": "13900139000", "email": "rc@test.com"})
         rc = c.repos.recipient.find_by_email("rc@test.com")
         tk2 = c.repos.token.find_active(2, rc["id"])
         h.approve_do({"token": tk2["token"], "action": "approve"})
@@ -697,8 +699,11 @@ class TestServerEndpoints:
                                      data=b"not json",
                                      headers={"Content-Type": "application/json"},
                                      method="POST")
-        with urllib.request.urlopen(req, timeout=5) as r:
-            body = json.loads(r.read())
+        # 坏 JSON 返回 400（带错误响应体），而不是解析为空对象继续执行
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req, timeout=5)
+        assert exc_info.value.code == 400
+        body = json.loads(exc_info.value.read())
         assert body["ok"] is False
     def test_form_urlencoded_body(self, live):
         base, _ = live

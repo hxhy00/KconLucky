@@ -22,7 +22,8 @@
             placeholder="请输入真实姓名"></div>
         <div class="field"><label>单位<span class="req">*</span></label><input id="f_company" class="input"
             placeholder="请输入单位名称"></div>
-        <div class="field"><label>手机号</label><input id="f_mobile" class="input" placeholder="选填" maxlength="11"></div>
+        <div class="field"><label>手机号<span class="req">*</span></label><input id="f_mobile" class="input"
+            placeholder="11 位手机号，用于现场签到" maxlength="11"></div>
         <div class="field"><label>邮箱<span class="req">*</span></label><input id="f_email" class="input" type="email"
             placeholder="用于接收注册码二维码"></div>
         <button id="submitBtn" class="btn block">提交申请</button>
@@ -49,7 +50,7 @@
         mobile: $('#f_mobile').value.trim(),
         email: $('#f_email').value.trim(),
       };
-      if (!d.name || !d.company || !d.email) return show('请填写姓名、单位、邮箱');
+      if (!d.name || !d.company || !d.mobile || !d.email) return show('请填写姓名、单位、手机号、邮箱');
       const r = await API.post('/api/ticket/register', d);
       if (!r.ok) return show(r.msg);
       $('#formArea').classList.add('hidden');

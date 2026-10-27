@@ -1,6 +1,48 @@
 """集成测试：管理员账户管理（DB 认证 + CRUD 限制）。"""
 import pytest
+from kcon.config import AppConfig, md5_email
+from kcon.app import Container
+from kcon.infra.clock import FixedClock
+from kcon.infra.external_checkin import NullExternalCheckin
+from kcon.infra.mailer import FakeMailer
+from kcon.infra.qrcode_gen import FakeQrCodeGenerator
+from kcon.infra.random_source import SequenceRandom
 pytestmark = pytest.mark.integration
+_DEMO_ADMINS = {"admin@kcon.com": "系统管理员", "boss@kcon.com": "运营负责人",
+                "ops@kcon.com": "技术负责人"}
+class SeqRandom(SequenceRandom):
+    def __init__(self):
+        super().__init__([])
+        self._n = {}
+    def _next(self, prefix, length):
+        i = self._n.get(prefix, 0) + 1
+        self._n[prefix] = i
+        return f"{prefix}{i:0{length - len(prefix)}d}"[:length]
+    def channel_code(self):
+        return self._next("CH", 16)
+    def referrer_code(self):
+        return self._next("RF", 16)
+    def token(self):
+        return self._next("TK", 32)
+    def registration_code(self):
+        i = self._n.get("RC", 0) + 1
+        self._n["RC"] = i
+        return f"RC{i:02d}".ljust(16, "A")
+    def verify_code(self, length=6):
+        i = self._n.get("VC", 0) + 1
+        self._n["VC"] = i
+        return f"{i:06d}"[-length:]
+@pytest.fixture
+def container(tmp_path):
+    """本文件专用容器：显式注入 3 个演示管理员（模拟生产 env 注入）。"""
+    cfg = AppConfig(site_url="http://t.local", db_path=str(tmp_path / "adm.db"),
+                    admin_whitelist={md5_email(e): n for e, n in _DEMO_ADMINS.items()},
+                    admin_emails=_DEMO_ADMINS,
+                    demo_code=True)
+    return Container(config=cfg, clock=FixedClock(), random_source=SeqRandom(),
+                     mailer=FakeMailer(), qr_generator=FakeQrCodeGenerator(),
+                     external_adapter=NullExternalCheckin(), init_schema=True)
+
 class TestAdminAuthFromDb:
     def test_admin_seeded_on_init(self, container):
         """admin 表为空时按配置播种初始管理员（幂等）。"""

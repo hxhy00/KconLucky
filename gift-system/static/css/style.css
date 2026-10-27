@@ -127,3 +127,99 @@ td.mono,.mono{font-family:Menlo,Consolas,monospace;font-size:12px;letter-spacing
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:#3a4354}
+
+/* =============================================================
+   管理台主题（body.console）：RuoYi 风格 —— 亮色内容区 + 深色侧边栏
+   作用于 admin / approver / login / mailbox 页面；公开页保持暗色主视觉。
+   通过重定义 CSS 变量 + 覆盖组件样式实现，HTML 结构复用原有类名。
+   ============================================================= */
+body.console{
+  --bg:#f0f2f5; --panel:#ffffff; --panel2:#f5f7fa; --panel3:#f5f7fa;
+  --line:#e4e7ed; --line2:#dcdfe6;
+  --primary:#409eff; --cyan:#409eff; --pink:#e6a23c;
+  --text:#303133; --muted:#606266; --dim:#909399;
+  --ok:#67c23a; --warn:#e6a23c; --err:#f56c6c;
+}
+body.console a{color:var(--primary)}
+/* ---------- 布局：左侧边栏 + 右侧主区 ---------- */
+.console-layout{display:flex;min-height:100vh}
+.console-side{width:220px;flex-shrink:0;background:#304156;color:#bfcbd9;display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;overflow-y:auto;z-index:60}
+.console-side .side-logo{height:60px;display:flex;align-items:center;justify-content:center;gap:10px;background:#2b3648;color:#fff;font-size:18px;font-weight:800;letter-spacing:1px}
+.console-side .side-logo small{font-size:11px;color:#409eff;font-weight:700}
+.console-nav{padding:10px 0;flex:1}
+.console-nav .nav-group{font-size:11px;color:#8a97a8;padding:14px 20px 6px;letter-spacing:1px}
+.console-nav a{display:flex;align-items:center;gap:10px;padding:12px 20px;color:#bfcbd9;font-size:14px;text-decoration:none;transition:.15s;border-left:3px solid transparent}
+.console-nav a:hover{background:#263445;color:#fff}
+.console-nav a.active{background:#263445;color:#409eff;border-left-color:#409eff}
+.console-main{flex:1;margin-left:220px;display:flex;flex-direction:column;min-width:0}
+.console-top{height:60px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:0 24px;position:sticky;top:0;z-index:50}
+.console-top .crumb{font-size:14px;color:var(--muted)}
+.console-top .crumb b{color:var(--text)}
+.console-top .spacer{flex:1}
+.console-top .who{font-size:13px;color:var(--muted)}
+.console-top .who b{color:var(--text)}
+.console-content{padding:20px 24px 60px;max-width:1400px;width:100%;margin:0 auto}
+@media(max-width:900px){
+  .console-side{display:none}
+  .console-main{margin-left:0}
+}
+/* ---------- 组件覆盖 ---------- */
+body.console .topbar{display:none}  /* 旧顶栏不再使用（保留类名兼容） */
+body.console .wrap{padding:0;max-width:none}
+body.console .page-head{margin-bottom:18px}
+body.console .page-head h1{font-size:20px;color:var(--text)}
+body.console .page-head p{color:var(--muted);font-size:13px}
+body.console .card{border:1px solid var(--line);box-shadow:0 1px 4px rgba(0,21,41,.08);border-radius:4px;padding:18px 20px}
+body.console .card.glow{border-color:var(--line);box-shadow:0 1px 4px rgba(0,21,41,.08)}
+body.console .card-title{color:var(--text);font-size:15px}
+body.console .card-title::before{background:var(--primary)}
+body.console .stat{background:#fff;border:1px solid var(--line);box-shadow:0 1px 4px rgba(0,21,41,.08)}
+body.console .stat::after{background:var(--primary)}
+body.console .stat .k{color:var(--muted)}
+body.console .stat .v{color:var(--text)}
+body.console .stat.cyan .v{color:var(--primary)}
+body.console .stat.pink .v{color:var(--warn)}
+body.console .stat.ok .v{color:var(--ok)}
+body.console .input,body.console select,body.console textarea{background:#fff;border:1px solid var(--line2);color:var(--text)}
+body.console .input:focus,body.console select:focus,body.console textarea:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(64,158,255,.15)}
+body.console .input::placeholder{color:#c0c4cc}
+body.console .hint{color:var(--dim)}
+body.console .btn{background:var(--primary);color:#fff}
+body.console .btn:hover{background:#66b1ff;filter:none;transform:none}
+body.console .btn.ghost{background:#fff;border:1px solid var(--line2);color:var(--muted)}
+body.console .btn.ghost:hover{border-color:var(--primary);color:var(--primary)}
+body.console .btn.danger{background:#fff;border:1px solid rgba(245,108,108,.5);color:var(--err)}
+body.console .btn.danger:hover{background:rgba(245,108,108,.08)}
+body.console .table-wrap{border:1px solid var(--line)}
+body.console thead th{background:#f5f7fa;color:var(--muted);border-bottom:1px solid var(--line)}
+body.console tbody td{border-top:1px solid var(--line);color:var(--text)}
+body.console tbody tr:hover{background:#f5f7fa}
+body.console .badge.wait{background:#fdf6ec;color:#e6a23c}
+body.console .badge.ok{background:#f0f9eb;color:#67c23a}
+body.console .badge.no{background:#fef0f0;color:#f56c6c}
+body.console .badge.info{background:#ecf5ff;color:#409eff}
+body.console .badge.dim{background:#f4f4f5;color:#909399}
+body.console .alert.ok{background:#f0f9eb;border-left-color:var(--ok);color:#67c23a}
+body.console .alert.err{background:#fef0f0;border-left-color:var(--err);color:#f56c6c}
+body.console .alert.info{background:#ecf5ff;border-left-color:var(--primary);color:#409eff}
+body.console .empty{color:var(--dim)}
+body.console .linkbox{background:#f5f7fa;border:1px dashed var(--line2);color:var(--primary)}
+body.console .mono,body.console td.mono{color:var(--text)}
+body.console .muted{color:var(--muted)}body.console .dim{color:var(--dim)}
+body.console .cyan{color:var(--primary)}body.console .pink{color:var(--warn)}
+body.console .mail-item{background:#fff;border:1px solid var(--line)}
+body.console .mail-item:hover{border-color:var(--primary);background:#f5f7fa}
+body.console .mail-tpl{background:#ecf5ff;color:#409eff}
+body.console .modal{background:#fff;border:1px solid var(--line2)}
+body.console .modal-head{background:#fff;border-bottom:1px solid var(--line)}
+body.console .modal-head h3{color:var(--text)}
+body.console .modal-body iframe{background:#fff}
+body.console .close-x{color:var(--dim)}
+body.console .close-x:hover{color:var(--text)}
+body.console .toast-box{}
+/* ---------- 登录页（亮色） ---------- */
+body.console .auth-wrap{background:linear-gradient(135deg,#1f2d3d 0%,#304156 60%,#3a4a5f 100%);align-items:center}
+body.console .auth-card{background:#fff;border:none;box-shadow:0 12px 40px -8px rgba(0,0,0,.35)}
+body.console .auth-card .brand .t{color:var(--primary)}
+body.console .auth-card .brand .s{color:var(--muted)}
+body.console .auth-card .brand .s b{color:var(--warn)}

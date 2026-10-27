@@ -69,6 +69,10 @@ public class MigrateController extends BaseController
     @Value("${spring.datasource.druid.master.password:}")
     private String dbPassword;
 
+    /** 备份临时目录：容器内默认 /app/backup，本地命令行运行可用 KCON_BACKUP_DIR 覆盖 */
+    @Value("${kcon.backup.dir:/app/backup}")
+    private String backupDir;
+
     @Autowired
     private SensitiveOperationGuard sensitiveOperationGuard;
 
@@ -88,7 +92,7 @@ public class MigrateController extends BaseController
         // 先落临时文件再发送：
         // 1) 边读进程 stdout 边写响应，中途任何异常都会给用户一个截断的坏文件；
         // 2) 落盘后能拿到准确大小，设置 Content-Length，浏览器进度条与下载都正常。
-        Path tmp = Paths.get("/app/backup", fileName);
+        Path tmp = Paths.get(backupDir, fileName);
         Files.createDirectories(tmp.getParent());
 
         String dumpError = runDump(dbName, tmp);
@@ -211,7 +215,7 @@ public class MigrateController extends BaseController
             return error("只支持 .sql 文件");
         }
 
-        Path sqlFile = Paths.get("/app/backup", "restore_" + timestamp() + ".sql");
+        Path sqlFile = Paths.get(backupDir, "restore_" + timestamp() + ".sql");
         Files.createDirectories(sqlFile.getParent());
         file.transferTo(sqlFile.toFile());
 
@@ -334,7 +338,7 @@ public class MigrateController extends BaseController
     }
 
     /**
-     * 恢复前把当前数据存档到 /app/backup
+     * 恢复前把当前数据存档到备份目录（backupDir，默认 /app/backup）
      *
      * @return 存档文件路径；失败返回 null
      */
@@ -343,7 +347,7 @@ public class MigrateController extends BaseController
         try
         {
             String dbName = parseDatabaseName(jdbcUrl);
-            Path out = Paths.get("/app/backup", "pre_restore_" + timestamp() + ".sql");
+            Path out = Paths.get(backupDir, "pre_restore_" + timestamp() + ".sql");
             Files.createDirectories(out.getParent());
             return runDump(dbName, out) == null ? out.toString() : null;
         }
@@ -359,7 +363,8 @@ public class MigrateController extends BaseController
     {
         List<String> cmd = new ArrayList<>();
         cmd.add("mysqldump");
-        cmd.add("--host=mysql");
+        cmd.add("--host=" + dbHost());
+        cmd.add("--user=" + dbUser);
         cmd.add("--single-transaction");
         cmd.add("--routines");
         cmd.add("--triggers");
@@ -374,10 +379,32 @@ public class MigrateController extends BaseController
     {
         List<String> cmd = new ArrayList<>();
         cmd.add("mysql");
-        cmd.add("--host=mysql");
+        cmd.add("--host=" + dbHost());
+        cmd.add("--user=" + dbUser);
         cmd.add("--default-character-set=utf8mb4");
         cmd.add(dbName);
         return cmd;
+    }
+
+    /**
+     * 备份/恢复连接的主机：从 jdbcUrl 提取，提取失败回退 "mysql"（容器服务名）。
+     * 原先写死 --host=mysql，容器内成立；本地命令行运行时 MySQL 在 127.0.0.1，
+     * 会报 Unknown MySQL server host 'mysql'。
+     */
+    private String dbHost()
+    {
+        try
+        {
+            // jdbc:mysql://host:port/db?params → host
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("jdbc:mysql://([^:/]+)").matcher(jdbcUrl);
+            if (m.find())
+            {
+                return m.group(1);
+            }
+        }
+        catch (Exception ignored) { }
+        return "mysql";
     }
 
     /**

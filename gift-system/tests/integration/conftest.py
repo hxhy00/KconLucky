@@ -5,7 +5,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from kcon.app import Container
-from kcon.config import AppConfig
+from kcon.config import AppConfig, md5_email
 from kcon.infra.clock import FixedClock
 from kcon.infra.external_checkin import NullExternalCheckin
 from kcon.infra.mailer import FakeMailer
@@ -38,10 +38,12 @@ class DeterministicRandom(SequenceRandom):
         return f"{idx:06d}"[-length:]
 @pytest.fixture
 def app_config(tmp_path):
-    """测试配置。"""
+    """测试配置（显式提供管理员名单，模拟生产由 KCON_ADMIN_EMAILS 注入）。"""
     return AppConfig(
         site_url="http://test.local",
         db_path=str(tmp_path / "test.db"),
+        admin_whitelist={md5_email("admin@kcon.com"): "系统管理员"},
+        admin_emails={"admin@kcon.com": "系统管理员"},
         demo_code=True,
     )
 @pytest.fixture

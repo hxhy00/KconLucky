@@ -9,17 +9,26 @@
   <link rel="stylesheet" href="{{base}}/static/css/style.css">
 </head>
 
-<body>
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="logo">KCon <small>奕智</small></div>
-      <div class="spacer"></div>
-      <span class="who">审批员 <b id="whoName">--</b></span>
-      <a href="{{base}}/mailbox" class="btn ghost sm">📬 邮件</a>
-      <button class="btn ghost sm" onclick="logout()">退出</button>
-    </div>
-  </div>
-  <div class="wrap">
+<body class="console">
+  <div class="console-layout">
+    <aside class="console-side">
+      <div class="side-logo">KCon <small>渠道工作台</small></div>
+      <nav class="console-nav">
+        <div class="nav-group">渠道</div>
+        <a href="{{base}}/gift-approver" class="active">📊 渠道工作台</a>
+        <a href="{{base}}/mailbox">📬 邮件出箱</a>
+        <div class="nav-group">账号</div>
+        <a href="javascript:void(0)" onclick="logout()">🚪 退出登录</a>
+      </nav>
+    </aside>
+    <div class="console-main">
+      <header class="console-top">
+        <span class="crumb">赠票系统 / <b>渠道工作台</b></span>
+        <span class="spacer"></span>
+        <span class="who">审批员 <b id="whoName">--</b></span>
+        <button class="btn ghost sm" onclick="logout()">退出</button>
+      </header>
+      <main class="console-content">
     <div class="page-head">
       <h1 id="chTitle">渠道工作台</h1>
       <p id="chSub">审批推荐人、查看本渠道数据</p>
@@ -147,6 +156,8 @@
         </table>
       </div>
     </div>
+      </main>
+    </div>
   </div>
   <script src="{{base}}/static/js/common.js"></script>
   <script>
@@ -177,11 +188,11 @@
       $('#pendCount').textContent = pending.length;
       $('#pendBody').innerHTML = pending.length ? pending.map(r => `
     <tr>
-      <td class="bold">${r.name}</td>
-      <td>${r.company}</td>
-      <td>${r.department}</td>
-      <td class="mono">${r.mobile}</td>
-      <td class="mono small">${r.email}</td>
+      <td class="bold">${esc(r.name)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(r.department)}</td>
+      <td class="mono">${esc(r.mobile)}</td>
+      <td class="mono small">${esc(r.email)}</td>
       <td class="dim small">${fmtTime(r.created_at)}</td>
       <td>
         <button class="btn sm" onclick="approve(${r.id},'approve')">通过</button>
@@ -190,29 +201,29 @@
     </tr>`).join('') : '<tr><td colspan="7" class="empty"><div class="ico">✓</div>暂无待审批推荐人</td></tr>';
       $('#refBody').innerHTML = list.length ? list.map(r => `
     <tr>
-      <td class="bold">${r.name}</td>
-      <td>${r.company}</td>
-      <td>${r.department}</td>
-      <td class="mono">${r.mobile}</td>
-      <td class="mono small">${r.email}</td>
+      <td class="bold">${esc(r.name)}</td>
+      <td>${esc(r.company)}</td>
+      <td>${esc(r.department)}</td>
+      <td class="mono">${esc(r.mobile)}</td>
+      <td class="mono small">${esc(r.email)}</td>
       <td>${badge('referrer', r.status)}</td>
       <td class="cyan bold">${r.issued_count}</td>
       <td>${r.invited_count}</td>
       <td class="pink">${r.checked_in_count}</td>
-      <td>${r.status === 2 ? `<button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/t/${r.code}')">复制赠票链接</button>` : '--'}</td>
+      <td>${r.status === 2 ? `<button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/t/${esc(r.code)}')">复制赠票链接</button>` : '--'}</td>
     </tr>`).join('') : '<tr><td colspan="10" class="empty">暂无推荐人</td></tr>';
       // 接收人
       const rc = await API.get('/api/approver/recipients');
       const rl = rc.data || [];
       $('#rcpBody').innerHTML = rl.length ? rl.map(x => `
     <tr>
-      <td class="bold">${x.name}</td>
-      <td>${x.company}</td>
-      <td class="mono">${x.mobile || '--'}</td>
-      <td class="mono small">${x.email}</td>
-      <td>${x.referrer_name}</td>
+      <td class="bold">${esc(x.name)}</td>
+      <td>${esc(x.company)}</td>
+      <td class="mono">${esc(x.mobile || '--')}</td>
+      <td class="mono small">${esc(x.email)}</td>
+      <td>${esc(x.referrer_name)}</td>
       <td>${badge('recipient', x.status)}</td>
-      <td class="mono small cyan">${x.reg_code || '--'}</td>
+      <td class="mono small cyan">${esc(x.reg_code || '--')}</td>
       <td class="dim small">${x.checked_at ? fmtTime(x.checked_at) : '--'}</td>
     </tr>`).join('') : '<tr><td colspan="8" class="empty">暂无赠票接收人</td></tr>';
     }

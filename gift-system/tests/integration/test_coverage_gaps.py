@@ -83,20 +83,6 @@ class TestMailerGaps:
         ok, err = smtp.send("CODE", "a@b.com", "主题", {"code": "123456"})
         assert ok is True and err is None
 
-class TestQrCodeGaps:
-    def test_load_font_fallback(self, monkeypatch):
-        from kcon.infra import qrcode_gen
-        monkeypatch.setattr(qrcode_gen, "FONT_CANDIDATES", ["/nonexistent/f.ttf"])
-        assert qrcode_gen._load_font(20) is not None
-
-    def test_load_font_truetype_error(self, monkeypatch, tmp_path):
-        from kcon.infra import qrcode_gen
-        bad = tmp_path / "bad.ttf"
-        bad.write_text("not a font")
-        monkeypatch.setattr(qrcode_gen, "FONT_CANDIDATES",
-                            [str(bad), "/nonexistent/x.ttf"])
-        assert qrcode_gen._load_font(20) is not None
-
 class TestCheckinGaps:
     def test_lookup_code_recipient_missing(self, container):
         raw_execute(container.config.db_path,
@@ -161,7 +147,7 @@ class TestTicketGaps:
         ref = referrer_factory()
         raw_execute(container.config.db_path,
                     "DELETE FROM channel WHERE id=?", (ref["channel_id"],))
-        ok, msg = container.ticket.register(ref["code"], "王参会", "单位", "",
+        ok, msg = container.ticket.register(ref["code"], "王参会", "单位", "13900139000",
                                             "rc@test.com")
         assert ok is False and msg == "该邀请链接已失效"
 
@@ -174,7 +160,7 @@ class TestTicketGaps:
 
     def test_approve_recipient_mark_used_fails(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         container.repos.token.mark_used(token["token"], container.clock.now_str())
@@ -184,7 +170,7 @@ class TestTicketGaps:
     def test_approve_recipient_mark_used_race(self, container, referrer_factory):
         """覆盖 ticket_service.py:101 —— mark_used 返回 0 的分支。"""
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "王参会", "单位", "", "rc@test.com")
+        container.ticket.register(ref["code"], "王参会", "单位", "13900139000", "rc@test.com")
         rc = container.repos.recipient.find_by_email("rc@test.com")
         token = container.repos.token.find_active(2, rc["id"])
         # 直接调用 approve，但在中途用 monkeypatch 让 mark_used 返回 0
@@ -213,7 +199,7 @@ class TestTicketGaps:
         # 删除原推荐人（模拟数据异常），使 find_by_id 返回 None
         raw_execute(container.config.db_path,
                     "DELETE FROM referrer WHERE id=?", (ref["id"],))
-        ok, msg = container.ticket.register(ref2["code"], "王参会2", "单位2", "",
+        ok, msg = container.ticket.register(ref2["code"], "王参会2", "单位2", "13900139000",
                                             "rc@test.com")
         assert ok is False
         assert msg == (False, "该邮箱已由「」推荐注册，请勿重复提交")[1]

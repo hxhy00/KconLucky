@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 from kcon.api.server import make_server
 from kcon.app import Container
-from kcon.config import AppConfig
+from kcon.config import AppConfig, md5_email
 from kcon.infra.clock import FixedClock
 from kcon.infra.external_checkin import NullExternalCheckin
 from kcon.infra.mailer import FakeMailer
@@ -90,8 +90,12 @@ class ApiClient:
 @pytest.fixture(scope="function")
 def live_server(tmp_path):
     """启动真实 HTTP 服务（集成/系统测试共用）。"""
+    demo_admins = {"admin@kcon.com": "系统管理员", "boss@kcon.com": "运营负责人",
+                   "ops@kcon.com": "技术负责人"}
     cfg = AppConfig(site_url="http://127.0.0.1:0",
                     db_path=str(tmp_path / "live.db"),
+                    admin_whitelist={md5_email(e): n for e, n in demo_admins.items()},
+                    admin_emails=demo_admins,
                     demo_code=True)
     container = Container(
         config=cfg,
