@@ -32,7 +32,7 @@
       const r = await API.post('/api/approve/info', { token: TOKEN });
       if (!r.ok) {
         $('#content').innerHTML = `<div class="center"><div style="font-size:52px;margin-bottom:16px;">⚠️</div>
-      <div class="bold">${r.msg}</div></div>`;
+      <div class="bold">${esc(r.msg)}</div></div>`;
         return;
       }
       const d = r.data;
@@ -42,17 +42,17 @@
     <div class="table-wrap mb-16">
       <table>
         ${isRef ? `
-        <tr><td class="muted" style="width:100px;">姓名</td><td class="bold">${d.name}</td></tr>
-        <tr><td class="muted">公司</td><td>${d.company}</td></tr>
-        <tr><td class="muted">部门</td><td>${d.department}</td></tr>
-        <tr><td class="muted">手机</td><td class="mono">${d.mobile}</td></tr>
-        <tr><td class="muted">邮箱</td><td class="mono small">${d.email}</td></tr>
-        <tr><td class="muted">渠道</td><td>${d.channel}</td></tr>` : `
-        <tr><td class="muted" style="width:100px;">申请人</td><td class="bold">${d.name}</td></tr>
-        <tr><td class="muted">单位</td><td>${d.company}</td></tr>
-        <tr><td class="muted">手机</td><td class="mono">${d.mobile || '--'}</td></tr>
-        <tr><td class="muted">邮箱</td><td class="mono small">${d.email}</td></tr>
-        <tr><td class="muted">推荐人</td><td>${d.referrer}</td></tr>`}
+        <tr><td class="muted" style="width:100px;">姓名</td><td class="bold">${esc(d.name)}</td></tr>
+        <tr><td class="muted">公司</td><td>${esc(d.company)}</td></tr>
+        <tr><td class="muted">部门</td><td>${esc(d.department)}</td></tr>
+        <tr><td class="muted">手机</td><td class="mono">${esc(d.mobile)}</td></tr>
+        <tr><td class="muted">邮箱</td><td class="mono small">${esc(d.email)}</td></tr>
+        <tr><td class="muted">渠道</td><td>${esc(d.channel)}</td></tr>` : `
+        <tr><td class="muted" style="width:100px;">申请人</td><td class="bold">${esc(d.name)}</td></tr>
+        <tr><td class="muted">单位</td><td>${esc(d.company)}</td></tr>
+        <tr><td class="muted">手机</td><td class="mono">${esc(d.mobile || '--')}</td></tr>
+        <tr><td class="muted">邮箱</td><td class="mono small">${esc(d.email)}</td></tr>
+        <tr><td class="muted">推荐人</td><td>${esc(d.referrer)}</td></tr>`}
       </table>
     </div>
     <div class="flex gap-12">
@@ -66,7 +66,7 @@
       if (!r.ok) return show(r.msg);
       $('#content').innerHTML = `<div class="center">
     <div style="font-size:52px;margin-bottom:16px;">${action === 'approve' ? '✅' : '🚫'}</div>
-    <div class="bold" style="font-size:16px;">${r.msg}</div>
+    <div class="bold" style="font-size:16px;">${esc(r.msg)}</div>
     <p class="muted small mt-8">相关邮件已发送，请查收。</p>
     <a href="{{base}}/mailbox" class="btn ghost mt-16">查看邮件出箱</a>
   </div>`;

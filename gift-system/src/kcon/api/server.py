@@ -29,6 +29,8 @@ MIME_TYPES = {
 }
 # 邮件出箱查看路由：/api/mailbox/{id}/view
 MAILBOX_VIEW_RE = re.compile(r"^/api/mailbox/(\d+)/view$")
+# 请求体上限：业务接口最大载荷（注册表单）远小于此值，64KB 足够防滥用
+MAX_BODY_BYTES = 64 * 1024
 class RequestHandler(BaseHTTPRequestHandler):
     """请求处理器。"""
     server_version = "KConProd/1.0"
@@ -106,30 +108,60 @@ class RequestHandler(BaseHTTPRequestHandler):
             return path[len(base):]
         return path
     def _read_body(self) -> Dict[str, Any]:
-        length = int(self.headers.get("Content-Length") or 0)
+        """读取请求体。超过上限直接抛 ApiError（413），防大请求体耗尽内存。"""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            raise ApiError("请求体大小非法", 400)
+        if length < 0:
+            raise ApiError("请求体大小非法", 400)
+        if length > MAX_BODY_BYTES:
+            raise ApiError("请求体过大", 413)
         if not length:
             return {}
         raw = self.rfile.read(length)
         ctype = self.headers.get("Content-Type", "")
         if "application/json" in ctype:
             try:
-                return json.loads(raw.decode("utf-8") or "{}")
-            except json.JSONDecodeError:
-                return {}
-        return {k: v[0] for k, v in urllib.parse.parse_qs(raw.decode("utf-8")).items()}
+                data = json.loads(raw.decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                raise ApiError("请求体格式错误", 400)
+            if not isinstance(data, dict):
+                raise ApiError("请求体格式错误", 400)
+            return data
+        try:
+            return {k: v[0] for k, v in urllib.parse.parse_qs(
+                raw.decode("utf-8")).items()}
+        except UnicodeDecodeError:
+            raise ApiError("请求体编码错误", 400)
     def _sid(self) -> Optional[str]:
         return self.headers.get("X-Session") or None
     def _client_ip(self) -> str:
-        """真实客户端 IP：优先取 Nginx 设置的 X-Real-IP。
+        """真实客户端 IP：优先取 Nginx 设置的 X-Real-IP，但仅限内网直连可信。
 
-        本服务只在内网监听，公网请求必经前置 Nginx；Nginx 会用
-        `$remote_addr` 覆盖 X-Real-IP，因此该头可信。直接取 socket
-        对端会得到反代容器 IP，导致全站共享一个限流桶。
+        生产流量必经前置 Nginx（compose 未把 8848 发布到公网时，socket 对端
+        只能是反代或内网机器），此时 X-Real-IP 由 Nginx 用 $remote_addr 覆盖，
+        可信。若请求直接打到本服务（端口意外暴露 / 本机调试），对端不是反代，
+        客户端可任意伪造 X-Real-IP 绕过限流——此时必须用 socket 对端地址。
         """
         real_ip = (self.headers.get("X-Real-IP") or "").strip()
-        if real_ip:
+        peer = self.client_address[0] if self.client_address else ""
+        if real_ip and self._peer_is_reverse_proxy(peer):
             return real_ip
-        return self.client_address[0] if self.client_address else ""
+        return peer
+    def _peer_is_reverse_proxy(self, peer: str) -> bool:
+        """对端是否可信反代：Nginx 容器网段（docker 内网）或本机回环。
+
+        Docker bridge 网段通常为 172.16.0.0/12；compose 内 nginx → gift
+        走容器网络。非反代来源（公网直连 8848）不信任其自报头。
+        """
+        if peer in ("127.0.0.1", "::1", "localhost"):
+            return True
+        m = re.match(r"^(\d+)\.(\d+)\.", peer or "")
+        if m and peer.startswith("172."):
+            second = int(m.group(2))
+            return 16 <= second <= 31
+        return peer.startswith("10.") or peer.startswith("192.168.")
     def log_message(self, fmt: str, *args) -> None:
         """静默日志（生产可接入 logger）。"""
     # ---------- 路由 ----------
@@ -198,7 +230,11 @@ class RequestHandler(BaseHTTPRequestHandler):
         if not route:
             self._send_json({"ok": False, "msg": "接口不存在"}, 404)
             return
-        body = self._read_body()
+        try:
+            body = self._read_body()
+        except ApiError as exc:
+            self._send_json({"ok": False, "msg": exc.message}, exc.status)
+            return
         self._dispatch(route, body)
     def _dispatch(self, route, body: Dict[str, Any]) -> None:
         """分发到处理器（按签名智能匹配参数）。"""

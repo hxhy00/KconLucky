@@ -697,8 +697,11 @@ class TestServerEndpoints:
                                      data=b"not json",
                                      headers={"Content-Type": "application/json"},
                                      method="POST")
-        with urllib.request.urlopen(req, timeout=5) as r:
-            body = json.loads(r.read())
+        # 坏 JSON 返回 400（带错误响应体），而不是解析为空对象继续执行
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req, timeout=5)
+        assert exc_info.value.code == 400
+        body = json.loads(exc_info.value.read())
         assert body["ok"] is False
     def test_form_urlencoded_body(self, live):
         base, _ = live

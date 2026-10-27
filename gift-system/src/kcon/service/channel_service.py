@@ -117,19 +117,25 @@ class ChannelService:
             return False, "渠道不存在"
         if channel["status"] != ChannelStatus.ACTIVE:
             return False, "该渠道已停用，无法更换审批员"
-        # 新邮箱不能已被其他渠道占用
-        other = self.repos.approver.find_by_email(new_email)
+        # 新邮箱不能已被其他渠道占用（含已停用行：approver.email 全局唯一，
+        # 只查启用行会在「A→B→A」场景误判可插入，触发 UNIQUE 崩溃）
+        other = self.repos.approver.email_exists_any(new_email)
         if other and other["channel_id"] != channel_id:
             return False, "该邮箱已被其他渠道使用"
         now = self.clock.now_str()
-        # 若新邮箱正是本渠道当前审批员，视为无需更换
+        # 若新邮箱正是本渠道当前启用审批员，视为无需更换
         current = self.repos.approver.find_by_channel(channel_id)
         if current and current["email"].lower() == new_email:
             return False, "该邮箱已是本渠道审批员"
         # 停用原审批员
         self.repos.approver.disable_by_channel(channel_id)
-        # 新建审批员
-        self.repos.approver.insert(channel_id, new_name.strip(), new_email, now)
+        # 启用/新建审批员：邮箱在本渠道有历史行（曾被停用）则复用原行，
+        # 否则触发 approver.email UNIQUE 约束导致 500，且渠道此刻已无启用审批人
+        existing = self.repos.approver.email_exists_any(new_email)
+        if existing:
+            self.repos.approver.activate(existing["id"], new_name.strip(), now)
+        else:
+            self.repos.approver.insert(channel_id, new_name.strip(), new_email, now)
         # 先收集本渠道待审批的推荐人（换人后需重新签发令牌给新审批员）
         pending_referrers = [
             r for r in self.repos.referrer.list_by_channel(channel_id)

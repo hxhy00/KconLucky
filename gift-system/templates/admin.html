@@ -180,8 +180,8 @@
       // 总览
       $('#chBody').innerHTML = r.channels.length ? r.channels.map(c => `
     <tr>
-      <td class="bold">${c.name}</td>
-      <td>${c.approver_name || '--'}</td>
+      <td class="bold">${esc(c.name)}</td>
+      <td>${esc(c.approver_name || '--')}</td>
       <td class="mono">${c.quota}</td>
       <td>${c.referrer_count}</td>
       <td class="cyan">${c.used_count}</td>
@@ -191,15 +191,15 @@
       $('#listBody').innerHTML = r.channels.length ? r.channels.map(c => `
     <tr>
       <td class="mono">${c.id}</td>
-      <td class="bold">${c.name}</td>
-      <td>${c.approver_name || '--'}</td>
-      <td class="mono small">${c.approver_email || '--'}</td>
+      <td class="bold">${esc(c.name)}</td>
+      <td>${esc(c.approver_name || '--')}</td>
+      <td class="mono small">${esc(c.approver_email || '--')}</td>
       <td class="mono">${c.quota}</td>
       <td class="mono">${c.referrer_cap}</td>
       <td>${badge('channel', c.status)}</td>
       <td class="dim small">${fmtTime(c.created_at)}</td>
       <td>
-        <button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/r/${c.code}')">复制注册链接</button>
+        <button class="btn ghost sm" onclick="copyText(window.location.origin + KCON_BASE + '/r/${esc(c.code)}')">复制注册链接</button>
         ${c.status === 1 ? `<button class="btn danger sm" onclick="suspend(${c.id})">停用</button>` : ''}
       </td>
     </tr>`).join('') : '<tr><td colspan="9" class="empty">暂无渠道</td></tr>';
@@ -238,8 +238,8 @@
       $('#admBody').innerHTML = r.data.length ? r.data.map(a => `
     <tr>
       <td class="mono">${a.id}</td>
-      <td class="mono small">${a.email || '--'}</td>
-      <td>${a.name}</td>
+      <td class="mono small">${esc(a.email || '--')}</td>
+      <td>${esc(a.name)}</td>
       <td>${a.status === 1 ? '<span class="badge ok">启用</span>' : '<span class="badge dim">停用</span>'}</td>
       <td class="dim small">${fmtTime(a.created_at)}</td>
       <td>

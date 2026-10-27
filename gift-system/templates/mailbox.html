@@ -66,9 +66,9 @@
       }
       $('#mailList').innerHTML = list.map(m => `
     <div class="mail-item" onclick="openMail(${m.id})">
-      <span class="mail-tpl">${m.template}</span>
-      <span class="mail-sub">${m.subject}</span>
-      <span class="mail-to">→ ${m.to_email}</span>
+      <span class="mail-tpl">${esc(m.template)}</span>
+      <span class="mail-sub">${esc(m.subject)}</span>
+      <span class="mail-to">→ ${esc(m.to_email)}</span>
       <span class="dim small">${fmtTime(m.created_at)}</span>
     </div>`).join('');
     }

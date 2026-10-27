@@ -96,22 +96,33 @@ class TicketService:
             return False, "该申请已处理", None
         referrer = self.repos.referrer.find_by_id(recipient["referrer_id"])
         channel = self.repos.channel.find_by_id(recipient["channel_id"])
+        # 复核上限与配额必须先于令牌消费：失败时令牌保持可用，
+        # 推荐人可补充额度后重试；否则令牌被烧、申请永久卡在待审批
+        if action == "approve":
+            ok, msg = rules.check_referrer_cap(referrer["issued_count"],
+                                               channel["referrer_cap"])
+            if not ok:
+                return False, msg, None
+            used = self.repos.recipient.count_used_by_channel(channel["id"])
+            ok, msg = rules.check_channel_quota(used, channel["quota"])
+            if not ok:
+                return False, msg, None
         if self.repos.token.mark_used(token, self.clock.now_str()) != 1:
             return False, "该链接已被使用", None
         if action != "approve":
-            self.repos.recipient.update_status(recipient["id"], RecipientStatus.REJECTED)
+            # 条件更新：仅 PENDING → REJECTED，rows=0 说明并发下已被处理
+            if self.repos.recipient.update_status_from(
+                    recipient["id"], RecipientStatus.PENDING,
+                    RecipientStatus.REJECTED) != 1:
+                return False, "该申请已被处理", None
             return True, f"已拒绝「{recipient['name']}」的赠票申请", recipient
-        # 复核上限与配额
-        ok, msg = rules.check_referrer_cap(referrer["issued_count"],
-                                           channel["referrer_cap"])
-        if not ok:
-            return False, msg, None
-        used = self.repos.recipient.count_used_by_channel(channel["id"])
-        ok, msg = rules.check_channel_quota(used, channel["quota"])
-        if not ok:
-            return False, msg, None
         now = self.clock.now_str()
-        self.repos.recipient.update_status(recipient["id"], RecipientStatus.APPROVED, now)
+        # 条件更新：仅 PENDING → APPROVED。并发审批同一申请时只有一方成功，
+        # 失败方在此终止，不会双次累加已发数/超发配额
+        if self.repos.recipient.update_status_from(
+                recipient["id"], RecipientStatus.PENDING,
+                RecipientStatus.APPROVED, now) != 1:
+            return False, "该申请已被处理", None
         self.repos.referrer.increment_issued(referrer["id"])
         referrer = self.repos.referrer.find_by_id(referrer["id"])
         # 生成注册码
