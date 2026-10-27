@@ -45,7 +45,7 @@
       if (!email) return showAlert('请输入邮箱');
       const r = await API.post('/api/auth/send-code', { email });
       if (!r.ok) return showAlert(r.msg);
-      showAlert(r.msg + (r.demo_code ? `（Demo 验证码：${r.demo_code}）` : ''), 'ok');
+      showAlert(r.msg, 'ok');
       countdown = 60;
       $('#sendBtn').disabled = true;
       timer = setInterval(() => {
