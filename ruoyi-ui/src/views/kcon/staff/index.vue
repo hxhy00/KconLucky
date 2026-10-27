@@ -2,8 +2,9 @@
   <div class="app-container">
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
       <div slot="title">
-        这里管理现场工作人员账号。岗位决定权限：<b>签到台</b>发权益、<b>抽奖台</b>抽奖、<b>兑奖台</b>发奖品；
-        一人可兼多岗（多选）。都没有清场、迁移、删名单、名单导入、奖品与渠道映射的权限。
+        这里管理本系统的全部账号，身份决定权限：<b>管理员</b>管全局（含清场、迁移、名单导入、奖品与渠道映射），
+        <b>签到台</b>发权益、<b>抽奖台</b>抽奖、<b>兑奖台</b>发奖品；一人可兼多身份（多选）。
+        管理员身份只有内置超管可以授予或收回。
       </div>
     </el-alert>
 
@@ -23,7 +24,7 @@
     <el-row :gutter="10" class="mb8">
       <el-col :span="1.5">
         <el-button type="primary" plain icon="el-icon-plus" size="mini" @click="handleAdd"
-          v-hasPermi="['kcon:staff:add']">新增工作人员</el-button>
+          v-hasPermi="['kcon:staff:add']">新增账号</el-button>
       </el-col>
       <right-toolbar :showSearch.sync="showSearch" @queryTable="getList"></right-toolbar>
     </el-row>
@@ -31,7 +32,7 @@
     <el-table v-loading="loading" :data="staffList">
       <el-table-column label="姓名" prop="nickName" min-width="120" show-overflow-tooltip />
       <el-table-column label="手机号（登录账号）" prop="phonenumber" min-width="150" />
-      <el-table-column label="岗位" prop="roleNames" min-width="140">
+      <el-table-column label="身份" prop="roleNames" min-width="160">
         <template slot-scope="scope">
           <span v-if="scope.row.roleNames">{{ scope.row.roleNames }}</span>
           <span v-else class="text-muted">—</span>
@@ -45,8 +46,10 @@
         </template>
       </el-table-column>
       <el-table-column label="创建时间" prop="createTime" width="160" align="center" />
-      <el-table-column label="操作" min-width="220" align="center">
+      <el-table-column label="操作" min-width="260" align="center">
         <template slot-scope="scope">
+          <el-button size="mini" type="text" icon="el-icon-edit" @click="handleEdit(scope.row)"
+            v-hasPermi="['kcon:staff:edit']">编辑</el-button>
           <el-button size="mini" type="text" icon="el-icon-key" @click="handleResetPwd(scope.row)"
             v-hasPermi="['kcon:staff:resetPwd']">重置密码</el-button>
           <el-button size="mini" type="text" @click="handleToggleStatus(scope.row)"
@@ -64,8 +67,8 @@
     <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize"
       @pagination="getList" />
 
-    <!-- 新增 -->
-    <el-dialog title="新增工作人员" :visible.sync="open" width="480px" append-to-body>
+    <!-- 新增 / 编辑 -->
+    <el-dialog :title="dialogTitle" :visible.sync="open" width="480px" append-to-body>
       <el-form ref="form" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="姓名" prop="nickName">
           <el-input v-model="form.nickName" placeholder="显示在操作日志里" maxlength="30" />
@@ -73,12 +76,12 @@
         <el-form-item label="手机号" prop="phonenumber">
           <el-input v-model="form.phonenumber" placeholder="登录账号，11 位手机号" maxlength="11" />
         </el-form-item>
-        <el-form-item label="岗位" prop="roleKeys">
-          <el-select v-model="form.roleKeys" multiple placeholder="选择岗位（可多选，一人可兼多岗）" style="width: 100%;">
+        <el-form-item label="身份" prop="roleKeys">
+          <el-select v-model="form.roleKeys" multiple placeholder="选择身份（可多选，一人可兼多身份）" style="width: 100%;">
             <el-option v-for="r in roleOptions" :key="r.roleKey" :label="r.roleName" :value="r.roleKey" />
           </el-select>
         </el-form-item>
-        <el-form-item label="初始密码" prop="password">
+        <el-form-item v-if="!isEdit" label="初始密码" prop="password">
           <el-input v-model="form.password" type="password" show-password placeholder="8-20 位，需含字母和数字" maxlength="20" />
         </el-form-item>
       </el-form>
@@ -108,7 +111,7 @@
 </template>
 
 <script>
-import { listStaff, listStaffRoles, addStaff, resetStaffPwd, changeStaffStatus, delStaff } from "@/api/kcon/staff"
+import { listStaff, listStaffRoles, addStaff, updateStaff, resetStaffPwd, changeStaffStatus, delStaff } from "@/api/kcon/staff"
 
 export default {
   name: "KconStaff",
@@ -123,6 +126,9 @@ export default {
       staffList: [],
       total: 0,
       open: false,
+      // 编辑态：复用同一个弹窗，编辑时不显示「初始密码」并改为 PUT
+      isEdit: false,
+      dialogTitle: "新增账号",
       pwdOpen: false,
       roleOptions: [],
       queryParams: { pageNum: 1, pageSize: 10, userName: null, phonenumber: null },
@@ -188,7 +194,26 @@ export default {
       this.handleQuery()
     },
     handleAdd() {
-      this.form = { nickName: null, phonenumber: null, roleKeys: [], password: null }
+      this.isEdit = false
+      this.dialogTitle = "新增账号"
+      this.rules.password[0].required = true
+      this.form = { userId: null, nickName: null, phonenumber: null, roleKeys: [], password: null }
+      this.loadRoles()
+      this.open = true
+      this.$nextTick(() => this.$refs.form && this.$refs.form.clearValidate())
+    },
+    handleEdit(row) {
+      this.isEdit = true
+      this.dialogTitle = "编辑账号"
+      // 编辑不涉及密码（走「重置密码」），把必填关掉避免误拦
+      this.rules.password[0].required = false
+      this.form = {
+        userId: row.userId,
+        nickName: row.nickName,
+        phonenumber: row.phonenumber,
+        roleKeys: (row.roleKeys || []).slice(),
+        password: null
+      }
       this.loadRoles()
       this.open = true
       this.$nextTick(() => this.$refs.form && this.$refs.form.clearValidate())
@@ -200,11 +225,13 @@ export default {
         const payload = {
           nickName: (this.form.nickName || "").trim(),
           phonenumber: (this.form.phonenumber || "").trim(),
-          roleKeys: this.form.roleKeys || [],
-          password: this.form.password
+          roleKeys: this.form.roleKeys || []
         }
-        addStaff(payload).then(() => {
-          this.$modal.msgSuccess("已创建")
+        const request = this.isEdit
+          ? updateStaff({ ...payload, userId: this.form.userId })
+          : addStaff({ ...payload, password: this.form.password })
+        request.then(() => {
+          this.$modal.msgSuccess(this.isEdit ? "已保存" : "已创建")
           this.open = false
           this.getList()
         }).catch(() => { }).finally(() => {

@@ -16,15 +16,20 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.system.service.ISysRoleService;
 
 /**
- * 现场工作人员岗位角色守卫（方案 B：按岗位三分）。
+ * 现场账号身份角色守卫。
  *
- * 岗位角色固定三个（role_key 写死，role_id 由本组件按 key 解析，不硬编码）：
- *   kcon_checkin_staff 签到台 / kcon_draw_staff 抽奖台 / kcon_verify_staff 兑奖台
+ * 身份角色固定四个（role_key 写死，role_id 由本组件按 key 解析，不硬编码）：
+ *   admin 管理员 / kcon_checkin_staff 签到台 / kcon_draw_staff 抽奖台 / kcon_verify_staff 兑奖台
+ *
+ * 「账号管理」范围内包含上述四类身份；「现场工作人员」只指后三个岗位——
+ * 两者的差异有实际含义，不能合并：
+ *   1. 岗位账号禁止自助改密（密码由管理员统一设置），管理员不受此限；
+ *   2. 管理员身份只能由内置超管（user_id = 1）授予或收回。
  *
  * 统一收敛三件事：
- *   1. 按 role_key 解析岗位角色 ID（sys_role.role_key 无唯一约束，重复/停用直接报错）；
- *   2. 校验建号请求的岗位列表合法且非空；
- *   3. 判断/断言某账号是否属于工作人员范围（绑定了任一岗位角色；超管账号不受理）。
+ *   1. 按 role_key 解析身份角色 ID（sys_role.role_key 无唯一约束，重复/停用直接报错）；
+ *   2. 校验建号/编辑请求的身份列表合法且非空；
+ *   3. 判断/断言某账号是否属于账号管理范围（绑定了任一身份角色）。
  *
  * 注意：不能用 {@code roleService.selectRolesByUserId}——RuoYi 的实现返回的是
  * 「全部角色 + flag」，对任何 userId 都包含所有角色，用它判断会恒为真。
@@ -34,6 +39,8 @@ import com.ruoyi.system.service.ISysRoleService;
 @Component
 public class StaffRoleGuard
 {
+    /** 管理员角色标识（RuoYi 内置超级管理员角色） */
+    public static final String ROLE_ADMIN = "admin";
     /** 签到台角色标识 */
     public static final String ROLE_CHECKIN = "kcon_checkin_staff";
     /** 抽奖台角色标识 */
@@ -41,26 +48,30 @@ public class StaffRoleGuard
     /** 兑奖台角色标识 */
     public static final String ROLE_VERIFY = "kcon_verify_staff";
 
-    /** 建号页可选岗位（顺序即下拉展示顺序） */
+    /** 账号管理可选身份（顺序即下拉展示顺序）：管理员排最前 */
+    private static final String[] MANAGED_ROLE_KEYS = { ROLE_ADMIN, ROLE_CHECKIN, ROLE_DRAW, ROLE_VERIFY };
+
+    /** 现场岗位（不含管理员）：用于「禁止自助改密」与岗位口径判断 */
     private static final String[] STAFF_ROLE_KEYS = { ROLE_CHECKIN, ROLE_DRAW, ROLE_VERIFY };
 
     @Autowired
     private ISysRoleService roleService;
 
-    /** 岗位角色中文备注：仅用于报错文案 */
+    /** 身份角色中文备注：仅用于报错文案 */
     private static final Map<String, String> ROLE_NAMES = Map.of(
+            ROLE_ADMIN, "管理员",
             ROLE_CHECKIN, "签到台",
             ROLE_DRAW, "抽奖台",
             ROLE_VERIFY, "兑奖台");
 
     /**
-     * 可建岗位列表（建号页下拉数据源）：key = roleKey，value = 角色名。
+     * 可选身份列表（建号 / 编辑页下拉数据源）：key = roleKey，value = 角色名。
      * 停用的角色不返回——建出来的号登录不了没有意义。
      */
     public List<Map<String, Object>> selectableRoles()
     {
         List<Map<String, Object>> result = new ArrayList<>();
-        for (String key : STAFF_ROLE_KEYS)
+        for (String key : MANAGED_ROLE_KEYS)
         {
             SysRole role = resolveRole(key);
             Map<String, Object> item = new LinkedHashMap<>();
@@ -73,25 +84,25 @@ public class StaffRoleGuard
     }
 
     /**
-     * 按岗位 key 集合解析角色 ID 数组，供建号时绑定。
-     * 任一岗位缺失/重复/停用都直接报错——静默取第一个会让权限悄悄落到错误角色上。
+     * 按身份 key 集合解析角色 ID 数组，供建号 / 编辑时绑定。
+     * 任一身份缺失/重复/停用都直接报错——静默取第一个会让权限悄悄落到错误角色上。
      *
-     * 入参先过岗位白名单：前端下拉之外的值（例如 "admin"）必须在查库之前拒绝，
-     * 否则只要猜到 role_key 就能把任意角色绑进工作人员账号。
+     * 入参先过身份白名单：前端下拉之外的值必须在查库之前拒绝，
+     * 否则只要猜到 role_key 就能把任意角色绑进账号。
      * 同一 key 重复提交时去重，避免向用户角色关联表写入重复主键。
      */
     public Long[] resolveRoleIds(List<String> roleKeys)
     {
         if (roleKeys == null || roleKeys.isEmpty())
         {
-            throw new ServiceException("请至少选择一个岗位");
+            throw new ServiceException("请至少选择一个身份");
         }
         Set<String> keys = new LinkedHashSet<>();
         for (String key : roleKeys)
         {
-            if (!isStaffRoleKey(key))
+            if (!isManagedRoleKey(key))
             {
-                throw new ServiceException("不支持的岗位：" + key);
+                throw new ServiceException("不支持的身份：" + key);
             }
             keys.add(key);
         }
@@ -102,21 +113,21 @@ public class StaffRoleGuard
             SysRole role = resolveRole(key);
             if (role == null)
             {
-                throw new ServiceException("岗位「" + ROLE_NAMES.getOrDefault(key, key) + "」不存在，请检查 kcon_menu.sql 是否已执行");
+                throw new ServiceException("身份「" + ROLE_NAMES.getOrDefault(key, key) + "」不存在，请检查初始化脚本是否已执行");
             }
             if (!"0".equals(role.getStatus()))
             {
-                throw new ServiceException("岗位「" + role.getRoleName() + "」已停用，请先在角色管理中启用");
+                throw new ServiceException("身份「" + role.getRoleName() + "」已停用，请先在角色管理中启用");
             }
             ids[i++] = role.getRoleId();
         }
         return ids;
     }
 
-    /** 是否为允许建号的岗位 role_key */
-    private boolean isStaffRoleKey(String roleKey)
+    /** 是否为账号管理允许的身份 role_key */
+    private boolean isManagedRoleKey(String roleKey)
     {
-        for (String allowed : STAFF_ROLE_KEYS)
+        for (String allowed : MANAGED_ROLE_KEYS)
         {
             if (allowed.equals(roleKey))
             {
@@ -127,8 +138,9 @@ public class StaffRoleGuard
     }
 
     /**
-     * 该账号是否属于工作人员范围（绑定了任一岗位角色；超管恒为 false）。
-     * 角色配置异常时按「不是工作人员」处理，不阻断个人中心等无关功能。
+     * 该账号是否属于「现场岗位」（绑定了签到台/抽奖台/兑奖台之一；管理员恒为 false）。
+     * 只用于「岗位账号禁止自助改密」这一条规则，不要拿它判断账号能否被管理。
+     * 角色配置异常时按「不是岗位账号」处理，不阻断个人中心等无关功能。
      */
     public boolean isStaff(Long userId)
     {
@@ -136,66 +148,141 @@ public class StaffRoleGuard
         {
             return false;
         }
-        List<Long> userRoleIds;
-        try
-        {
-            userRoleIds = roleService.selectRoleListByUserId(userId);
-        }
-        catch (ServiceException e)
+        List<Long> userRoleIds = roleIdsOf(userId);
+        if (userRoleIds.isEmpty())
         {
             return false;
         }
-        if (userRoleIds == null || userRoleIds.isEmpty())
-        {
-            return false;
-        }
-        List<Long> staffIds = allStaffRoleIds();
-        return userRoleIds.stream().anyMatch(staffIds::contains);
-    }
-
-    /**
-     * 断言目标账号属于工作人员范围，供重置密码/启停/删除等管理动作使用。
-     */
-    public void assertStaff(Long userId)
-    {
-        if (!isStaff(userId))
-        {
-            throw new ServiceException("只能操作现场工作人员账号");
-        }
-    }
-
-    /** 全部岗位角色 ID（任一解析失败都报错） */
-    private List<Long> allStaffRoleIds()
-    {
-        List<Long> ids = new ArrayList<>();
+        List<Long> staffIds = new ArrayList<>();
         for (String key : STAFF_ROLE_KEYS)
         {
             SysRole role = resolveRole(key);
             if (role != null)
             {
-                ids.add(role.getRoleId());
+                staffIds.add(role.getRoleId());
             }
         }
-        return ids;
+        return userRoleIds.stream().anyMatch(staffIds::contains);
     }
 
-    /** 按 role_key 解析角色（供 Controller 补岗位名等展示用），缺失返回 null（不抛错） */
+    /**
+     * 该账号是否属于账号管理范围（管理员或任一现场岗位；内置超管恒为 true）。
+     */
+    public boolean isManagedAccount(Long userId)
+    {
+        if (userId == null)
+        {
+            return false;
+        }
+        if (SecurityUtils.isAdmin(userId))
+        {
+            return true;
+        }
+        List<Long> userRoleIds = roleIdsOf(userId);
+        if (userRoleIds.isEmpty())
+        {
+            return false;
+        }
+        List<Long> managedIds = new ArrayList<>();
+        for (String key : MANAGED_ROLE_KEYS)
+        {
+            SysRole role = resolveRole(key);
+            if (role != null)
+            {
+                managedIds.add(role.getRoleId());
+            }
+        }
+        return userRoleIds.stream().anyMatch(managedIds::contains);
+    }
+
+    /**
+     * 断言目标账号属于账号管理范围，供编辑/重置密码/启停/删除等管理动作使用。
+     */
+    public void assertManagedAccount(Long userId)
+    {
+        if (!isManagedAccount(userId))
+        {
+            throw new ServiceException("只能操作管理员或现场工作人员账号");
+        }
+    }
+
+    /** 目标账号是否绑定了管理员身份（用于「不能取消自己的管理员身份」判断） */
+    public boolean hasAdminRole(Long userId)
+    {
+        if (userId == null)
+        {
+            return false;
+        }
+        if (SecurityUtils.isAdmin(userId))
+        {
+            return true;
+        }
+        SysRole admin = resolveRole(ROLE_ADMIN);
+        return admin != null && roleIdsOf(userId).contains(admin.getRoleId());
+    }
+
+    /**
+     * 账号绑定的身份角色（按下拉顺序返回，只含账号管理范围内的身份）。
+     * 列表页展示与编辑回填都用它——列表 SQL 只查 sys_user，不 join 角色，
+     * 靠这里按 userId 补齐，避免把「用户 × 角色」笛卡尔行带进分页。
+     */
+    public List<SysRole> managedRolesOf(Long userId)
+    {
+        List<Long> userRoleIds = roleIdsOf(userId);
+        if (userRoleIds.isEmpty())
+        {
+            return List.of();
+        }
+        List<SysRole> allRoles = roleService.selectRoleAll();
+        List<SysRole> result = new ArrayList<>();
+        for (String key : MANAGED_ROLE_KEYS)
+        {
+            SysRole matched = findUnique(allRoles, key);
+            if (matched != null && userRoleIds.contains(matched.getRoleId()))
+            {
+                result.add(matched);
+            }
+        }
+        return result;
+    }
+
+    /** 账号绑定的角色 ID（查询异常按空处理，与 isStaff 口径一致） */
+    private List<Long> roleIdsOf(Long userId)
+    {
+        try
+        {
+            List<Long> ids = roleService.selectRoleListByUserId(userId);
+            return ids == null ? List.of() : ids;
+        }
+        catch (ServiceException e)
+        {
+            return List.of();
+        }
+    }
+
+    /** 按 role_key 解析角色（供 Controller 补身份名等展示用），缺失返回 null（不抛错） */
     public SysRole resolveRolePublic(String roleKey)
     {
         return resolveRole(roleKey);
     }
 
-    /** 岗位 role_key 数组（供 Controller 遍历） */
-    public static String[] staffRoleKeysArray()
+    /** 账号管理身份 role_key 数组（供 Controller 遍历） */
+    public static String[] managedRoleKeysArray()
     {
-        return STAFF_ROLE_KEYS.clone();
+        return MANAGED_ROLE_KEYS.clone();
     }
 
-    /** 按 role_key 在未过滤的角色列表中找唯一启用状态的角色 */
+    /** 按 role_key 在未过滤的角色列表中找唯一角色 */
     private SysRole resolveRole(String roleKey)
     {
+        return findUnique(roleService.selectRoleAll(), roleKey);
+    }
+
+    /** 在给定角色列表中按 role_key 找唯一角色；重复视为配置错误 */
+    private SysRole findUnique(List<SysRole> roles, String roleKey)
+    {
         SysRole found = null;
-        for (SysRole role : roleService.selectRoleAll())
+        for (SysRole role : roles)
         {
             if (roleKey.equals(role.getRoleKey()))
             {

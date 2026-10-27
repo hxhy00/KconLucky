@@ -22,11 +22,13 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.system.service.ISysRoleService;
 
 /**
- * 现场工作人员岗位守卫单元测试：角色解析、建号岗位校验、工作人员判定。
+ * 账号身份守卫单元测试：角色解析、身份白名单、岗位判定与账号管理范围判定。
  */
 @ExtendWith(MockitoExtension.class)
 class StaffRoleGuardTest
 {
+    private static final Long ADMIN_ROLE_ID = 1L;
+
     private static final Long CHECKIN_ROLE_ID = 11L;
 
     private static final Long DRAW_ROLE_ID = 12L;
@@ -40,38 +42,39 @@ class StaffRoleGuardTest
     private StaffRoleGuard guard;
 
     @Test
-    @DisplayName("岗位列表为 null：提示请至少选择一个岗位")
+    @DisplayName("身份列表为 null：提示请至少选择一个身份")
     void rejectsNullRoleKeys()
     {
         assertThatThrownBy(() -> guard.resolveRoleIds(null))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("请至少选择一个岗位");
+                .hasMessage("请至少选择一个身份");
     }
 
     @Test
-    @DisplayName("岗位列表为空：提示请至少选择一个岗位")
+    @DisplayName("身份列表为空：提示请至少选择一个身份")
     void rejectsEmptyRoleKeys()
     {
         assertThatThrownBy(() -> guard.resolveRoleIds(Collections.emptyList()))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("请至少选择一个岗位");
+                .hasMessage("请至少选择一个身份");
     }
 
     @Test
-    @DisplayName("岗位角色不存在：提示检查 kcon_menu.sql")
+    @DisplayName("身份角色不存在：提示检查初始化脚本")
     void rejectsMissingRoleWithSqlHint()
     {
         when(roleService.selectRoleAll()).thenReturn(List.of(
+                role(ADMIN_ROLE_ID, StaffRoleGuard.ROLE_ADMIN, "管理员", "0"),
                 role(CHECKIN_ROLE_ID, StaffRoleGuard.ROLE_CHECKIN, "签到台", "0"),
                 role(DRAW_ROLE_ID, StaffRoleGuard.ROLE_DRAW, "抽奖台", "0")));
 
         assertThatThrownBy(() -> guard.resolveRoleIds(List.of(StaffRoleGuard.ROLE_VERIFY)))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("岗位「兑奖台」不存在，请检查 kcon_menu.sql 是否已执行");
+                .hasMessage("身份「兑奖台」不存在，请检查初始化脚本是否已执行");
     }
 
     @Test
-    @DisplayName("岗位角色已停用：提示先在角色管理中启用")
+    @DisplayName("身份角色已停用：提示先在角色管理中启用")
     void rejectsDisabledRole()
     {
         when(roleService.selectRoleAll()).thenReturn(List.of(
@@ -79,14 +82,14 @@ class StaffRoleGuardTest
 
         assertThatThrownBy(() -> guard.resolveRoleIds(List.of(StaffRoleGuard.ROLE_CHECKIN)))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("岗位「签到台」已停用，请先在角色管理中启用");
+                .hasMessage("身份「签到台」已停用，请先在角色管理中启用");
     }
 
     @Test
     @DisplayName("正常解析：角色 ID 按请求顺序返回")
     void resolvesRoleIdsInRequestOrder()
     {
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
         Long[] ids = guard.resolveRoleIds(List.of(StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_CHECKIN));
 
@@ -94,21 +97,32 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("非岗位白名单的 role_key：直接拒绝，且不查角色表")
+    @DisplayName("管理员在白名单内：可解析为管理员角色 ID")
+    void resolvesAdminRole()
+    {
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
+
+        Long[] ids = guard.resolveRoleIds(List.of(StaffRoleGuard.ROLE_ADMIN));
+
+        assertThat(ids).containsExactly(ADMIN_ROLE_ID);
+    }
+
+    @Test
+    @DisplayName("白名单之外的 role_key：直接拒绝，且不查角色表")
     void rejectsKeyOutsideWhitelistBeforeTouchingMapper()
     {
-        assertThatThrownBy(() -> guard.resolveRoleIds(List.of("admin")))
+        assertThatThrownBy(() -> guard.resolveRoleIds(List.of("common")))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("不支持的岗位：admin");
+                .hasMessage("不支持的身份：common");
 
         verifyNoInteractions(roleService);
     }
 
     @Test
-    @DisplayName("重复岗位去重后只解析一次，返回单个角色 ID")
+    @DisplayName("重复身份去重后只解析一次，返回单个角色 ID")
     void dedupesRepeatedRoleKeys()
     {
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
         Long[] ids = guard.resolveRoleIds(List.of(
                 StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_CHECKIN));
@@ -130,7 +144,7 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("超管账号（userId=1）恒不是工作人员，且不查角色")
+    @DisplayName("超管账号（userId=1）恒不是岗位账号，且不查角色")
     void adminIsNeverStaff()
     {
         assertThat(guard.isStaff(1L)).isFalse();
@@ -139,7 +153,7 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("userId 为空：不是工作人员")
+    @DisplayName("userId 为空：不是岗位账号")
     void nullUserIdIsNotStaff()
     {
         assertThat(guard.isStaff(null)).isFalse();
@@ -148,7 +162,7 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("未绑定任何角色：不是工作人员")
+    @DisplayName("未绑定任何角色：不是岗位账号")
     void userWithoutRolesIsNotStaff()
     {
         when(roleService.selectRoleListByUserId(5L)).thenReturn(Collections.emptyList());
@@ -157,17 +171,17 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("绑定任一岗位角色：判定为工作人员")
+    @DisplayName("绑定任一岗位角色：判定为岗位账号")
     void userWithAnyStaffRoleIsStaff()
     {
         when(roleService.selectRoleListByUserId(5L)).thenReturn(List.of(99L, DRAW_ROLE_ID));
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
         assertThat(guard.isStaff(5L)).isTrue();
     }
 
     @Test
-    @DisplayName("角色查询抛业务异常：按非工作人员处理，不向上抛")
+    @DisplayName("角色查询抛业务异常：按非岗位账号处理，不向上抛")
     void roleLookupFailureFallsBackToNotStaff()
     {
         when(roleService.selectRoleListByUserId(5L)).thenThrow(new ServiceException("角色配置损坏"));
@@ -176,47 +190,87 @@ class StaffRoleGuardTest
     }
 
     @Test
-    @DisplayName("assertStaff：非工作人员直接拒绝")
-    void assertStaffRejectsNonStaff()
+    @DisplayName("只绑定管理员身份：属于账号管理范围，但不属于现场岗位")
+    void adminOnlyAccountIsManagedButNotStaff()
+    {
+        when(roleService.selectRoleListByUserId(7L)).thenReturn(List.of(ADMIN_ROLE_ID));
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
+
+        assertThat(guard.isManagedAccount(7L)).isTrue();
+        assertThat(guard.isStaff(7L)).isFalse();
+        assertThat(guard.hasAdminRole(7L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("内置超管无需查角色即属于账号管理范围")
+    void builtinAdminIsManagedWithoutRoleQuery()
+    {
+        assertThat(guard.isManagedAccount(1L)).isTrue();
+        assertThat(guard.hasAdminRole(1L)).isTrue();
+
+        verifyNoInteractions(roleService);
+    }
+
+    @Test
+    @DisplayName("assertManagedAccount：范围外账号直接拒绝")
+    void assertManagedAccountRejectsOutsider()
     {
         when(roleService.selectRoleListByUserId(5L)).thenReturn(List.of(99L));
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
-        assertThatThrownBy(() -> guard.assertStaff(5L))
+        assertThatThrownBy(() -> guard.assertManagedAccount(5L))
                 .isInstanceOf(ServiceException.class)
-                .hasMessage("只能操作现场工作人员账号");
+                .hasMessage("只能操作管理员或现场工作人员账号");
     }
 
     @Test
-    @DisplayName("assertStaff：工作人员通过")
-    void assertStaffAcceptsStaff()
+    @DisplayName("assertManagedAccount：管理员与岗位账号都通过")
+    void assertManagedAccountAcceptsManagedAccounts()
     {
         when(roleService.selectRoleListByUserId(5L)).thenReturn(List.of(VERIFY_ROLE_ID));
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleListByUserId(6L)).thenReturn(List.of(ADMIN_ROLE_ID));
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
-        assertThatCode(() -> guard.assertStaff(5L)).doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertManagedAccount(5L)).doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertManagedAccount(6L)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("selectableRoles：按签到台、抽奖台、兑奖台顺序返回 key/name/id")
+    @DisplayName("managedRolesOf：按管理员→签到台→抽奖台→兑奖台顺序返回已绑定身份")
+    void managedRolesOfKeepsDisplayOrder()
+    {
+        when(roleService.selectRoleListByUserId(5L)).thenReturn(List.of(VERIFY_ROLE_ID, ADMIN_ROLE_ID));
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
+
+        List<SysRole> roles = guard.managedRolesOf(5L);
+
+        assertThat(roles).extracting(SysRole::getRoleKey).containsExactly(
+                StaffRoleGuard.ROLE_ADMIN, StaffRoleGuard.ROLE_VERIFY);
+    }
+
+    @Test
+    @DisplayName("selectableRoles：按管理员、签到台、抽奖台、兑奖台顺序返回 key/name/id")
     void selectableRolesKeepsOrderAndFields()
     {
-        when(roleService.selectRoleAll()).thenReturn(allStaffRoles());
+        when(roleService.selectRoleAll()).thenReturn(allManagedRoles());
 
         List<Map<String, Object>> roles = guard.selectableRoles();
 
-        assertThat(roles).hasSize(3);
+        assertThat(roles).hasSize(4);
         assertThat(roles).extracting(m -> m.get("roleKey")).containsExactly(
-                StaffRoleGuard.ROLE_CHECKIN, StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_VERIFY);
-        assertThat(roles).extracting(m -> m.get("roleName")).containsExactly("签到台", "抽奖台", "兑奖台");
+                StaffRoleGuard.ROLE_ADMIN, StaffRoleGuard.ROLE_CHECKIN,
+                StaffRoleGuard.ROLE_DRAW, StaffRoleGuard.ROLE_VERIFY);
+        assertThat(roles).extracting(m -> m.get("roleName"))
+                .containsExactly("管理员", "签到台", "抽奖台", "兑奖台");
         assertThat(roles).extracting(m -> m.get("roleId"))
-                .containsExactly(CHECKIN_ROLE_ID, DRAW_ROLE_ID, VERIFY_ROLE_ID);
+                .containsExactly(ADMIN_ROLE_ID, CHECKIN_ROLE_ID, DRAW_ROLE_ID, VERIFY_ROLE_ID);
         assertThat(roles.get(0).keySet()).containsExactly("roleKey", "roleName", "roleId");
     }
 
-    private List<SysRole> allStaffRoles()
+    private List<SysRole> allManagedRoles()
     {
         return List.of(
+                role(ADMIN_ROLE_ID, StaffRoleGuard.ROLE_ADMIN, "管理员", "0"),
                 role(CHECKIN_ROLE_ID, StaffRoleGuard.ROLE_CHECKIN, "签到台", "0"),
                 role(DRAW_ROLE_ID, StaffRoleGuard.ROLE_DRAW, "抽奖台", "0"),
                 role(VERIFY_ROLE_ID, StaffRoleGuard.ROLE_VERIFY, "兑奖台", "0"));
