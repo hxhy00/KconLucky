@@ -25,7 +25,7 @@ class TestCheckinLookup:
         assert ok is True
     def test_lookup_pending_recipient(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "待审", "单位", "", "p@test.com")
+        container.ticket.register(ref["code"], "待审", "单位", "13900139000", "p@test.com")
         rc = container.repos.recipient.find_by_email("p@test.com")
         # 手动造一个注册码（模拟异常数据）
         container.repos.code.insert(rc["id"], "PENDINGCODE12345", "", "",
@@ -35,7 +35,7 @@ class TestCheckinLookup:
         assert msg == "该赠票尚未生效，请联系推荐人"
     def test_lookup_rejected_recipient(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "被拒", "单位", "", "r@test.com")
+        container.ticket.register(ref["code"], "被拒", "单位", "13900139000", "r@test.com")
         rc = container.repos.recipient.find_by_email("r@test.com")
         container.repos.code.insert(rc["id"], "REJECTEDCODE1234", "", "",
                                     container.clock.now_str())
@@ -45,7 +45,7 @@ class TestCheckinLookup:
         assert msg == "该赠票已被拒绝"
     def test_lookup_cancelled_recipient(self, container, referrer_factory):
         ref = referrer_factory()
-        container.ticket.register(ref["code"], "作废", "单位", "", "c@test.com")
+        container.ticket.register(ref["code"], "作废", "单位", "13900139000", "c@test.com")
         rc = container.repos.recipient.find_by_email("c@test.com")
         container.repos.code.insert(rc["id"], "CANCELLEDCODE123", "", "",
                                     container.clock.now_str())
@@ -111,7 +111,7 @@ class TestM08Flush:
             token = container.repos.token.find_active(1, ref["id"])
             container.referrer.approve(token["token"], "approve")
             ref = container.repos.referrer.find_by_id(ref["id"])
-            container.ticket.register(ref["code"], f"参会{i}", "单位", "",
+            container.ticket.register(ref["code"], f"参会{i}", "单位", "13900139000",
                                       f"rc{i}@test.com")
             rc = container.repos.recipient.find_by_email(f"rc{i}@test.com")
             token2 = container.repos.token.find_active(2, rc["id"])

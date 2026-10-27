@@ -27,11 +27,12 @@ class TicketService:
         ok, msg = rules.check_referrer_available(referrer["status"], channel["status"])
         if not ok:
             return False, msg
-        # 字段校验
+        # 字段校验。手机号必填：它是主系统参会名单的业务主键，
+        # 选填会导致审批通过后导出 CSV 时被「缺手机号」剔除，人在交接环节静默丢失
         for ok, msg in (
             validators.validate_name(name),
             validators.validate_company(company),
-            validators.validate_mobile(mobile, required=False),
+            validators.validate_mobile(mobile, required=True),
             validators.validate_email(email),
         ):
             if not ok:

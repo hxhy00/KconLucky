@@ -16,15 +16,20 @@ class TestConfig:
         assert md5_email("ADMIN@KCON.COM") == md5_email("admin@kcon.com")
     def test_md5_email_strip(self):
         assert md5_email("  admin@kcon.com  ") == md5_email("admin@kcon.com")
-    def test_is_admin_email_true(self):
+    def test_is_admin_email_false_by_default(self):
+        """未配置 KCON_ADMIN_EMAILS 时不应有内置演示管理员。"""
         cfg = AppConfig()
-        assert cfg.is_admin_email("admin@kcon.com") is True
-    def test_is_admin_email_false(self):
-        cfg = AppConfig()
-        assert cfg.is_admin_email("nobody@test.com") is False
-    def test_admin_name(self):
-        cfg = AppConfig()
-        assert cfg.admin_name("admin@kcon.com") == "系统管理员"
+        assert cfg.is_admin_email("admin@kcon.com") is False
+        assert cfg.admin_emails == {}
+    def test_is_admin_email_with_env_injection(self):
+        import os
+        os.environ["KCON_ADMIN_EMAILS"] = "admin@kcon.com:系统管理员"
+        try:
+            cfg = load_config()
+            assert cfg.is_admin_email("admin@kcon.com") is True
+            assert cfg.admin_name("admin@kcon.com") == "系统管理员"
+        finally:
+            del os.environ["KCON_ADMIN_EMAILS"]
     def test_admin_name_unknown(self):
         cfg = AppConfig()
         assert cfg.admin_name("nobody@test.com") == ""

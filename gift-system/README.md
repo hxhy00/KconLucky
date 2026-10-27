@@ -26,7 +26,7 @@ python run.py
 ```
 访问 **http://127.0.0.1:8848**
 
-**管理员账号**：生产环境通过环境变量 `KCON_ADMIN_EMAILS` 配置（admin 表为空时作为初始种子写入），登录页不提供演示账号；本地 Demo 未配置该变量时使用内置演示白名单（`admin@kcon.com` / `boss@kcon.com` / `ops@kcon.com`，验证码显示在页面）。管理员可在后台「管理员账户」卡片中增停删（最多 3 个启用）。
+**管理员账号**：通过环境变量 `KCON_ADMIN_EMAILS` 配置（admin 表为空时作为初始种子写入；docker-compose 已强制必填）。未配置时系统没有任何内置账号。管理员可在后台「管理员账户」卡片中增停删（最多 3 个启用）。
 
 **邮件发送**：默认 `OutboxMailer`（邮件落库到 `/mailbox`）；配置 `KCON_SMTP_*` 后自动切换 `SmtpMailer` 真发。当前生产已接入企业微信邮（发件箱 `kcon_master@knownsec.com`），凭据只写在服务器 `.env`。验证码只发给已存在的管理员/审批员，未知邮箱不发信。
 
