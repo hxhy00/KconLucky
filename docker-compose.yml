@@ -122,7 +122,7 @@ services:
     image: kcon/gift:1.0
     container_name: kcon-gift
     restart: unless-stopped
-    # Python + Pillow 常驻约 50-70m，128m 留余量
+    # 纯标准库常驻约 30m，128m 留余量
     mem_limit: 128m
     logging:
       driver: json-file

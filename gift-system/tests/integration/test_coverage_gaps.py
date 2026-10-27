@@ -83,20 +83,6 @@ class TestMailerGaps:
         ok, err = smtp.send("CODE", "a@b.com", "主题", {"code": "123456"})
         assert ok is True and err is None
 
-class TestQrCodeGaps:
-    def test_load_font_fallback(self, monkeypatch):
-        from kcon.infra import qrcode_gen
-        monkeypatch.setattr(qrcode_gen, "FONT_CANDIDATES", ["/nonexistent/f.ttf"])
-        assert qrcode_gen._load_font(20) is not None
-
-    def test_load_font_truetype_error(self, monkeypatch, tmp_path):
-        from kcon.infra import qrcode_gen
-        bad = tmp_path / "bad.ttf"
-        bad.write_text("not a font")
-        monkeypatch.setattr(qrcode_gen, "FONT_CANDIDATES",
-                            [str(bad), "/nonexistent/x.ttf"])
-        assert qrcode_gen._load_font(20) is not None
-
 class TestCheckinGaps:
     def test_lookup_code_recipient_missing(self, container):
         raw_execute(container.config.db_path,

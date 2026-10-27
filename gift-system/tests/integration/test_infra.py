@@ -6,7 +6,7 @@ from kcon.infra.clock import FixedClock
 from kcon.infra.database import Database
 from kcon.infra.external_checkin import FailingExternalCheckin, NullExternalCheckin
 from kcon.infra.mailer import FakeMailer, OutboxMailer, SmtpMailer
-from kcon.infra.qrcode_gen import FakeQrCodeGenerator, PillowQrCodeGenerator
+from kcon.infra.qrcode_gen import FakeQrCodeGenerator, NullQrCodeGenerator
 from kcon.infra.random_source import SecureRandom, SequenceRandom
 from kcon.infra.repositories import Repositories
 pytestmark = pytest.mark.integration
@@ -195,20 +195,12 @@ class TestMailer:
         assert err == "模拟发送失败"
 # ==================== 二维码 ====================
 class TestQrCode:
-    def test_pillow_generate_png(self):
-        gen = PillowQrCodeGenerator(qr_box=100, pad=10, header_h=40)
-        png = gen.generate_png("http://x/t/abc", "标题", "副标题", "页脚")
-        assert isinstance(png, bytes)
-        assert len(png) > 0
-        assert png[:8] == b"\x89PNG\r\n\x1a\n"
-    def test_pillow_generate_png_no_subtitle(self):
-        gen = PillowQrCodeGenerator(qr_box=100, pad=10, header_h=40)
-        png = gen.generate_png("http://x/t/abc", "标题")
-        assert png[:8] == b"\x89PNG\r\n\x1a\n"
-    def test_pillow_generate_datauri(self):
-        gen = PillowQrCodeGenerator(qr_box=100, pad=10, header_h=40)
-        uri = gen.generate_datauri("http://x/t/abc", "标题")
-        assert uri.startswith("data:image/png;base64,")
+    def test_null_generate_png_empty(self):
+        gen = NullQrCodeGenerator()
+        assert gen.generate_png("http://x/t/abc", "标题") == b""
+    def test_null_generate_datauri_empty(self):
+        gen = NullQrCodeGenerator()
+        assert gen.generate_datauri("http://x/t/abc", "标题") == ""
     def test_fake_qr_records_calls(self):
         gen = FakeQrCodeGenerator()
         gen.generate_png("content", "title", "sub", "foot")

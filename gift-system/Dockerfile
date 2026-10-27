@@ -6,9 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 依赖很少（qrcode + Pillow），使用国内源加速
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+# 无生产依赖（现场签到走主系统，侧车不再生成二维码，qrcode/Pillow 已移除）
+# 测试依赖不进镜像：pytest 在宿主机/CI 用 gift-system/.venv 跑
 
 COPY src ./src
 COPY templates ./templates

@@ -41,7 +41,9 @@ def info_table(rows: List[tuple]) -> str:
                  f'border-bottom:1px solid #1a1f2b;">{v}</td></tr>')
     return html + "</table>"
 def qr_block(datauri: str, caption: str = "") -> str:
-    """二维码组件。"""
+    """二维码组件；datauri 为空时不渲染（现场签到走主系统，无扫码场景）。"""
+    if not datauri:
+        return ""
     cap = (f'<div style="font-size:12px;color:#6b7688;margin-top:10px;">{caption}</div>'
            if caption else "")
     return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '

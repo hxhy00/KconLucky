@@ -5,7 +5,7 @@ from .infra.clock import Clock, SystemClock
 from .infra.database import Database
 from .infra.external_checkin import ExternalCheckinAdapter, NullExternalCheckin
 from .infra.mailer import AsyncMailer, Mailer, OutboxMailer, SmtpMailer
-from .infra.qrcode_gen import PillowQrCodeGenerator, QrCodeGenerator
+from .infra.qrcode_gen import NullQrCodeGenerator, QrCodeGenerator
 from .infra.random_source import RandomSource, SecureRandom
 from .infra.repositories import Repositories
 from .service.auth_service import AuthService
@@ -42,7 +42,7 @@ class Container:
         self.repos = Repositories(self.db)
         if init_schema:
             _seed_admins(self.repos, self.config)
-        self.qr = qr_generator or PillowQrCodeGenerator()
+        self.qr = qr_generator or NullQrCodeGenerator()
         self.external = external_adapter or NullExternalCheckin()
         if mailer is not None:
             self.mailer = mailer
