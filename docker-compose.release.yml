@@ -1,0 +1,148 @@
+# =============================================================
+# KCon 2026 签到 + 抽奖系统 · 发行版编排（只用发布镜像，不构建）
+# -------------------------------------------------------------
+# 三步跑起来（同一个目录下执行）：
+#   1) curl -O https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.0/docker-compose.release.yml
+#   2) curl -o .env https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.0/.env.release.example
+#      编辑 .env，填 MYSQL_ROOT_PASSWORD、TOKEN_SECRET、LAN_IP 三个必填项
+#   3) docker compose -f docker-compose.release.yml up -d
+#
+# 访问（根路径会自动跳到统一前缀）：
+#       http://<主机IP>/kconluck2026/          入口分流页
+#       http://<主机IP>/kconluck2026/admin/    管理端（初始账号见 .env 模板注释）
+#       http://<主机IP>/kconluck2026/screen/   抽奖大屏
+#       http://<主机IP>/kconluck2026/sign/     观众签到
+#
+# 数据全部落在命名卷里，容器重建不丢；彻底重置用 docker compose down -v。
+# 指定版本：KCON_TAG=v0.2.0（默认）或 KCON_TAG=sha-abc1234 精确锁定。
+# 私有化部署到自己的镜像仓库：KCON_REGISTRY=registry.example.com/kcon。
+# =============================================================
+name: kcon
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ---------- MySQL（镜像内已内置建库建表脚本，首次启动自动执行） ----------
+  mysql:
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-mysql:${KCON_TAG:-v0.2.0}
+    container_name: kcon-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-kcon_lucky}
+      TZ: ${TZ:-Asia/Shanghai}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+      - --max-connections=100
+      - --max-allowed-packet=64M
+      - --innodb-flush-log-at-trx-commit=1
+      - --skip-log-bin
+    mem_limit: 600m
+    logging: *logging
+    volumes:
+      - kcon-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [kcon]
+
+  # ---------- Redis（登录令牌 / 缓存） ----------
+  redis:
+    image: redis:7-alpine
+    container_name: kcon-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    mem_limit: 128m
+    logging: *logging
+    volumes:
+      - kcon-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [kcon]
+
+  # ---------- 后端 SpringBoot ----------
+  backend:
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-backend:${KCON_TAG:-v0.2.0}
+    container_name: kcon-backend
+    restart: unless-stopped
+    mem_limit: 850m
+    logging: *logging
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      BACKEND_PORT: 8080
+      LOG_PATH: /app/logs
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError}
+      SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-kcon_lucky}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
+      SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+      REDIS_PASSWORD: ""
+      # 生成签到二维码用的对外地址，填服务器 IP 或域名
+      LAN_IP: ${LAN_IP:-127.0.0.1}
+      TOKEN_SECRET: ${TOKEN_SECRET:?必须在 .env 中配置 TOKEN_SECRET，生成方式：openssl rand -base64 48}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    volumes:
+      - kcon-upload:/app/uploadPath
+      - kcon-backup:/app/backup
+      - kcon-logs:/app/logs
+    networks: [kcon]
+
+  # ---------- Web 统一入口（三端静态 + 反代） ----------
+  web:
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-web:${KCON_TAG:-v0.2.0}
+    container_name: kcon-web
+    restart: unless-stopped
+    mem_limit: 64m
+    logging: *logging
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-80}:80"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    volumes:
+      - kcon-web-static:/usr/share/nginx/html
+    networks: [kcon]
+
+networks:
+  kcon:
+    driver: bridge
+
+volumes:
+  kcon-mysql:
+  kcon-redis:
+  kcon-upload:
+  kcon-backup:
+  kcon-logs:
+  kcon-web-static:

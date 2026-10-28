@@ -1,5 +1,5 @@
 # =============================================================
-# 镜像构建：backend（Spring Boot）/ web（三端静态 + nginx）
+# 镜像构建：backend（Spring Boot）/ web（三端静态 + nginx）/ mysql（基线 SQL）
 # -------------------------------------------------------------
 # 产物推 GitHub Container Registry（GHCR），tag 采用 OSS 常见约定：
 #   sha-<短SHA>            每次构建都有，不可变，生产按这个锁版本/回滚
@@ -56,6 +56,11 @@ jobs:
           - name: web
             dockerfile: docker/web/Dockerfile
             image: kconlucky-web
+          # mysql 镜像把 sql/ 基线脚本打进 /docker-entrypoint-initdb.d，
+          # 让外部用户只靠镜像 + 编排文件就能起库（见 docker-compose.release.yml）
+          - name: mysql
+            dockerfile: docker/mysql/Dockerfile
+            image: kconlucky-mysql
     steps:
       - uses: actions/checkout@v4
 
