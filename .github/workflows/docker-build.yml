@@ -8,8 +8,9 @@
 # 服务器侧把 docker-compose.yml 的 image 换成 ghcr.io 地址（或 digest）即可
 # docker compose pull && up -d --no-build，不再需要 docker save | ssh | docker load。
 #
-# 目标平台固定 linux/amd64：服务器是 x86_64，ARM 产物在服务器上起不来
-# （本地 Apple Silicon 构建时必须显式 --platform，这里是同一约束的 CI 版本）。
+# 目标平台：linux/amd64 + linux/arm64（AMD64/ARM64 机器都能直接跑）。
+# 多架构走 QEMU 模拟构建，ARM 侧编译比原生慢，但产物与真机 ABI 一致；
+# 本地 Apple Silicon / ARM 服务器无需再手动 --platform。
 # =============================================================
 name: docker-build
 
@@ -57,6 +58,11 @@ jobs:
       # 但 buildx 才稳定支持 --platform 与 GHA 缓存导出）
       - uses: docker/setup-buildx-action@v3
 
+      # QEMU 必装：runner 是 amd64，构建 arm64 层靠它做指令集模拟
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       # PR 只验证构建能否通过，不登录也不推送（fork 来的 PR 拿不到 packages:write）
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -90,7 +96,8 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
+          # 双架构单 manifest：x86 服务器与 Apple Silicon / ARM 云主机都能直接 pull
+          platforms: linux/amd64,linux/arm64
           # 只有 push 到 main 才推送：PR 只验证构建；手动触发（workflow_dispatch）
           # 可能从任意分支发起，推了会用非 main 代码覆盖 latest
           push: ${{ github.event_name == 'push' }}
