@@ -24,7 +24,6 @@ public interface KconWinnerMapper
 
     /**
      * 最近一条有效（未作废）中奖记录。
-     * 大屏作废接口免登录，以此为基准把可作废范围限制为最新一条。
      */
     KconWinner selectLatestValidWinner();
 
@@ -66,11 +65,6 @@ public interface KconWinnerMapper
      * 全部已中奖端口号（用于抽奖池排除）
      */
     List<Integer> selectAllWonPorts();
-
-    /**
-     * 某场次已中奖端口号（下午场剔除上午场用）
-     */
-    List<Integer> selectWonPortsBySession(String sessionCode);
 
     /**
      * 今日中奖统计（按场次）

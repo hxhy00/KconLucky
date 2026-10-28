@@ -34,11 +34,16 @@ WORKDIR /app
 # -Xss512k：Tomcat max-threads=800（application.yml），默认 1MB 栈即 800MB，
 # 叠加 Xmx512m + Metaspace192m 必超 mem_limit 850m 被 OOM Kill；
 # 本系统并发极低，512k 线程栈足够（800 线程 ≈ 400MB 上限，实际远达不到）
-ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError"
+# LOG_PATH 与 compose 的 environment.LOG_PATH 保持一致：脱离 compose 单独 docker run 时
+# 日志也写进 /app/logs（挂载卷位置），而不是 logback 默认的 /home/ruoyi/logs
+ENV TZ=Asia/Shanghai \
+    LOG_PATH=/app/logs \
+    JAVA_OPTS="-Xms256m -Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError"
 
 # mysql-client：管理端「数据迁移」功能需要调 mysqldump / mysql
 # 导出全量 .sql 备份与从 .sql 恢复（需求 AC-11），不自研 SQL 导出器。
-# apt 源为 Debian 官方 CDN（deb.debian.org），未换国内镜像；构建时如遇网络问题再评估切换
+# 基础镜像 eclipse-temurin:17-jre 基于 Ubuntu，apt 源为 Ubuntu 官方源（archive.ubuntu.com），
+# 未换国内镜像；构建时如遇网络问题再评估切换
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends mysql-client; \

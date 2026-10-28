@@ -106,7 +106,7 @@ export default {
       const seq = ++this.listSeq
       listBenefitGrant(this.addDateRange(this.queryParams, this.dateRange)).then(res => {
         if (seq !== this.listSeq) return
-        this.grantList = res.rows
+        this.grantList = res.rows || []
         this.total = res.total
       }).catch(() => {
         // request.js 已统一提示，这里只兜底

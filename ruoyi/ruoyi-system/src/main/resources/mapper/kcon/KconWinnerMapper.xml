@@ -136,11 +136,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select distinct port_no from kcon_winner where status != 2
     </select>
 
-    <select id="selectWonPortsBySession" parameterType="String" resultType="java.lang.Integer">
-        select distinct port_no from kcon_winner
-        where status != 2 and session_code = #{sessionCode}
-    </select>
-
     <select id="statBySession" resultType="java.util.LinkedHashMap">
         select session_code as sessionCode,
                count(*) as total,

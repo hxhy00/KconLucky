@@ -753,13 +753,12 @@ export default {
         this.importOpen = false
         const s = res.data || {}
         const mappingTip = s.skipped > 0
-          ? `<br/><span style="color:#d4342a">有 ${s.skipped} 行未导入，详见跳过明细。</span>`
+          ? `有 ${s.skipped} 行未导入，详见跳过明细。`
           : ""
         this.$alert(
-          `新增 ${s.inserted || 0} 条，更新 ${s.updated || 0} 条，跳过 ${s.skipped || 0} 条。<br/>
-           当前有效名单共 <b>${s.total || 0}</b> 人。${mappingTip}`,
-          "导入完成",
-          { dangerouslyUseHTMLString: true }
+          `新增 ${s.inserted || 0} 条，更新 ${s.updated || 0} 条，跳过 ${s.skipped || 0} 条。` +
+            `当前有效名单共 ${s.total || 0} 人。${mappingTip}`,
+          "导入完成"
         )
         this.handleQuery()
       }).catch(() => {

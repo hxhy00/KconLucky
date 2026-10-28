@@ -358,9 +358,6 @@ public class KconDrawServiceImpl implements IKconDrawService
 
     /**
      * 抽奖主体。由 {@link #draw} 在抽奖锁内通过事务模板调用，不要直接暴露。
-     */
-    /**
-     * 抽奖主体。由 {@link #draw} 在抽奖锁内通过事务模板调用，不要直接暴露。
      *
      * 一次调用把该档位剩余名额全部抽出（舞台上的「一键抽完一档」）：
      * 例如三等奖还剩 3 个名额，就一次抽出 3 个人，大屏再逐个滚动揭晓。

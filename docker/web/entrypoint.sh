@@ -54,6 +54,9 @@ if [ -f "$MARKER" ]; then
                 | while read -r f; do rm -f "$STATIC/$f"; done
         done
     fi
+    # 兜底：.release 存在但 .last-files 丢失（卷被部分清理/手工删过）时，
+    # sort 会因文件不存在报错，叠加 set -e 直接退出 → nginx 不启动、容器 crashloop
+    [ -f "$STATIC/.last-files" ] || : > "$STATIC/.last-files"
     # 发布后快照 = 新版 ∪ 实际留存的上一版文件。按磁盘实际存在过滤：
     # 直接用 .keep 会让「上一版快照里已不存在的条目」永久残留
     sort -u "$STATIC/.last-files" "$STATIC/.newlist" | \

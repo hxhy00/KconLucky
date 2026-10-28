@@ -129,7 +129,7 @@ public class KconCheckinServiceImpl implements IKconCheckinService
      *
      * 只接受完整 11 位。后四位不构成秘密（10^4 可枚举），若允许它作为提交凭证，
      * 等于把「查得到尾号就能替人签到」写进接口，和没有校验一样。
-     * 查询入口仍保留后四位，是为了现场快速定位；确认签到这一步必须补全。
+     * 查询入口同样只收完整 11 位，这里再校验一次格式与等值。
      */
     private void verifyPhone(KconAttendee attendee, String phone)
     {

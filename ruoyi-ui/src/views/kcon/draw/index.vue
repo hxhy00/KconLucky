@@ -254,7 +254,6 @@ export default {
     },
     /** 大屏访问地址：与后端 qrcode 接口同源，按当前页面 host 推导 */
     screenUrl() {
-      // origin 不含路径，replace(/\/admin\/?$/) 永远不会命中，属于无效代码
       return `${window.location.origin}/screen/`
     },
     /** 全部有效中奖，按场次 × 档位分组（后端已按 draw_order 排好：三等 → 二等 → 一等） */
@@ -340,7 +339,7 @@ export default {
     // ---------- 大屏设置 ----------
     loadSetting() {
       getDrawSetting().then(res => {
-        const list = res.data?.sponsors || res.sponsors || []
+        const list = res.sponsors || []
         this.settingForm.sponsors = Array.isArray(list) ? list.join(", ") : String(list || "")
         this.settingLoaded = true
       }).catch(() => {

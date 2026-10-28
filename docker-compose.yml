@@ -27,7 +27,7 @@ services:
       - --max-connections=100
       - --max-allowed-packet=64M
       - --skip-log-bin
-    # 内存上限需与 my.cnf 保持一致（docker/mysql/my.cnf），改两处一起改
+    # 内存上限只由本处 mem_limit 控制（docker/mysql/my.cnf 无任何内存参数）
     mem_limit: 600m
     logging:
       driver: json-file

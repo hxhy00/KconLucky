@@ -228,7 +228,7 @@ export default {
           this.$modal.msgSuccess(isEdit ? "修改成功" : "新增成功")
           this.open = false
           this.getList()
-        }).finally(() => { this.submitting = false })
+        }).catch(() => {}).finally(() => { this.submitting = false })
       })
     },
     handleDelete(row) {

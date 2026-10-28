@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 日志存放路径：可用 LOG_PATH 环境变量覆盖（本地命令行运行用），容器内保持默认 -->
+    <!-- 日志存放路径：可用 LOG_PATH 环境变量覆盖；容器内镜像已设置 LOG_PATH=/app/logs -->
 	<property name="log.path" value="${LOG_PATH:-/home/ruoyi/logs}" />
     <!-- 日志输出格式 -->
 	<property name="log.pattern" value="%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - [%method,%line] - %msg%n" />

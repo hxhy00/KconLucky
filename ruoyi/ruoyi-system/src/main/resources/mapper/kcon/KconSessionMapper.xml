@@ -20,9 +20,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select id, code, name, status, sort from kcon_session where code = #{code} limit 1
     </select>
 
+    <!-- 只把进行中（status=1）的场次置为未开始，保留已结束（status=2）的场次状态 -->
     <update id="activate" parameterType="String">
         update kcon_session
-        set status = case when code = #{code} then 1 else 0 end
+        set status = case when code = #{code} then 1
+                          when status = 2 then 2
+                          else 0 end
     </update>
 
     <update id="deactivateAll">

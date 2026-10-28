@@ -118,7 +118,7 @@ export default {
       const seq = ++this.listSeq
       listWinner(this.queryParams).then(res => {
         if (seq !== this.listSeq) return
-        this.winnerList = res.rows
+        this.winnerList = res.rows || []
         this.total = res.total
       }).catch(() => {
         // request.js 已统一提示，这里只兜底

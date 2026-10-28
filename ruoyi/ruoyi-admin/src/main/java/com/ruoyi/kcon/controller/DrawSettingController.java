@@ -104,8 +104,8 @@ public class DrawSettingController extends BaseController
             sysConfigService.updateConfig(config);
         }
 
-        // 大屏每 3 秒轮询一次状态接口，改完最多等一轮就会显示出来
-        return success("已保存，大屏将在 3 秒内自动刷新显示");
+        // 大屏每 1.5 秒轮询一次状态接口，改完最多等一轮就会显示出来
+        return success("已保存，大屏将在 1.5 秒内自动刷新显示");
     }
 
     /** 把逗号/中文逗号分隔的配置值拆成列表 */

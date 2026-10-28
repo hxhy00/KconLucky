@@ -511,10 +511,13 @@ async function doCheckinById(id, phone) {
     // 防止有人只拿 attendeeId 替他人签到（公网版加固）
     const res = await submitCheckin(id, phone)
     if (seq !== lookupSeq) return
-    if (res.code === 200) {
+    if (res.code === 200 && res.data && res.data.portNo) {
       result.value = res.data
       step.value = 'success'
       scrollTop()
+    } else if (res.code === 200) {
+      // code=200 但 data 缺 portNo：直接切成功页会因访问 result.portNo 抛错白屏
+      error.value = '签到信息读取失败，请联系现场工作人员'
     } else {
       error.value = res.msg || '签到失败，请联系现场工作人员'
     }
@@ -533,7 +536,7 @@ async function showExistingCheckin(phone, seq) {
   error.value = ''
   try {
     const res = await lookup(phone)
-    if (seq !== undefined && seq !== lookupSeq) return
+    if (seq !== lookupSeq) return
     const d = res.data || {}
     if (res.code !== 200 || !d.signed || !d.portNo) {
       error.value = d.msg || res.msg || '签到信息读取失败，请联系现场工作人员'
@@ -549,7 +552,7 @@ async function showExistingCheckin(phone, seq) {
     step.value = 'success'
     scrollTop()
   } catch (e) {
-    if (seq !== undefined && seq !== lookupSeq) return
+    if (seq !== lookupSeq) return
     error.value = '网络异常，请重试'
   }
 }

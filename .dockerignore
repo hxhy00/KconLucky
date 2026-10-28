@@ -5,6 +5,10 @@
 *.iml
 .DS_Store
 
+# 密钥文件（真实 .env 含 DB/TOKEN 密钥，不进构建上下文；构建不需要任何 env 文件）
+.env
+.env.*
+
 # 数据与备份（不参与构建，避免镜像膨胀）
 data/
 logs/

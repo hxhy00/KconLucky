@@ -12,13 +12,12 @@ import java.util.Map;
 public interface IKconCheckinService
 {
     /**
-     * 签到端查询：按手机号全号或后四位匹配。
+     * 签到端查询：只接受完整 11 位手机号（不再支持 4 位尾号），命中即唯一。
      * 返回结构对应接口文档 2.1：
-     *   matchType = single   → attendee
-     *   matchType = multiple → candidates
+     *   matchType = single → attendee
      *   无匹配 → 抛 ServiceException
      *
-     * @param keyword 手机号全号或后四位
+     * @param keyword 完整 11 位手机号
      */
     Map<String, Object> queryAttendee(String keyword);
 

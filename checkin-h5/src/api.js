@@ -8,13 +8,16 @@ const BASE = import.meta.env.VITE_API_BASE ||
 const DEFAULT_TIMEOUT = 12000
 
 async function request(path, options = {}) {
-  const { timeout = DEFAULT_TIMEOUT, ...rest } = options
+  const { timeout = DEFAULT_TIMEOUT, headers, ...rest } = options
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   try {
     const res = await fetch(BASE + path, {
-      headers: { 'Content-Type': 'application/json' },
       ...rest,
+      // 调用方传的 headers 与默认合并而非整体覆盖；
+      // GET 请求不带 Content-Type（无请求体，带了会多一次 CORS 预检）
+      headers: { ...(rest.body ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      cache: 'no-store',
       signal: controller.signal
     })
     // fetch 只在网络层失败时 reject：网关 502、鉴权失败等仍会正常返回。

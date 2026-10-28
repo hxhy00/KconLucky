@@ -76,16 +76,6 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 
-/* 姓名 / 公司 / 奖项随后淡入上浮，避免整块同时蹦出显得生硬 */
-.fade-up {
-  animation: fade-up .5s .22s ease both;
-}
-
-@keyframes fade-up {
-  from { transform: translateY(16px); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
-}
-
 /* ② 全屏纸屑层：覆盖整屏、不拦鼠标事件 */
 .confetti-layer {
   position: fixed;

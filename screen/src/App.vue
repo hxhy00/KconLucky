@@ -109,7 +109,7 @@
             </span>
             <span class="text-sm tabular-nums text-slate-400">{{ t.drawnCount }} / {{ t.quantity }}</span>
           </div>
-          <div class="h-2 rounded-full bg-white/8 overflow-hidden">
+          <div class="h-2 rounded-full bg-white/[0.08] overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-500"
               :class="isCurrentTier(t) ? 'bg-gold' : 'bg-brand'"
@@ -139,19 +139,6 @@
       <div class="mt-2 text-sm text-slate-500">画面上的数字可能已经过期</div>
     </div>
 
-    <!-- 自绘提示 / 确认层：替代原生 alert/confirm（投屏上会带出域名与系统灰框） -->
-    <div v-if="dialog.show" class="dialog-mask">
-      <div class="dialog-box">
-        <div class="dialog-text">{{ dialog.text }}</div>
-        <div class="flex gap-4 mt-8">
-          <button v-if="dialog.confirm" class="dialog-btn dialog-btn-ghost"
-                  @click="resolveDialog(false)">取 消</button>
-          <button class="dialog-btn" @click="resolveDialog(true)">
-            {{ dialog.confirm ? '确 定' : '知道了' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -171,7 +158,7 @@ const displayNo = ref('00000')
 // 一次点击抽出整档的人，所以「揭晓」是一段过程而不是一帧：
 //   revealList    本次要揭晓的整批
 //   revealIndex   揭晓到第几个（0 基）
-//   revealSettled 当前号码是否已定格——定格前不显示姓名，避免提前剧透
+//   revealSettled 当前号码是否已定格——定格前号码无入场动画，避免提前剧透
 const revealList = ref([])
 const revealIndex = ref(0)
 const revealSettled = ref(false)
@@ -190,12 +177,10 @@ let disposed = false
 // ReferenceError，rollTo 一旦抛错整批揭晓动画就会被 revealAll 的 finally 跳过，
 // 现场表现为「看不到滚动和纸屑，直接出结果名单」
 let ticker = null
-let lastWinnerId = null
 
 // 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
 let currentVersion = null
-// 已经「看到」过的最近中奖 id 与批次：用来识别管理端抽奖控制台代抽的新中奖
-let knownWinnerId = null
+// 已经「看到」过的最近批次：用来识别管理端抽奖控制台代抽的新中奖
 let knownBatchKey = null
 // 已见批次的最新中奖时间（batchKey 第二段）水位：管理端作废最近一档后
 // lastBatch 会退化成更早批次，没有水位的话退化批次会被误当成新抽奖，
@@ -219,26 +204,6 @@ let pollInterval = 1500
 const POLL_MAX_INTERVAL = 12000
 // 轮询句柄改用递归 setTimeout：固定 setInterval 在退避时无法改间隔
 let pollTimer = null
-
-// 自绘提示 / 确认层，替代原生 alert / confirm
-// （投屏上弹系统原生弹窗会带出域名和灰色系统样式，观众也会看到）
-const dialog = ref({ show: false, text: '', confirm: false })
-let dialogResolver = null
-
-function resolveDialog(ok) {
-  dialog.value = { show: false, text: '', confirm: false }
-  const fn = dialogResolver
-  dialogResolver = null
-  if (fn) fn(ok)
-}
-function showTip(text) {
-  return new Promise(resolve => {
-    dialogResolver = resolve
-    dialog.value = { show: true, text, confirm: false }
-  })
-}
-// showConfirm 已随 doVoid 一起删除：大屏不再有需要二次确认的写操作。
-// 弹窗只剩 showTip（纯提示），模板据此始终显示「知道了」。
 
 const poolEmpty = computed(() => (status.value.poolCount ?? 0) <= 0)
 
@@ -335,23 +300,13 @@ const remainingOfCurrent = computed(() => {
   return Math.max(0, (c.quantity ?? 0) - (c.drawnCount ?? 0))
 })
 
-// 轮询在途标记：单次请求超过 3s 时不再叠加新请求，弱网下避免请求雪崩
+// 轮询在途标记：弱网下单次请求可能超过轮询间隔（api.js 超时 10s），
+// 在途时不叠加新请求，避免请求雪崩
 let statusInflight = false
-// 是否成功取到过一次状态：用于区分「真的没号可抽」与「后端连不上」
-let statusLoaded = false
 
-// 不同来源调用 loadStatus 的代号，用于「只让最新那个请求写回状态」。
-// 没有这个令牌时：一次 force 强制刷新与一次在途的普通轮询并发返回，
-// 后返回的那个（可能是旧场次数据）会覆盖先返回的新数据，画面回退到旧场次。
-let statusReqSeq = 0
-
-async function loadStatus(force = false) {
-  // force：切换场次等场景必须立即拿到新场次的快照。
-  // 此时若正好有一个 3 秒轮询在飞行中，普通调用会被早退掉，
-  // 而那次请求带回的还是旧场次的 version 与数据，会把它覆盖回 currentVersion。
-  if (statusInflight && !force) return
+async function loadStatus() {
+  if (statusInflight) return
   statusInflight = true
-  const seq = ++statusReqSeq
   // 只把网络请求包进 try：syncFromServer 等后续处理若抛编程异常，
   // 以前会被当成「网络失败」吞掉——不落日志、误亮「失去连接」遮罩，
   // 而网络其实正常（正是掩盖 ticker 根因的同一类缺陷）
@@ -367,13 +322,11 @@ async function loadStatus(force = false) {
     // 失败退避：指数加倍轮询间隔，恢复后复位（成功时在下面复位）
     pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
   } finally {
-    // 只有最新那个请求才有资格复位标记，否则会把后来者的在途状态提前清掉
-    if (seq === statusReqSeq) statusInflight = false
+    statusInflight = false
   }
-  if (failed || seq !== statusReqSeq) return
+  if (failed) return
   try {
     if (res.code === 200) {
-      statusLoaded = true
       failStreak = 0
       offline.value = false
       pollInterval = 1500
@@ -418,13 +371,11 @@ function batchTimeOf(key) {
 
 /** 把服务端快照映射到本地 phase，并接管「管理端抽出的整批中奖」 */
 function syncFromServer(d) {
-  const lw = d.lastWinner
   const batch = d.lastBatch
 
   if (!firstLoadDone) {
     // 刷新后不该凭空弹出上一轮的结果：只记住，不展示
     firstLoadDone = true
-    if (lw && lw.winnerId) knownWinnerId = lw.winnerId
     if (batch && batch.batchKey) {
       knownBatchKey = batch.batchKey
       knownBatchTime = batchTimeOf(batch.batchKey)
@@ -441,7 +392,6 @@ function syncFromServer(d) {
       // 汇总页就地同步，不重播揭晓动画。shortfall 一并同步：
       // 后端按作废后的 drawnCount 重算缺口，不同步的话「还差 N 位」停留旧值
       knownBatchKey = batch.batchKey
-      if (lw && lw.winnerId) knownWinnerId = lw.winnerId
       if (phase.value === 'result') {
         resultList.value = (batch.winners || []).map(w => ({ ...w }))
         shortfall.value = batch.shortfall ?? 0
@@ -462,7 +412,6 @@ function syncFromServer(d) {
         // 记账在开播前：配合 revealAll 的 try/finally，即使本批动画中途异常，
         // revealing 也会复位，下一批照常播放，不会出现「卡死后全批失效」
         knownBatchKey = batch.batchKey
-        if (lw && lw.winnerId) knownWinnerId = lw.winnerId
         // gap：池子不足时本批少抽的人数（后端 lastBatch.shortfall），
         // 汇总页据此提示「还差 N 位」；后端不下发时按 0 处理
         revealAll(batch.winners || [], batch.tierName, batch.shortfall ?? 0)
@@ -472,7 +421,6 @@ function syncFromServer(d) {
         // 让这批在 finally 补播时仍走「新批次」分支，避免被当成已消费而漏播
         const entry = {
           batchKey: batch.batchKey,
-          lastWinnerId: lw && lw.winnerId ? lw.winnerId : null,
           winners: batch.winners || [],
           tierName: batch.tierName,
           gap: batch.shortfall ?? 0
@@ -499,13 +447,11 @@ function syncFromServer(d) {
     // 整批都被作废了。knownBatchTime 保留：它是「已见最新中奖时间」水位，
     // 清空的话继续撤回更早批次时，lastBatch 的退化批次会被误当成新抽奖
     knownBatchKey = null
-    knownWinnerId = null
     // 队列里可能还压着这一批（或更早批次）的待播快照，源头已作废：
     // 不清掉的话 finally 补播仍会把它们播出来，等于播了已被撤回的奖
     if (pendingBatches.length) pendingBatches.length = 0
     if (phase.value === 'result') {
       resultList.value = []
-      lastWinnerId = null
       phase.value = 'idle'
     }
   }
@@ -561,7 +507,6 @@ async function playReveal(winners, tierName, gap) {
   resultList.value = winners.map(w => ({ ...w }))
   resultTier.value = tierName || ''
   shortfall.value = gap || 0
-  lastWinnerId = winners[winners.length - 1].winnerId
 
   for (let i = 0; i < winners.length; i++) {
     // 卸载后停止揭晓：组件已销毁，继续跑只会新建无人清理的滚动定时器
@@ -629,7 +574,6 @@ async function revealAll(winners, tierName, gap) {
     if (pendingBatches.length) {
       const p = pendingBatches.shift()
       knownBatchKey = p.batchKey
-      if (p.lastWinnerId != null) knownWinnerId = p.lastWinnerId
       next = { winners: p.winners, tierName: p.tierName, gap: p.gap }
     }
   }

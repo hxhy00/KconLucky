@@ -8,13 +8,16 @@ const BASE = import.meta.env.VITE_API_BASE ||
 const DEFAULT_TIMEOUT = 10000
 
 async function request(path, options = {}) {
-  const { timeout = DEFAULT_TIMEOUT, ...rest } = options
+  const { timeout = DEFAULT_TIMEOUT, headers, ...rest } = options
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   try {
     const res = await fetch(BASE + path, {
-      headers: { 'Content-Type': 'application/json' },
       ...rest,
+      // 调用方传的 headers 与默认合并而非整体覆盖；GET 轮询禁用中间层缓存，
+      // 否则大屏可能一直拿到缓存的旧状态
+      headers: { 'Content-Type': 'application/json', ...headers },
+      cache: 'no-store',
       signal: controller.signal
     })
     // HTTP 非 2xx 说明后端/网关异常，不是网络不通；
