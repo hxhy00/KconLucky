@@ -182,6 +182,11 @@ const shortfall = ref(0)
 // 揭晓动画进行中：轮询发现的「新中奖」其实正是本次抽出的同一批，不要来打断
 let revealing = false
 
+// 端口号滚动定时器句柄（rollTo 启动 / stopRolling 清理）。
+// 注意：必须声明——<script setup> 编译为 ESM 严格模式，给未声明变量赋值会抛
+// ReferenceError，rollTo 一旦抛错整批揭晓动画就会被 revealAll 的 finally 跳过，
+// 现场表现为「看不到滚动和纸屑，直接出结果名单」
+let ticker = null
 let lastWinnerId = null
 
 // 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
