@@ -48,7 +48,8 @@ services:
       # 仅绑定本机回环，不对局域网暴露；现场若不需要本机调试可整段注释掉
       - "127.0.0.1:${MYSQL_DEBUG_PORT:-3307}:3306"
     healthcheck:
-      # 用容器内环境变量取口令，避免明文出现在 ps/日志里；$$ 让 compose 不做插值
+      # 用容器内环境变量取口令，避免明文写进编排文件；$$ 让 compose 不做插值。
+      # 注意口令仍会出现在容器内 ps（CMD-SHELL 的局限），容器不对公网暴露可接受
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 10s
       timeout: 5s
@@ -115,7 +116,8 @@ services:
       # JWT 签名密钥（必填，无默认值）。强度由 TokenService 启动时校验，不达标拒绝启动
       TOKEN_SECRET: ${TOKEN_SECRET:?必须在 .env 中配置 TOKEN_SECRET，生成方式：openssl rand -base64 48}
     healthcheck:
-      # TCP 探活：镜像无 curl/wget，用 bash 内建 /dev/tcp；假活（进程在、端口不通）无法靠 depends_on 发现
+      # TCP 探活：用 bash 内建 /dev/tcp（镜像无 curl，wget 为 busybox 精简版）；
+      # 假活（进程在、端口不通）无法靠 depends_on 发现
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
       interval: 10s
       timeout: 5s

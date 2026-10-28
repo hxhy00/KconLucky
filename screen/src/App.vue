@@ -350,6 +350,11 @@ async function loadStatus() {
         failStreak += 1
         if (failStreak >= 3) offline.value = true
       }
+    } else {
+      // 响应畸形（无 code 字段）：与业务失败同口径计入失败连击，
+      // 静默忽略的话画面停在旧数据上却毫无迹象
+      failStreak += 1
+      if (failStreak >= 3) offline.value = true
     }
   } catch (e) {
     // 编程异常（如状态映射出错）：留下可观测证据，不吞掉也不当成网络失败；
@@ -398,10 +403,12 @@ function syncFromServer(d) {
       }
     } else {
       // 撤回导致的退化批次：管理端作废最近一档后，lastBatch 会回退到
-      // 更早的批次（时间不新于已见水位），这不是新抽奖——不拦截的话
-      // 大屏会把上一轮的中奖动画完整重播一遍
+      // 更早的批次（时间早于已见水位），这不是新抽奖——不拦截的话
+      // 大屏会把上一轮的中奖动画完整重播一遍。
+      // 用严格小于：主持人同一秒内连抽两档时，下一档时间等于水位，
+      // 是新批次不是退化，不能吞
       const bt = batchTimeOf(batch.batchKey)
-      if (knownBatchTime && bt && bt <= knownBatchTime) {
+      if (knownBatchTime && bt && bt < knownBatchTime) {
         knownBatchKey = batch.batchKey
         return
       }
@@ -491,6 +498,8 @@ function syncResultIfBatchChanged() {
   const batch = status.value.lastBatch
   if (!batch || !batch.batchKey || batch.batchKey !== knownBatchKey) return
   resultList.value = (batch.winners || []).map(w => ({ ...w }))
+  // 缺口一并校正：作废后后端按最新 drawnCount 重算，不同步会停留旧值
+  shortfall.value = batch.shortfall ?? 0
 }
 
 /**

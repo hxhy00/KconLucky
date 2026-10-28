@@ -145,48 +145,6 @@ body {
   background: rgba(6, 8, 14, .93);
 }
 
-/* --- 自绘提示 / 确认层：投屏上弹浏览器原生弹窗会带出域名与系统灰框，观众也看得到 --- */
-.dialog-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, .6);
-}
-.dialog-box {
-  min-width: 460px;
-  max-width: 760px;
-  padding: 40px 48px;
-  border-radius: 20px;
-  background: #12161f;
-  border: 1px solid rgba(255, 255, 255, .12);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
-  text-align: center;
-}
-.dialog-text {
-  font-size: 22px;
-  line-height: 1.7;
-  color: #e2e8f0;
-}
-.dialog-btn {
-  flex: 1;
-  padding: 12px 28px;
-  border-radius: 12px;
-  font-size: 18px;
-  font-weight: 700;
-  background: #E23B2E;
-  color: #fff;
-  transition: transform .1s;
-}
-.dialog-btn:active { transform: scale(.97); }
-.dialog-btn-ghost {
-  background: rgba(255, 255, 255, .06);
-  color: #cbd5e1;
-  border: 1px solid rgba(255, 255, 255, .12);
-}
-
 /* --- 汇总页：整档中奖者排成网格，人多时自动换行 --- */
 .winner-grid {
   display: flex;

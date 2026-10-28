@@ -148,11 +148,13 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         String channel = attendee.getChannel() == null ? null : attendee.getChannel().trim();
         attendee.setChannel(channel);
         checkChannelAllowed(channel);
-        // draw_eligible 一律按映射重算，不接受客户端值：
-        // 映射是「参与抽奖」的唯一事实源，直连 API 显式传 1 可给非购票渠道开资格
+        // 权益类型 / 参与抽奖一律按映射回填，不接受客户端值：
+        // 映射是唯一事实源，直连 API 可借自由填写的 ticketType/drawEligible
+        // 绕开权益关键字过滤或给非购票渠道开资格
         Map<String, ChannelMapping> mappings = loadChannelMappings();
         ChannelMapping mapping = mappings.get(channel);
         attendee.setDrawEligible(mapping != null ? mapping.drawEligible : 0);
+        attendee.setTicketType(mapping != null && !mapping.benefitType.isEmpty() ? mapping.benefitType : "");
         // 尾号必须基于 trim 后的手机号计算：带尾部空格时先取后四位会得到 "001 " 这类脏值
         if (attendee.getPhone() != null)
         {
@@ -184,7 +186,8 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             // draw_eligible 一律按映射重算，不接受客户端值：
             // 映射是「参与抽奖」的唯一事实源，直连 API 显式传 1 可给非购票渠道开资格；
             // 而 resyncByChannel 又会把未锁定行按映射改回，形成「改了又被静默覆盖」。
-            // 渠道未变但映射缺失（历史遗留渠道）时不动该字段，避免破坏存量编辑
+            // 渠道未变但映射缺失（历史遗留渠道）时保持库中旧值——
+            // 不接受客户端值，否则直连 API 传 1 仍可给未映射渠道开资格
             Map<String, ChannelMapping> mappings = loadChannelMappings();
             ChannelMapping mapping = mappings.get(channel);
             if (mapping != null)
@@ -193,10 +196,16 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
                 if (channelChanged)
                 {
                     // 渠道变更时权益类型跟随新映射：旧的人工标记属于旧渠道，
-                    // 一并复位为「跟随映射」
-                    attendee.setTicketType(mapping.benefitType.isEmpty() ? null : mapping.benefitType);
+                    // 一并复位为「跟随映射」。
+                    // benefit_type 为空时置空字符串而非 null——update XML 对 null
+                    // 跳过更新，置 null 会残留旧渠道权益，且与已复位的人工标记矛盾
+                    attendee.setTicketType(mapping.benefitType.isEmpty() ? "" : mapping.benefitType);
                     attendee.setTicketTypeManual(0);
                 }
+            }
+            else if (!channelChanged && old != null)
+            {
+                attendee.setDrawEligible(old.getDrawEligible() != null ? old.getDrawEligible() : 0);
             }
         }
         if (attendee.getPhone() != null && !attendee.getPhone().trim().isEmpty())

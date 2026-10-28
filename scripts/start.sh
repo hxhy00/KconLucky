@@ -9,13 +9,20 @@ echo "==> 构建并启动容器..."
 docker compose up -d --build
 
 echo "==> 等待后端就绪..."
+# 以日志里的启动标志为准（curl / 依赖根路径状态码，不可靠）；
+# 超时必须失败退出：否则脚本照常打印「启动完成」，误导读到的人
+READY=0
 for i in $(seq 1 60); do
-  if docker exec kcon-backend curl -sf http://127.0.0.1:8080/ >/dev/null 2>&1 || \
-     docker logs kcon-backend 2>&1 | grep -q "Started RuoYiApplication"; then
+  if docker logs kcon-backend 2>&1 | grep -q "Started RuoYiApplication"; then
+    READY=1
     break
   fi
   sleep 3
 done
+if [ "$READY" != "1" ]; then
+  echo "后端 3 分钟内未就绪，请查看日志排查：docker logs kcon-backend"
+  exit 1
+fi
 
 LAN_IP=$(grep -E '^LAN_IP=' .env | cut -d= -f2)
 PORT=$(grep -E '^WEB_PORT=' .env | cut -d= -f2)

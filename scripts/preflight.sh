@@ -36,6 +36,9 @@ esac
 
 PREFIX=$(env_get KCON_BASE_PATH)
 PREFIX=${PREFIX%/}
+# 端口与 compose 同源（WEB_PORT，默认 80）：固定写 80 会让非 80 部署误报 FAIL
+PORT=$(env_get WEB_PORT)
+PORT=${PORT:-80}
 
 echo "== 2. 容器状态 =="
 for c in kcon-web kcon-backend kcon-mysql kcon-redis; do
@@ -45,7 +48,7 @@ done
 
 echo "== 3. 入口连通性（本机回环） =="
 for p in "${PREFIX}/" "${PREFIX}/admin/" "${PREFIX}/sign/" "${PREFIX}/screen/"; do
-  code=$(curl -sL -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1${p}" 2>/dev/null || echo 000)
+  code=$(curl -sL -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:${PORT}${p}" 2>/dev/null || echo 000)
   [ "$code" = "200" ] && pass "${p} → 200" || fail "${p} → ${code}"
 done
 

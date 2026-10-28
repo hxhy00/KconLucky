@@ -58,10 +58,13 @@ if [ -f "$MARKER" ]; then
     # sort 会因文件不存在报错，叠加 set -e 直接退出 → nginx 不启动、容器 crashloop
     [ -f "$STATIC/.last-files" ] || : > "$STATIC/.last-files"
     # 发布后快照 = 新版 ∪ 实际留存的上一版文件。按磁盘实际存在过滤：
-    # 直接用 .keep 会让「上一版快照里已不存在的条目」永久残留
+    # 直接用 .keep 会让「上一版快照里已不存在的条目」永久残留。
+    # 先写临时文件再 mv：直接 > .last-files 会在管道启动时截断它，
+    # 与 sort 读同一文件并发竞争，上一代清单被清空后「保留一代」失效
     sort -u "$STATIC/.last-files" "$STATIC/.newlist" | \
         while read -r f; do [ -f "$STATIC/$f" ] && echo "$f"; done \
-        > "$STATIC/.last-files"
+        > "$STATIC/.last-files.tmp"
+    mv "$STATIC/.last-files.tmp" "$STATIC/.last-files"
     rm -f "$STATIC/.keep"
 else
     # 首次发布：快照初版清单，供下次换版时区分孤儿

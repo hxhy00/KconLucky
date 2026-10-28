@@ -38,7 +38,6 @@
               autocomplete="tel"
               autocapitalize="off"
               spellcheck="false"
-              maxlength="11"
               placeholder="请输入报名手机号"
               aria-describedby="phone-status"
               class="w-full h-14 pl-4 pr-11 rounded-lg bg-[#0E0E11] border text-lg
@@ -48,6 +47,8 @@
                 ? 'border-rose-500/60 focus:border-rose-400'
                 : 'border-white/10 focus:border-brand'"
               @input="onKeywordInput"
+              @compositionstart="onCompositionStart"
+              @compositionend="onCompositionEnd"
               @keyup.enter="onEnter"
             />
             <button
@@ -352,10 +353,27 @@ onMounted(() => {
 })
 
 // 输入即归一化：全角转半角、去掉分隔符、截断到 11 位。
-// IME 组合输入期间不改写：全角输入法下改写 value 会吞字/光标跳动，
-// 等 compositionend 后的最后一次 input 事件（isComposing=false）再归一化
+// IME 组合输入期间不改写：全角输入法下改写 value 会吞字/光标跳动。
+// 不用事件属性判断（input 事件的 keyCode 恒为 undefined、部分安卓 IME
+// 组合期间 isComposing=false），用 compositionstart/end 显式加锁
+let composing = false
+
+function onCompositionStart() {
+  composing = true
+}
+
+function onCompositionEnd(e) {
+  composing = false
+  // compositionend 后部分浏览器不再补发 input 事件：这里手动归一化一次
+  const digits = digitsOnly(e.target.value)
+  keyword.value = digits
+  if (e.target.value !== digits) {
+    e.target.value = digits
+  }
+}
+
 function onKeywordInput(e) {
-  if (e.isComposing || e.keyCode === 229) return
+  if (composing) return
   const digits = digitsOnly(e.target.value)
   keyword.value = digits
   if (e.target.value !== digits) {
@@ -365,7 +383,7 @@ function onKeywordInput(e) {
 
 // IME 确认候选词的 Enter 也会触发 keyup：组合期间不查询
 function onEnter(e) {
-  if (e.isComposing || e.keyCode === 229) return
+  if (composing || e.isComposing) return
   doQuery()
 }
 
@@ -432,7 +450,9 @@ async function doLookup() {
     })
   } catch (e) {
     if (seq !== lookupSeq) return
-    lookupError.value = '查询失败，请检查网络后重试'
+    // api.js 已备好面向用户的文案（请求超时/服务异常 HTTP 502），直接展示，
+    // 不再统一改写成「网络异常」——现场才能区分超时与网关故障
+    lookupError.value = e.message || '查询失败，请检查网络后重试'
   } finally {
     // 只有最新一次请求才有资格复位 loading；被作废的旧请求由 watch 复位
     if (seq === lookupSeq) loading.value = false
@@ -484,7 +504,7 @@ async function doQuery() {
     scrollTop()
   } catch (e) {
     if (seq !== lookupSeq) return
-    error.value = '网络异常，请重试或联系现场工作人员'
+    error.value = e.message || '网络异常，请重试或联系现场工作人员'
   } finally {
     if (seq === lookupSeq) loading.value = false
   }
@@ -523,7 +543,7 @@ async function doCheckinById(id, phone) {
     }
   } catch (e) {
     if (seq !== lookupSeq) return
-    error.value = '网络异常，请重试'
+    error.value = e.message || '网络异常，请重试'
   } finally {
     if (seq === lookupSeq) loading.value = false
   }
@@ -553,7 +573,7 @@ async function showExistingCheckin(phone, seq) {
     scrollTop()
   } catch (e) {
     if (seq !== lookupSeq) return
-    error.value = '网络异常，请重试'
+    error.value = e.message || '网络异常，请重试'
   }
 }
 </script>
