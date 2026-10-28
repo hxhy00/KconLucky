@@ -2,8 +2,8 @@
 # KCon 2026 签到 + 抽奖系统 · 发行版编排（只用发布镜像，不构建）
 # -------------------------------------------------------------
 # 三步跑起来（同一个目录下执行）：
-#   1) curl -O https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.0/docker-compose.release.yml
-#   2) curl -o .env https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.0/.env.release.example
+#   1) curl -O https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.1/docker-compose.release.yml
+#   2) curl -o .env https://raw.githubusercontent.com/hxhy00/KconLucky/v0.2.1/.env.release.example
 #      编辑 .env，填 MYSQL_ROOT_PASSWORD、TOKEN_SECRET、LAN_IP 三个必填项
 #   3) docker compose -f docker-compose.release.yml up -d
 #
@@ -14,7 +14,7 @@
 #       http://<主机IP>/kconluck2026/sign/     观众签到
 #
 # 数据全部落在命名卷里，容器重建不丢；彻底重置用 docker compose down -v。
-# 指定版本：KCON_TAG=v0.2.0（默认）或 KCON_TAG=sha-abc1234 精确锁定。
+# 指定版本：KCON_TAG=v0.2.1（默认）或 KCON_TAG=sha-abc1234 精确锁定。
 # 私有化部署到自己的镜像仓库：KCON_REGISTRY=registry.example.com/kcon。
 # =============================================================
 name: kcon
@@ -29,7 +29,7 @@ services:
 
   # ---------- MySQL（镜像内已内置建库建表脚本，首次启动自动执行） ----------
   mysql:
-    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-mysql:${KCON_TAG:-v0.2.0}
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-mysql:${KCON_TAG:-v0.2.1}
     container_name: kcon-mysql
     restart: unless-stopped
     environment:
@@ -75,7 +75,7 @@ services:
 
   # ---------- 后端 SpringBoot ----------
   backend:
-    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-backend:${KCON_TAG:-v0.2.0}
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-backend:${KCON_TAG:-v0.2.1}
     container_name: kcon-backend
     restart: unless-stopped
     mem_limit: 850m
@@ -99,6 +99,9 @@ services:
       REDIS_PASSWORD: ""
       # 生成签到二维码用的对外地址，填服务器 IP 或域名
       LAN_IP: ${LAN_IP:-127.0.0.1}
+      # 域名 + HTTPS 部署时填完整基地址（如 https://kcon.example.com），
+      # 二维码用它生成；留空则回退 http://$LAN_IP
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       TOKEN_SECRET: ${TOKEN_SECRET:?必须在 .env 中配置 TOKEN_SECRET，生成方式：openssl rand -base64 48}
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
@@ -114,7 +117,7 @@ services:
 
   # ---------- Web 统一入口（三端静态 + 反代） ----------
   web:
-    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-web:${KCON_TAG:-v0.2.0}
+    image: ${KCON_REGISTRY:-ghcr.io/hxhy00/kconlucky}/kconlucky-web:${KCON_TAG:-v0.2.1}
     container_name: kcon-web
     restart: unless-stopped
     mem_limit: 64m

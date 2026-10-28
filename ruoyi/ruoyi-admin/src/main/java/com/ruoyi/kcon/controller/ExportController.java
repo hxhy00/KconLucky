@@ -131,9 +131,27 @@ public class ExportController extends BaseController
     /**
      * 观众签到页地址（扫码入口）。
      * 四端统一挂在 nginx 的 /kconluck2026/ 前缀下，签到页固定为 /kconluck2026/sign/。
+     *
+     * 对外地址优先取 {@code PUBLIC_BASE_URL}（如 https://kcon.example.com），
+     * 用于域名 + HTTPS 部署：二维码必须是 https，否则扫码会被降级或直接打不开。
+     * 未配置时退回 {@code http://$LAN_IP}，兼容内网 IP 部署。
      */
     private String checkinUrl()
     {
+        String publicBase = System.getenv("PUBLIC_BASE_URL");
+        if (publicBase != null && !publicBase.trim().isEmpty())
+        {
+            String base = publicBase.trim();
+            if (!base.startsWith("http://") && !base.startsWith("https://"))
+            {
+                base = "https://" + base;
+            }
+            while (base.endsWith("/"))
+            {
+                base = base.substring(0, base.length() - 1);
+            }
+            return base + "/kconluck2026/sign/";
+        }
         String lanIp = System.getenv().getOrDefault("LAN_IP", "127.0.0.1");
         return "http://" + lanIp + "/kconluck2026/sign/";
     }

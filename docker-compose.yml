@@ -113,6 +113,9 @@ services:
       REDIS_DATABASE: 0
       REDIS_PASSWORD: ""
       LAN_IP: ${LAN_IP:-127.0.0.1}
+      # 域名 + HTTPS 部署时填完整基地址（如 https://kcon.example.com），
+      # 二维码用它生成；留空则回退 http://$LAN_IP
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       # JWT 签名密钥（必填，无默认值）。强度由 TokenService 启动时校验，不达标拒绝启动
       TOKEN_SECRET: ${TOKEN_SECRET:?必须在 .env 中配置 TOKEN_SECRET，生成方式：openssl rand -base64 48}
     healthcheck:
