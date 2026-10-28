@@ -108,7 +108,9 @@ public class KconVerifyServiceImpl implements IKconVerifyService
         // verify() 开头已对 phone 判空抛异常（控制器入口允许 null），此处 trim 安全
         String input = phone.trim();
 
-        if (!input.matches("\\d{11}"))
+        // 与签到/查询接口同一口径（1[3-9]\d{9}）：以前这里只校验 \d{11}，
+        // 12 开头的非法号会走到「与持有人不符」，报错误导兑奖台以为是冒领
+        if (!input.matches("1[3-9]\\d{9}"))
         {
             data.put("result", KconVerifyLog.RESULT_PHONE_MISMATCH);
             data.put("msg", "请输入完整 11 位手机号（为保证不被冒领，已不支持只报后四位）");

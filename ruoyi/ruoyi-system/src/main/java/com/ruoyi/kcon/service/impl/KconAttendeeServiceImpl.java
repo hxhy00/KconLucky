@@ -148,18 +148,17 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         String channel = attendee.getChannel() == null ? null : attendee.getChannel().trim();
         attendee.setChannel(channel);
         checkChannelAllowed(channel);
+        // draw_eligible 一律按映射重算，不接受客户端值：
+        // 映射是「参与抽奖」的唯一事实源，直连 API 显式传 1 可给非购票渠道开资格
+        Map<String, ChannelMapping> mappings = loadChannelMappings();
+        ChannelMapping mapping = mappings.get(channel);
+        attendee.setDrawEligible(mapping != null ? mapping.drawEligible : 0);
         // 尾号必须基于 trim 后的手机号计算：带尾部空格时先取后四位会得到 "001 " 这类脏值
         if (attendee.getPhone() != null)
         {
             attendee.setPhone(attendee.getPhone().trim());
         }
         attendee.setPhoneTail4(tail4(attendee.getPhone()));
-        // draw_eligible 列 NOT NULL：直连 API 新增时可能不带该字段，缺省按「否」
-        // （与导入口径一致：只有显式「是」才进池），避免插 null 触发 SQL 错误
-        if (attendee.getDrawEligible() == null)
-        {
-            attendee.setDrawEligible(0);
-        }
         return attendeeMapper.insertAttendee(attendee);
     }
 
@@ -171,15 +170,34 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
         // 只在渠道真被改过时才校验：存量里可能还有未配置映射的渠道（如历史遗留的「媒体」），
         // 若每次编辑都校验，这些人连补个邮箱都改不了，只能靠改库。
         // 校验与落库统一使用 trim 后的值，避免「白名单通过、库里带空格」。
+        boolean channelChanged = false;
         if (attendee.getChannel() != null && !attendee.getChannel().trim().isEmpty())
         {
             String channel = attendee.getChannel().trim();
             String oldChannel = old == null ? null : old.getChannel();
-            if (!channel.equals(oldChannel))
+            channelChanged = !channel.equals(oldChannel);
+            if (channelChanged)
             {
                 checkChannelAllowed(channel);
             }
             attendee.setChannel(channel);
+            // draw_eligible 一律按映射重算，不接受客户端值：
+            // 映射是「参与抽奖」的唯一事实源，直连 API 显式传 1 可给非购票渠道开资格；
+            // 而 resyncByChannel 又会把未锁定行按映射改回，形成「改了又被静默覆盖」。
+            // 渠道未变但映射缺失（历史遗留渠道）时不动该字段，避免破坏存量编辑
+            Map<String, ChannelMapping> mappings = loadChannelMappings();
+            ChannelMapping mapping = mappings.get(channel);
+            if (mapping != null)
+            {
+                attendee.setDrawEligible(mapping.drawEligible);
+                if (channelChanged)
+                {
+                    // 渠道变更时权益类型跟随新映射：旧的人工标记属于旧渠道，
+                    // 一并复位为「跟随映射」
+                    attendee.setTicketType(mapping.benefitType.isEmpty() ? null : mapping.benefitType);
+                    attendee.setTicketTypeManual(0);
+                }
+            }
         }
         if (attendee.getPhone() != null && !attendee.getPhone().trim().isEmpty())
         {
@@ -196,7 +214,12 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             attendee.setPhone(phone);
             attendee.setPhoneTail4(tail4(phone));
         }
-        markManualTicketTypeIfChanged(attendee, old);
+        // 渠道变更时 ticketType 已按新映射回填并复位标记，不是人工修改，
+        // 不再走「值变了就置人工标记」的判定（否则渠道一改就被误标成人工改过）
+        if (!channelChanged)
+        {
+            markManualTicketTypeIfChanged(attendee, old);
+        }
         int rows = attendeeMapper.updateAttendee(attendee);
         // 乐观锁：带了版本号却更新 0 行，说明这条名单在编辑期间被别人改过（或已被删除）。
         // 与其静默覆盖对方的修改，不如明确拒绝让人重新打开——现场两人同时补录名单时，

@@ -48,7 +48,7 @@
                 ? 'border-rose-500/60 focus:border-rose-400'
                 : 'border-white/10 focus:border-brand'"
               @input="onKeywordInput"
-              @keyup.enter="doQuery"
+              @keyup.enter="onEnter"
             />
             <button
               v-if="keyword"
@@ -351,13 +351,22 @@ onMounted(() => {
   phoneEl.value && phoneEl.value.focus()
 })
 
-// 输入即归一化：全角转半角、去掉分隔符、截断到 11 位
+// 输入即归一化：全角转半角、去掉分隔符、截断到 11 位。
+// IME 组合输入期间不改写：全角输入法下改写 value 会吞字/光标跳动，
+// 等 compositionend 后的最后一次 input 事件（isComposing=false）再归一化
 function onKeywordInput(e) {
+  if (e.isComposing || e.keyCode === 229) return
   const digits = digitsOnly(e.target.value)
   keyword.value = digits
   if (e.target.value !== digits) {
     e.target.value = digits
   }
+}
+
+// IME 确认候选词的 Enter 也会触发 keyup：组合期间不查询
+function onEnter(e) {
+  if (e.isComposing || e.keyCode === 229) return
+  doQuery()
 }
 
 function clearKeyword() {
@@ -493,11 +502,15 @@ async function doCheckin() {
 
 async function doCheckinById(id, phone) {
   error.value = ''
+  // 与 doQuery 同一序号机制：提交在途时输入若变化（watch 自增 lookupSeq），
+  // 旧提交的结果作废，不再把旧号码的成功页盖回来
+  const seq = ++lookupSeq
   loading.value = true
   try {
     // 一并提交完整手机号：后端据此做二次校验，
     // 防止有人只拿 attendeeId 替他人签到（公网版加固）
     const res = await submitCheckin(id, phone)
+    if (seq !== lookupSeq) return
     if (res.code === 200) {
       result.value = res.data
       step.value = 'success'
@@ -506,9 +519,10 @@ async function doCheckinById(id, phone) {
       error.value = res.msg || '签到失败，请联系现场工作人员'
     }
   } catch (e) {
+    if (seq !== lookupSeq) return
     error.value = '网络异常，请重试'
   } finally {
-    loading.value = false
+    if (seq === lookupSeq) loading.value = false
   }
 }
 

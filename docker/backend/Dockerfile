@@ -46,4 +46,6 @@ RUN set -eux; \
 
 COPY --from=build /src/ruoyi-admin/target/ruoyi-admin.jar app.jar
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# exec 让 java 成为 1 号进程直接接收信号：sh -c 包一层时 SIGTERM 不会转发，
+# docker stop 要等满 10s 超时后被 SIGKILL，无优雅关闭（进行中的抽奖事务被硬断）
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

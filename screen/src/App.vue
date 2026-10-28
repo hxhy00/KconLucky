@@ -181,6 +181,9 @@ const resultTier = ref('')
 const shortfall = ref(0)
 // 揭晓动画进行中：轮询发现的「新中奖」其实正是本次抽出的同一批，不要来打断
 let revealing = false
+// 组件已卸载：卸载后揭晓循环不再新建滚动定时器——
+// 卸载发生在 await sleep 期间时，之后的 rollTo 会新建 interval 且再无人清理
+let disposed = false
 
 // 端口号滚动定时器句柄（rollTo 启动 / stopRolling 清理）。
 // 注意：必须声明——<script setup> 编译为 ESM 严格模式，给未声明变量赋值会抛
@@ -194,6 +197,10 @@ let currentVersion = null
 // 已经「看到」过的最近中奖 id 与批次：用来识别管理端抽奖控制台代抽的新中奖
 let knownWinnerId = null
 let knownBatchKey = null
+// 已见批次的最新中奖时间（batchKey 第二段）水位：管理端作废最近一档后
+// lastBatch 会退化成更早批次，没有水位的话退化批次会被误当成新抽奖，
+// 大屏把上一轮的中奖动画完整重播一遍
+let knownBatchTime = null
 // 揭晓动画进行中时轮询送来的新批次：先挂起，等当前批次播完由 revealAll 的
 // finally 补播。不挂起的话该批次会被 `!revealing` 静默丢弃，现场就是「少播一次特效」。
 // 用队列而非单槽：主持人手快连抽两档、或单档人数多导致揭晓耗时长时，
@@ -404,6 +411,11 @@ function sameDraw(a, b) {
   return head(a) === head(b)
 }
 
+/** batchKey 第二段（yyyy-MM-dd HH:mm:ss）：字典序即时间序，可直接比较 */
+function batchTimeOf(key) {
+  return String(key || '').split('@')[1] || null
+}
+
 /** 把服务端快照映射到本地 phase，并接管「管理端抽出的整批中奖」 */
 function syncFromServer(d) {
   const lw = d.lastWinner
@@ -413,7 +425,10 @@ function syncFromServer(d) {
     // 刷新后不该凭空弹出上一轮的结果：只记住，不展示
     firstLoadDone = true
     if (lw && lw.winnerId) knownWinnerId = lw.winnerId
-    if (batch && batch.batchKey) knownBatchKey = batch.batchKey
+    if (batch && batch.batchKey) {
+      knownBatchKey = batch.batchKey
+      knownBatchTime = batchTimeOf(batch.batchKey)
+    }
     if (phase.value === 'idle' && poolEmpty.value) phase.value = 'empty'
     return
   }
@@ -423,52 +438,66 @@ function syncFromServer(d) {
 
     if (prevKey && sameDraw(prevKey, batch.batchKey)) {
       // 同一次抽奖、只有人数变了 = 批次里有人被作废（可能在管理端操作）：
-      // 汇总页就地同步，不重播揭晓动画
+      // 汇总页就地同步，不重播揭晓动画。shortfall 一并同步：
+      // 后端按作废后的 drawnCount 重算缺口，不同步的话「还差 N 位」停留旧值
       knownBatchKey = batch.batchKey
       if (lw && lw.winnerId) knownWinnerId = lw.winnerId
       if (phase.value === 'result') {
         resultList.value = (batch.winners || []).map(w => ({ ...w }))
+        shortfall.value = batch.shortfall ?? 0
       }
-    } else if (!revealing) {
-      // 新的整批：抽奖全程由管理端「抽奖控制台」发起，大屏检测到新 batchKey
-      // 就播放揭晓动画。revealing 为真时说明正是本次揭晓触发的同步，不要重播。
-      // 记账在开播前：配合 revealAll 的 try/finally，即使本批动画中途异常，
-      // revealing 也会复位，下一批照常播放，不会出现「卡死后全批失效」
-      knownBatchKey = batch.batchKey
-      if (lw && lw.winnerId) knownWinnerId = lw.winnerId
-      // gap：池子不足时本批少抽的人数（后端 lastBatch.shortfall），
-      // 汇总页据此提示「还差 N 位」；后端不下发时按 0 处理
-      revealAll(batch.winners || [], batch.tierName, batch.shortfall ?? 0)
-      return
     } else {
-      // 揭晓进行中收到新批次：入队待补播。不在此记账 knownBatchKey，
-      // 让这批在 finally 补播时仍走「新批次」分支，避免被当成已消费而漏播
-      const entry = {
-        batchKey: batch.batchKey,
-        lastWinnerId: lw && lw.winnerId ? lw.winnerId : null,
-        winners: batch.winners || [],
-        tierName: batch.tierName,
-        gap: batch.shortfall ?? 0
-      }
-      // 同一次抽奖（batchKey 同前缀）已在队列里时只替换、不追加：
-      // 揭晓期间同批有人被作废会带来同一批的新快照（人数变化），
-      // 若直接 push，补播时会把这一批连播两遍（后一遍人数少），
-      // 现场表现为同一档特效莫名重复。替换时保留原位置，维持先后顺序
-      const dupIdx = pendingBatches.findIndex(p => sameDraw(p.batchKey, entry.batchKey))
-      if (dupIdx >= 0) {
-        pendingBatches[dupIdx] = entry
+      // 撤回导致的退化批次：管理端作废最近一档后，lastBatch 会回退到
+      // 更早的批次（时间不新于已见水位），这不是新抽奖——不拦截的话
+      // 大屏会把上一轮的中奖动画完整重播一遍
+      const bt = batchTimeOf(batch.batchKey)
+      if (knownBatchTime && bt && bt <= knownBatchTime) {
+        knownBatchKey = batch.batchKey
         return
       }
-      if (pendingBatches.length >= MAX_PENDING_BATCHES) {
-        // 队列已满：丢最旧的。现场宁可漏播最早那一批，也不能让大屏无限连播
-        const dropped = pendingBatches.shift()
-        console.warn('[syncFromServer] 待播批次积压超上限，丢弃最旧一批', dropped && dropped.batchKey)
+      if (bt) knownBatchTime = bt
+      if (!revealing) {
+        // 新的整批：抽奖全程由管理端「抽奖控制台」发起，大屏检测到新 batchKey
+        // 就播放揭晓动画。revealing 为真时说明正是本次揭晓触发的同步，不要重播。
+        // 记账在开播前：配合 revealAll 的 try/finally，即使本批动画中途异常，
+        // revealing 也会复位，下一批照常播放，不会出现「卡死后全批失效」
+        knownBatchKey = batch.batchKey
+        if (lw && lw.winnerId) knownWinnerId = lw.winnerId
+        // gap：池子不足时本批少抽的人数（后端 lastBatch.shortfall），
+        // 汇总页据此提示「还差 N 位」；后端不下发时按 0 处理
+        revealAll(batch.winners || [], batch.tierName, batch.shortfall ?? 0)
+        return
+      } else {
+        // 揭晓进行中收到新批次：入队待补播。不在此记账 knownBatchKey，
+        // 让这批在 finally 补播时仍走「新批次」分支，避免被当成已消费而漏播
+        const entry = {
+          batchKey: batch.batchKey,
+          lastWinnerId: lw && lw.winnerId ? lw.winnerId : null,
+          winners: batch.winners || [],
+          tierName: batch.tierName,
+          gap: batch.shortfall ?? 0
+        }
+        // 同一次抽奖（batchKey 同前缀）已在队列里时只替换、不追加：
+        // 揭晓期间同批有人被作废会带来同一批的新快照（人数变化），
+        // 若直接 push，补播时会把这一批连播两遍（后一遍人数少），
+        // 现场表现为同一档特效莫名重复。替换时保留原位置，维持先后顺序
+        const dupIdx = pendingBatches.findIndex(p => sameDraw(p.batchKey, entry.batchKey))
+        if (dupIdx >= 0) {
+          pendingBatches[dupIdx] = entry
+          return
+        }
+        if (pendingBatches.length >= MAX_PENDING_BATCHES) {
+          // 队列已满：丢最旧的。现场宁可漏播最早那一批，也不能让大屏无限连播
+          const dropped = pendingBatches.shift()
+          console.warn('[syncFromServer] 待播批次积压超上限，丢弃最旧一批', dropped && dropped.batchKey)
+        }
+        pendingBatches.push(entry)
+        return
       }
-      pendingBatches.push(entry)
-      return
     }
   } else if (!batch && knownBatchKey != null) {
-    // 整批都被作废了
+    // 整批都被作废了。knownBatchTime 保留：它是「已见最新中奖时间」水位，
+    // 清空的话继续撤回更早批次时，lastBatch 的退化批次会被误当成新抽奖
     knownBatchKey = null
     knownWinnerId = null
     // 队列里可能还压着这一批（或更早批次）的待播快照，源头已作废：
@@ -535,10 +564,13 @@ async function playReveal(winners, tierName, gap) {
   lastWinnerId = winners[winners.length - 1].winnerId
 
   for (let i = 0; i < winners.length; i++) {
+    // 卸载后停止揭晓：组件已销毁，继续跑只会新建无人清理的滚动定时器
+    if (disposed) return
     revealIndex.value = i
     revealSettled.value = false
     phase.value = 'revealing'
     await sleep(100)
+    if (disposed) return
     // 多人时每个滚短一点，单人时滚久一点，整体节奏都在舞台上可控
     await rollTo(winners[i].portNo, winners.length > 1 ? 1100 : 1600)
     revealSettled.value = true
@@ -629,6 +661,9 @@ onMounted(() => {
   // 用递归 setTimeout 而非 setInterval：连续失败时按 pollInterval 退避
   // （1.5s → 3s → 6s → 12s 封顶），成功即复位；fixed interval 做不到这点
   const scheduleNext = () => {
+    // 卸载后不再续：请求在途时卸载组件，await 返回后若无此检查
+    // 仍会重新 setTimeout，形成永不停止的轮询（HMR 下叠加多套）
+    if (disposed) return
     pollTimer = setTimeout(async () => {
       await loadStatus()
       scheduleNext()
@@ -638,6 +673,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  disposed = true
   clearTimeout(pollTimer)
   stopRolling()
 })

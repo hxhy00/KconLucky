@@ -232,21 +232,22 @@ class KconAttendeeServiceImplTest
             assertThat(a.getPhone()).isEqualTo("13800000001");
             assertThat(a.getPhoneTail4()).isEqualTo("0001");
             assertThat(a.getChannel()).isEqualTo("嘉宾");
-            assertThat(a.getDrawEligible()).isZero();
+            // draw_eligible 按映射重算（映射是唯一事实源），不再取客户端值或缺省 0
+            assertThat(a.getDrawEligible()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("显式传入参与抽奖标记时保留")
-        void keepsExplicitDrawEligible()
+        @DisplayName("显式传入参与抽奖标记时以映射为准覆盖（直连 API 不能绕过白名单开资格）")
+        void overridesExplicitDrawEligible()
         {
-            when(channelMappingService.selectAll()).thenReturn(List.of(mapping("嘉宾", "午餐", 1)));
+            when(channelMappingService.selectAll()).thenReturn(List.of(mapping("嘉宾", "午餐", 0)));
             when(attendeeMapper.insertAttendee(any())).thenReturn(1);
 
             KconAttendee a = attendee(null, "13800000001", "嘉宾");
             a.setDrawEligible(1);
             service.insertAttendee(a);
 
-            assertThat(a.getDrawEligible()).isEqualTo(1);
+            assertThat(a.getDrawEligible()).isZero();
         }
     }
 
@@ -270,15 +271,18 @@ class KconAttendeeServiceImplTest
         }
 
         @Test
-        @DisplayName("渠道未改时不重复做白名单校验（存量脏渠道仍可改其它字段）")
+        @DisplayName("渠道未改时不做白名单校验（存量脏渠道仍可改其它字段，资格也不被误改）")
         void skipsWhitelistWhenChannelUnchanged()
         {
             when(attendeeMapper.selectAttendeeById(1L)).thenReturn(attendee(1L, "13800000001", "媒体"));
             when(attendeeMapper.updateAttendee(any())).thenReturn(1);
 
-            service.updateAttendee(attendee(1L, "13800000001", "媒体"));
+            KconAttendee incoming = attendee(1L, "13800000001", "媒体");
+            service.updateAttendee(incoming);
 
-            verify(channelMappingService, never()).selectAll();
+            // 渠道未变：不做白名单校验（未配置映射的存量渠道不抛异常），
+            // 映射缺失时也不重算资格，避免破坏存量编辑
+            verify(attendeeMapper).updateAttendee(incoming);
         }
 
         @Test
@@ -305,7 +309,6 @@ class KconAttendeeServiceImplTest
             service.updateAttendee(incoming);
 
             assertThat(incoming.getChannel()).isEqualTo("嘉宾");
-            verify(channelMappingService, never()).selectAll();
         }
 
         @Test

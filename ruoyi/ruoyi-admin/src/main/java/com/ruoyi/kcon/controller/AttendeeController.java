@@ -137,6 +137,12 @@ public class AttendeeController extends BaseController
         {
             return error("请选择文件");
         }
+        // 文件大小上限：xlsx 是 zip 容器，压缩炸弹可把内存撑爆（readRows 会全量解析整表）；
+        // 2 万行名单实际只有几百 KB，10MB 已远超需要
+        if (file.getSize() > 10 * 1024 * 1024L)
+        {
+            return error("文件过大（上限 10MB），请检查是否选错文件");
+        }
         String name = file.getOriginalFilename();
         try (InputStream is = file.getInputStream())
         {
@@ -167,6 +173,11 @@ public class AttendeeController extends BaseController
         if (file == null || file.isEmpty())
         {
             return error("请选择文件");
+        }
+        // 与 importData 同一上限：预检同样会全量解析整表
+        if (file.getSize() > 10 * 1024 * 1024L)
+        {
+            return error("文件过大（上限 10MB），请检查是否选错文件");
         }
         try (InputStream is = file.getInputStream())
         {
