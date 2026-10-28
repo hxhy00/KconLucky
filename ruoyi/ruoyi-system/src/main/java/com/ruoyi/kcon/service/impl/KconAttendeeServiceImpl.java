@@ -623,6 +623,16 @@ public class KconAttendeeServiceImpl implements IKconAttendeeService
             parsed.rows.add(a);
         }
 
+        // 一行有效数据都没有（表头以下为空、或全部行因手机号/姓名/渠道为空被跳过）：
+        // 以前 blockers 为空会放行，replace 模式先清空名单再循环 0 次，返回「新增 0」成功——
+        // 现场传一份空模板就把名单静默清空。这里补一条 blocker，预检显示 BLOCK、
+        // 正式导入抛异常中止，两条路径共用同一判断
+        if (parsed.rows.isEmpty() && parsed.blockers.isEmpty())
+        {
+            addBlocker(parsed.blockers, 0,
+                    "没有可导入的有效数据行（表头以下为空，或所有行都因手机号/姓名/渠道来源为空被跳过）");
+        }
+
         return parsed;
     }
 

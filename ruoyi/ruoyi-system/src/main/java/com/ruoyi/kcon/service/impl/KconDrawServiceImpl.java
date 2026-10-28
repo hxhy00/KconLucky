@@ -186,6 +186,18 @@ public class KconDrawServiceImpl implements IKconDrawService
                 lb.put("tierName", last.getTierName());
                 lb.put("count", batchViews.size());
                 lb.put("winners", batchViews);
+                // 池子不足时本批少抽的人数：draw() 时的 shortfall = remain - drawCount，
+                // 抽完后恰好等于「档位总量 - 当前已抽」。大屏据此提示「还差 N 位」；
+                // 批次后有人被作废时 drawnCount 回退、缺口变大，提示口径一致。
+                // 以前 lastBatch 不带这个字段，大屏的缺口提示永远不出现（静默失效）
+                KconPrize batchPrize = prizeMapper.selectPrizeById(last.getPrizeId());
+                int shortfall = 0;
+                if (batchPrize != null && batchPrize.getQuantity() != null)
+                {
+                    int drawnCount = batchPrize.getDrawnCount() == null ? 0 : batchPrize.getDrawnCount();
+                    shortfall = Math.max(0, batchPrize.getQuantity() - drawnCount);
+                }
+                lb.put("shortfall", shortfall);
                 data.put("lastBatch", lb);
             }
         }

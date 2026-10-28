@@ -345,10 +345,26 @@ async function loadStatus(force = false) {
   if (statusInflight && !force) return
   statusInflight = true
   const seq = ++statusReqSeq
+  // 只把网络请求包进 try：syncFromServer 等后续处理若抛编程异常，
+  // 以前会被当成「网络失败」吞掉——不落日志、误亮「失去连接」遮罩，
+  // 而网络其实正常（正是掩盖 ticker 根因的同一类缺陷）
+  let res = null
+  let failed = false
   try {
-    const res = await fetchStatus(currentVersion)
-    // 已经有更新的请求发出去了 → 本次结果作废，防止旧响应覆盖新状态
-    if (seq !== statusReqSeq) return
+    res = await fetchStatus(currentVersion)
+  } catch (e) {
+    failed = true
+    // 单次抖动不闪遮罩；连续失败才判定为断开，恢复后自动消失
+    failStreak += 1
+    if (failStreak >= 3) offline.value = true
+    // 失败退避：指数加倍轮询间隔，恢复后复位（成功时在下面复位）
+    pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
+  } finally {
+    // 只有最新那个请求才有资格复位标记，否则会把后来者的在途状态提前清掉
+    if (seq === statusReqSeq) statusInflight = false
+  }
+  if (failed || seq !== statusReqSeq) return
+  try {
     if (res.code === 200) {
       statusLoaded = true
       failStreak = 0
@@ -372,18 +388,13 @@ async function loadStatus(force = false) {
         pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
       } else {
         failStreak += 1
-        if (failStreak >= 3 && res.code !== 4001) offline.value = true
+        if (failStreak >= 3) offline.value = true
       }
     }
   } catch (e) {
-    // 单次抖动不闪遮罩；连续失败才判定为断开，恢复后自动消失
-    failStreak += 1
-    if (failStreak >= 3) offline.value = true
-    // 失败退避：指数加倍轮询间隔，恢复后复位（上面 code===200 分支）
-    pollInterval = Math.min(pollInterval * 2, POLL_MAX_INTERVAL)
-  } finally {
-    // 只有最新那个请求才有资格复位标记，否则会把后来者的在途状态提前清掉
-    if (seq === statusReqSeq) statusInflight = false
+    // 编程异常（如状态映射出错）：留下可观测证据，不吞掉也不当成网络失败；
+    // 捕获而非放任抛出——否则 scheduleNext 的 await 链会断，轮询直接停摆
+    console.error('[loadStatus] 状态处理异常', e)
   }
 }
 
@@ -425,7 +436,9 @@ function syncFromServer(d) {
       // revealing 也会复位，下一批照常播放，不会出现「卡死后全批失效」
       knownBatchKey = batch.batchKey
       if (lw && lw.winnerId) knownWinnerId = lw.winnerId
-      revealAll(batch.winners || [], batch.tierName, 0)
+      // gap：池子不足时本批少抽的人数（后端 lastBatch.shortfall），
+      // 汇总页据此提示「还差 N 位」；后端不下发时按 0 处理
+      revealAll(batch.winners || [], batch.tierName, batch.shortfall ?? 0)
       return
     } else {
       // 揭晓进行中收到新批次：入队待补播。不在此记账 knownBatchKey，
@@ -435,7 +448,7 @@ function syncFromServer(d) {
         lastWinnerId: lw && lw.winnerId ? lw.winnerId : null,
         winners: batch.winners || [],
         tierName: batch.tierName,
-        gap: 0
+        gap: batch.shortfall ?? 0
       }
       // 同一次抽奖（batchKey 同前缀）已在队列里时只替换、不追加：
       // 揭晓期间同批有人被作废会带来同一批的新快照（人数变化），

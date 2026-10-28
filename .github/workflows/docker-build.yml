@@ -1,10 +1,10 @@
 # =============================================================
 # 镜像构建：backend（Spring Boot）/ web（三端静态 + nginx）
 # -------------------------------------------------------------
-# 产物推 GitHub Container Registry（GHCR），tag 约定与 docs/04-部署运行.md §8.5
-# 的内网 Harbor 一致：
-#   latest                 跟最新
-#   sha-<git 短 SHA>       可精确回滚
+# 产物推 GitHub Container Registry（GHCR），tag 约定：
+#   latest                 跟最新（仅 push 到 main 时打）
+#   sha-<git 短 SHA>       可精确回滚（每次构建都打）
+# 与 docs/04-部署运行.md §8.5 的内网 Harbor（rc / rc-<sha>）语义对应但地址不同；
 # 服务器侧把 docker-compose.yml 的 image 换成 ghcr.io 地址（或 digest）即可
 # docker compose pull && up -d --no-build，不再需要 docker save | ssh | docker load。
 #
@@ -71,6 +71,16 @@ jobs:
           IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          # latest 只在「push 到 main」时打：tag 构建（可能用旧提交打 v*）与
+          # 手动触发（可能从任意分支）都会把 latest 回退，服务器 pull latest 变旧版
+          TAGS="${IMAGE}:sha-$(git rev-parse --short HEAD)"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            TAGS="${TAGS}
+          ${IMAGE}:latest"
+          fi
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$TAGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -78,11 +88,10 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          # PR 与本地手动触发都不推：只有 main 分支与 tag 才产出可部署镜像
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ steps.tags.outputs.image }}:sha-${{ steps.tags.outputs.sha }}
-            ${{ steps.tags.outputs.image }}:latest
+          # 只有 push 到 main 才推送：PR 只验证构建；手动触发（workflow_dispatch）
+          # 可能从任意分支发起，推了会用非 main 代码覆盖 latest
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.tags.outputs.tags }}
           # 复用上一轮层缓存：三端前端 npm ci 与 maven 依赖下载是最慢的两步
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}

@@ -88,6 +88,10 @@ export default {
       receiving: false,
       verifyData: null,
       verifyResult: null,
+      // 核验请求序号：只有最新一次核验的响应才允许写回。
+      // 没有序号时：快速改输入连按核验，旧请求晚到会覆盖新结果，
+      // 界面显示 A 的人、输入框是 B，而「确认发放」仍可点——现场会发错奖品
+      verifySeq: 0,
       sessions: [],
       form: { portNo: null, phone: null },
       // 核验通过时的输入快照：发放一律以快照为准，避免与输入框当前值不一致
@@ -113,8 +117,11 @@ export default {
     "form.phone": "resetVerify"
   },
   methods: {
-    // 作废上一次核验结果（输入改动、核验失败时调用）
+    // 作废上一次核验结果（输入改动、新核验发起时调用）。
+    // 序号自增：让在途的核验响应全部作废——输入框在核验期间仍可编辑，
+    // 旧请求晚到时若不作废，会把上一个人的核验结果盖回来
     resetVerify() {
+      this.verifySeq++
       this.verifyData = null
       this.verifyResult = null
       this.verifiedBody = null
@@ -137,18 +144,29 @@ export default {
       return { portNo: this.form.portNo, phone: this.form.phone }
     },
     handleVerify() {
+      // verifying 守卫必须放在最前：输入框的 Enter 键绕过按钮 loading，
+      // 核验进行中再按 Enter 会并发第二个请求，两个响应互相覆盖
+      if (this.verifying) return
       this.$refs["verifyForm"].validate(valid => {
         if (!valid) return
         this.verifying = true
+        // 发起即作废旧结果并取序号：响应回来时序号已变（期间输入又改过）就丢弃
+        this.resetVerify()
+        const seq = this.verifySeq
         const body = this.buildBody()
         verify(body).then(res => {
+          if (seq !== this.verifySeq) return
           this.verifyData = res.data
           this.verifyResult = res.data.result
           // 记录本次核验对应的输入，发放时只认这份快照
           this.verifiedBody = body
-        }).catch(() => {
-          this.resetVerify()
-        }).finally(() => { this.verifying = false })
+        }).catch(() => {}).finally(() => {
+          // 无条件复位：入口的 verifying 守卫保证同时最多一个在途请求，
+          // 旧响应返回时不可能有新请求在飞行，不存在「提前解锁」的场景；
+          // 若按 seq 条件复位，核验期间改输入（watch 自增 seq）会让旧响应
+          // 跳过复位，而新请求又被守卫挡住——按钮永久 loading，页面报废
+          this.verifying = false
+        })
       })
     },
     handleReceive() {

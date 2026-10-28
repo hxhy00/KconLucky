@@ -577,7 +577,7 @@ class KconAttendeeServiceImplTest
         }
 
         @Test
-        @DisplayName("逐行校验：手机号为空/格式错、姓名为空、渠道为空均计入跳过")
+        @DisplayName("逐行校验：手机号为空/格式错、姓名为空、渠道为空均计入跳过；全无效时整批拦截")
         void reportsRowSkipDetails()
         {
             InputStream is = csv("姓名,手机号,渠道来源\n"
@@ -592,12 +592,18 @@ class KconAttendeeServiceImplTest
                     .containsEntry("totalRows", 4)
                     .containsEntry("willSkip", 4)
                     .containsEntry("willInsert", 0)
-                    .containsEntry("level", "OK");
+                    // 全部行无效 = 没有可导入的数据行：以前 level=OK 会放行，
+                    // replace 模式下会先清空名单再导入 0 行（静默清库），现已整批拦截
+                    .containsEntry("level", "BLOCK");
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> details = (List<Map<String, Object>>) data.get("skipDetails");
             assertThat(details).hasSize(4);
             assertThat(details).extracting(d -> d.get("reason"))
                     .containsExactly("手机号为空", "手机号格式不正确：1380000", "姓名为空", "渠道来源为空");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> blockers = (List<Map<String, Object>>) data.get("blockers");
+            assertThat(blockers).hasSize(1);
+            assertThat((String) blockers.get(0).get("reason")).contains("没有可导入的有效数据行");
         }
 
         @Test

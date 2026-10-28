@@ -100,7 +100,10 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       BACKEND_PORT: 8080
-      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError}
+      # 日志路径必须指向挂载卷 /app/logs：logback 默认 /home/ruoyi/logs，
+      # 不设的话 ./logs/backend 卷永远为空，容器重建即丢日志
+      LOG_PATH: /app/logs
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError}
       SPRING_DATASOURCE_DRUID_MASTER_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-kcon_lucky}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_DRUID_MASTER_USERNAME: root
       SPRING_DATASOURCE_DRUID_MASTER_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}

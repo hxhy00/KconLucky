@@ -329,9 +329,12 @@ const phoneHint = computed(() => {
 })
 
 // 输入一变就清掉上一次的找回结果，避免「改了手机号、下面还显示旧端口号」；
-// 同时让在途的找回请求作废，防止旧号码的结果晚到后覆盖新状态
+// 同时让在途的找回/查询请求作废，防止旧号码的结果晚到后覆盖新状态。
+// loading 一并复位：在途请求已被作废，其 finally 会因序号不符跳过复位，
+// 不在这里解锁的话按钮会一直禁用到请求超时
 watch(keyword, () => {
   lookupSeq++
+  loading.value = false
   lookupResult.value = null
   lookupError.value = ''
   error.value = ''
@@ -422,7 +425,8 @@ async function doLookup() {
     if (seq !== lookupSeq) return
     lookupError.value = '查询失败，请检查网络后重试'
   } finally {
-    loading.value = false
+    // 只有最新一次请求才有资格复位 loading；被作废的旧请求由 watch 复位
+    if (seq === lookupSeq) loading.value = false
   }
 }
 
@@ -443,9 +447,14 @@ async function doQuery() {
   // 收起键盘：确认页信息较多，键盘会挡住「确认签到」按钮
   phoneEl.value && phoneEl.value.blur()
   phoneInput.value = kw
+  // 请求序号：与 doLookup 同一机制。输入在请求途中变化时 watch 会自增 lookupSeq，
+  // 旧响应回来后序号不符即丢弃——否则共用签到设备上，旧号码的结果晚到
+  // 会把上一个人的姓名与端口号展示出来（隐私泄露）
+  const seq = ++lookupSeq
   loading.value = true
   try {
     const res = await queryAttendee(kw)
+    if (seq !== lookupSeq) return
     if (res.code !== 200) {
       error.value = res.msg || '查无此人，请联系现场工作人员'
       return
@@ -458,16 +467,17 @@ async function doQuery() {
     if (data.signed && data.attendee) {
       // 已签到：走只读的 lookup 回查原端口号，不再调用 submit——
       // submit 会写签到记录，已签到的人点「查询」不该产生写操作
-      await showExistingCheckin(kw)
+      await showExistingCheckin(kw, seq)
       return
     }
     person.value = data.attendee
     step.value = 'confirm'
     scrollTop()
   } catch (e) {
+    if (seq !== lookupSeq) return
     error.value = '网络异常，请重试或联系现场工作人员'
   } finally {
-    loading.value = false
+    if (seq === lookupSeq) loading.value = false
   }
 }
 
@@ -504,10 +514,12 @@ async function doCheckinById(id, phone) {
 
 // 已签到用户：只读回查原端口号，复用「签到成功」页展示。
 // lookup 不返回 repeat，这里补成 true —— 语义就是「已完成签到」。
-async function showExistingCheckin(phone) {
+// seq：沿用 doQuery 的请求序号，输入在回查途中变化时结果作废
+async function showExistingCheckin(phone, seq) {
   error.value = ''
   try {
     const res = await lookup(phone)
+    if (seq !== undefined && seq !== lookupSeq) return
     const d = res.data || {}
     if (res.code !== 200 || !d.signed || !d.portNo) {
       error.value = d.msg || res.msg || '签到信息读取失败，请联系现场工作人员'
@@ -523,6 +535,7 @@ async function showExistingCheckin(phone) {
     step.value = 'success'
     scrollTop()
   } catch (e) {
+    if (seq !== undefined && seq !== lookupSeq) return
     error.value = '网络异常，请重试'
   }
 }

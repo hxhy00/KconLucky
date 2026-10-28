@@ -30,7 +30,11 @@ WORKDIR /app
 # !! 这里的值会被 docker-compose.yml 的 environment.JAVA_OPTS 覆盖 !!
 # compose 里写的是 ${JAVA_OPTS:-<同上默认值>}，两处默认值必须保持一致；
 # 只想临时调参时改 .env 即可，不要只改本文件——改了也不生效。
-ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError"
+#
+# -Xss512k：Tomcat max-threads=800（application.yml），默认 1MB 栈即 800MB，
+# 叠加 Xmx512m + Metaspace192m 必超 mem_limit 850m 被 OOM Kill；
+# 本系统并发极低，512k 线程栈足够（800 线程 ≈ 400MB 上限，实际远达不到）
+ENV TZ=Asia/Shanghai JAVA_OPTS="-Xms256m -Xmx512m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError"
 
 # mysql-client：管理端「数据迁移」功能需要调 mysqldump / mysql
 # 导出全量 .sql 备份与从 .sql 恢复（需求 AC-11），不自研 SQL 导出器。
