@@ -1,10 +1,13 @@
 # =============================================================
 # 镜像构建：backend（Spring Boot）/ web（三端静态 + nginx）
 # -------------------------------------------------------------
-# 产物推 GitHub Container Registry（GHCR），tag 约定：
-#   latest                 跟最新（仅 push 到 main 时打）
-#   sha-<git 短 SHA>       可精确回滚（每次构建都打）
-# 与 docs/04-部署运行.md §8.5 的内网 Harbor（rc / rc-<sha>）语义对应但地址不同；
+# 产物推 GitHub Container Registry（GHCR），tag 采用 OSS 常见约定：
+#   sha-<短SHA>            每次构建都有，不可变，生产按这个锁版本/回滚
+#   edge                   main 分支最新构建（等价 nightly/dev 通道）
+#   <git tag>              打什么 tag 就产出什么镜像 tag（如 v1.2.3、v1.2.3-rc.1）
+#   1.2.3 / 1.2 / 1        仅语义化正式版（v1.2.3）产出，版本别名
+#   latest                 仅语义化正式版产出；预发布与 main 推送都不会动它
+# 与 docs/04-部署运行.md §8.5 的内网 Harbor 流程并存，地址与命名各成一套；
 # 服务器侧把 docker-compose.yml 的 image 换成 ghcr.io 地址（或 digest）即可
 # docker compose pull && up -d --no-build，不再需要 docker save | ssh | docker load。
 #
@@ -34,8 +37,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 防挂起构建长期占用 runner（默认 360 分钟）
-    timeout-minutes: 30
+    # 防挂起构建长期占用 runner（默认 360 分钟）。
+    # 双架构冷缓存实测：backend ≈14.5m、web ≈12m；两条流水线并行（如同时 push
+    # main 与打 tag）会争抢同一份 GHA 缓存，实测可翻倍到 30m+，故留到 60m。
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -80,13 +85,38 @@ jobs:
           IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          # latest 只在「push 到 main」时打：tag 构建（可能用旧提交打 v*）与
-          # 手动触发（可能从任意分支）都会把 latest 回退，服务器 pull latest 变旧版
-          TAGS="${IMAGE}:sha-$(git rev-parse --short HEAD)"
+          SHA=$(git rev-parse --short HEAD)
+          # 每次构建必有不可变 tag，用于精确回滚
+          TAGS="${IMAGE}:sha-${SHA}"
+
+          # 分支构建：main → edge。latest 只给正式版本（OSS 惯例），
+          # 否则「打到旧提交的 tag」会把 latest 往回带，pull latest 的机器变旧版
           if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             TAGS="${TAGS}
-          ${IMAGE}:latest"
+          ${IMAGE}:edge"
           fi
+
+          # git tag 构建：tag 名直接做镜像 tag（v1.2.3-rc.1 → :v1.2.3-rc.1）。
+          # 语义化正式版再加 1.2.3 / 1.2 / 1 别名与 latest（对齐 nginx/postgres 习惯）；
+          # 预发布（带 -rc/-beta 后缀）只产自身，never 覆盖 latest。
+          case "${GITHUB_REF}" in
+            refs/tags/*)
+              TAG_NAME=$(echo "${GITHUB_REF#refs/tags/}" | tr '[:upper:]' '[:lower:]')
+              TAGS="${TAGS}
+          ${IMAGE}:${TAG_NAME}"
+              if echo "${TAG_NAME}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+                VER="${TAG_NAME#v}"
+                MAJOR="${VER%%.*}"
+                MINOR="${VER#*.}"
+                MINOR="${MINOR%%.*}"
+                TAGS="${TAGS}
+          ${IMAGE}:${VER}
+          ${IMAGE}:${MAJOR}.${MINOR}
+          ${IMAGE}:${MAJOR}
+          ${IMAGE}:latest"
+              fi
+              ;;
+          esac
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "$TAGS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
@@ -102,9 +132,11 @@ jobs:
           # 可能从任意分支发起，推了会用非 main 代码覆盖 latest
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.tags.outputs.tags }}
-          # 复用上一轮层缓存：三端前端 npm ci 与 maven 依赖下载是最慢的两步
+          # 复用上一轮层缓存：三端前端 npm ci 与 maven 依赖下载是最慢的两步。
+          # 只有 push 到 main 才「写」缓存：打 tag / 手动触发若同时写同一 scope，
+          # 两条流水线会互相覆盖缓存条目（实测并行时构建时间翻倍），这里让它们只读。
           cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
