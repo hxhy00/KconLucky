@@ -301,6 +301,36 @@ class KconDrawServiceImplTest
         }
 
         @Test
+        @DisplayName("档位改份数或改名后 version 变化，大屏进度条才会刷新")
+        void versionTracksTierQuantityAndName()
+        {
+            when(sessionMapper.selectSessionList()).thenReturn(List.of(session(AM, "上午场", 1)));
+            stubDefaultDrawConfig();
+            when(checkinMapper.selectAllPorts()).thenReturn(new ArrayList<>());
+            when(winnerMapper.selectAllWonPorts()).thenReturn(new ArrayList<>());
+            KconPrize p = prize(3L, AM, "三等奖", 5, 1);
+            when(prizeMapper.selectCurrentTier(AM)).thenReturn(p);
+            when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
+            when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
+            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
+
+            String before = (String) service.screenStatus().get("version");
+
+            // 只改份数（drawnCount 不变）：旧实现版本号不变，大屏会停在旧进度条
+            when(prizeMapper.selectPrizeList(any()))
+                    .thenReturn(List.of(prize(3L, AM, "三等奖", 3, 1)));
+            String quantityChanged = (String) service.screenStatus().get("version");
+
+            // 只改名
+            when(prizeMapper.selectPrizeList(any()))
+                    .thenReturn(List.of(prize(3L, AM, "一等奖", 3, 1)));
+            String nameChanged = (String) service.screenStatus().get("version");
+
+            assertThat(quantityChanged).isNotEqualTo(before);
+            assertThat(nameChanged).isNotEqualTo(quantityChanged);
+        }
+
+        @Test
         @DisplayName("无场次时回落 AM，且不返回档位与中奖信息")
         void fallsBackWhenNoSession()
         {

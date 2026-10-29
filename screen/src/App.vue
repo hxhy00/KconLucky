@@ -171,6 +171,9 @@ let revealing = false
 // 组件已卸载：卸载后揭晓循环不再新建滚动定时器——
 // 卸载发生在 await sleep 期间时，之后的 rollTo 会新建 interval 且再无人清理
 let disposed = false
+// 揭晓代次：切场次时自增，让进行中的揭晓循环尽早退出，
+// 否则会把上一场的中奖者继续演完再落到汇总页
+let revealEpoch = 0
 
 // 端口号滚动定时器句柄（rollTo 启动 / stopRolling 清理）。
 // 注意：必须声明——<script setup> 编译为 ESM 严格模式，给未声明变量赋值会抛
@@ -186,6 +189,10 @@ let knownBatchKey = null
 // lastBatch 会退化成更早批次，没有水位的话退化批次会被误当成新抽奖，
 // 大屏把上一轮的中奖动画完整重播一遍
 let knownBatchTime = null
+// 最近一次同步的场次：切场次后上一场的水位/名单都不再适用。
+// 不重置的话，切回有历史结果的场次时它的 lastBatch 时间早于已见水位，
+// 会被当成「退化批次」吞掉，大屏就停在上一场的名单上、标题却已换成新场次
+let knownSessionCode = null
 // 揭晓动画进行中时轮询送来的新批次：先挂起，等当前批次播完由 revealAll 的
 // finally 补播。不挂起的话该批次会被 `!revealing` 静默丢弃，现场就是「少播一次特效」。
 // 用队列而非单槽：主持人手快连抽两档、或单档人数多导致揭晓耗时长时，
@@ -378,6 +385,14 @@ function batchTimeOf(key) {
 function syncFromServer(d) {
   const batch = d.lastBatch
 
+  // 切场次：上一场的名单与水位都不能带过来。管理端切到下午场再切回上午场时，
+  // 上午场 lastBatch 的时间早于下午场留下的水位，会被下面的退化判断吞掉，
+  // 大屏就停在下午场的名单上、标题却是上午场
+  if (d.sessionCode && knownSessionCode && d.sessionCode !== knownSessionCode) {
+    resetForSessionSwitch()
+  }
+  if (d.sessionCode) knownSessionCode = d.sessionCode
+
   if (!firstLoadDone) {
     // 刷新后不该凭空弹出上一轮的结果：只记住，不展示
     firstLoadDone = true
@@ -467,6 +482,27 @@ function syncFromServer(d) {
   else if (phase.value === 'empty' && !poolEmpty.value) phase.value = 'idle'
 }
 
+/**
+ * 切场次后清空一切与上一场次绑定的本地状态：水位、待播队列、汇总页与进行中的揭晓。
+ * 水位必须清——否则新场次的旧批次会被退化判断吞掉；列表必须清——否则
+ * 新场次的表头下会继续挂着上一场的名单。
+ */
+function resetForSessionSwitch() {
+  // 代次自增：正在播的揭晓循环据此提前退出，不会把上一场的人演完
+  revealEpoch++
+  knownBatchKey = null
+  knownBatchTime = null
+  if (pendingBatches.length) pendingBatches.length = 0
+  revealList.value = []
+  resultList.value = []
+  resultTier.value = ''
+  shortfall.value = 0
+  confetti.value = []
+  phase.value = 'idle'
+  // 待机页仍展示占位号码：复位掉上一场揭晓中途定格的号码
+  displayNo.value = '00000'
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -493,10 +529,22 @@ function rollTo(target, ms) {
  * 收尾校正汇总页名单：揭晓期间若当前批在管理端被作废（人数变化），
  * syncFromServer 因 phase='revealing' 不会刷新 resultList，汇总页会停在旧名单。
  * 这里按最新 status.lastBatch 校正一次，仅当它确实是当前批（batchKey 前缀一致）时生效。
+ * 整批被作废（lastBatch 消失）时同样兜底：揭晓动画结束时同步清空名单，
+ * 否则动画会落到汇总页并永久展示已被撤回的中奖者。
  */
 function syncResultIfBatchChanged() {
   const batch = status.value.lastBatch
-  if (!batch || !batch.batchKey || batch.batchKey !== knownBatchKey) return
+  if (!batch || !batch.batchKey) {
+    // 无批次可展示：只清理确实残留了名单的情况，避免误伤待机页
+    if (resultList.value.length || phase.value === 'result') {
+      resultList.value = []
+      resultTier.value = ''
+      shortfall.value = 0
+      if (phase.value === 'result') phase.value = 'idle'
+    }
+    return
+  }
+  if (batch.batchKey !== knownBatchKey) return
   resultList.value = (batch.winners || []).map(w => ({ ...w }))
   // 缺口一并校正：作废后后端按最新 drawnCount 重算，不同步会停留旧值
   shortfall.value = batch.shortfall ?? 0
@@ -512,21 +560,25 @@ async function playReveal(winners, tierName, gap) {
     phase.value = 'idle'
     return
   }
+  // 本次播放所属代次：切场次会自增 revealEpoch，循环据此提前退出
+  const epoch = revealEpoch
   revealList.value = winners
   resultList.value = winners.map(w => ({ ...w }))
   resultTier.value = tierName || ''
   shortfall.value = gap || 0
 
   for (let i = 0; i < winners.length; i++) {
-    // 卸载后停止揭晓：组件已销毁，继续跑只会新建无人清理的滚动定时器
-    if (disposed) return
+    // 卸载或切场次后停止揭晓：组件已销毁，继续跑只会新建无人清理的滚动定时器；
+    // 场次已切换，继续演上一场的人会把新场次的大屏停在错误的名单上
+    if (disposed || epoch !== revealEpoch) return
     revealIndex.value = i
     revealSettled.value = false
     phase.value = 'revealing'
     await sleep(100)
-    if (disposed) return
+    if (disposed || epoch !== revealEpoch) return
     // 多人时每个滚短一点，单人时滚久一点，整体节奏都在舞台上可控
     await rollTo(winners[i].portNo, winners.length > 1 ? 1100 : 1600)
+    if (disposed || epoch !== revealEpoch) return
     revealSettled.value = true
     await sleep(winners.length > 1 ? 1900 : 2400)
   }

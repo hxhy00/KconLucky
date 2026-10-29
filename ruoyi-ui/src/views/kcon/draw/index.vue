@@ -3,7 +3,7 @@
     <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
       <div slot="title">
         本页用于管理端接管抽奖操作（切换场次 / 抽奖 / 作废）。大屏
-        <b>/screen/</b> 仍在同步刷新同一份数据，两边看到的是同一个抽奖池。
+        <b>{{ screenUrl }}</b> 仍在同步刷新同一份数据，两边看到的是同一个抽奖池。
       </div>
     </el-alert>
 
@@ -254,7 +254,7 @@ export default {
     },
     /** 大屏访问地址：与后端 qrcode 接口同源，按当前页面 host 推导 */
     screenUrl() {
-      return `${window.location.origin}/screen/`
+      return `${window.location.origin}${this.screenBasePath()}`
     },
     /** 全部有效中奖，按场次 × 档位分组（后端已按 draw_order 排好：三等 → 二等 → 一等） */
     winnerGroups() {
@@ -336,6 +336,18 @@ export default {
     }
   },
   methods: {
+    /**
+     * 大屏页面的部署前缀（以 / 结尾）。
+     * 生产环境 VUE_APP_BASE_API 为 /kconluck2026/prod-api、大屏挂在 /kconluck2026/screen/，
+     * 硬编码根路径 /screen/ 会 404，这里从 API 基址剥掉 /prod-api 反推出统一前缀；
+     * 开发环境剥掉 /dev-api 后为 /，本地大屏仍走根路径（vue.config.js 的 devServer.proxy
+     * 只代理 API 前缀，开发时大屏需自行按根路径访问）。
+     */
+    screenBasePath() {
+      const baseApi = process.env.VUE_APP_BASE_API || '/dev-api'
+      const prefix = baseApi.replace(/\/(prod|dev)-api\/?$/, '')
+      return (prefix.endsWith('/') ? prefix : prefix + '/') + 'screen/'
+    },
     // ---------- 大屏设置 ----------
     loadSetting() {
       getDrawSetting().then(res => {

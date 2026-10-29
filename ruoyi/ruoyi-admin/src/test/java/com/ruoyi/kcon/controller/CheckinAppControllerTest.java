@@ -130,12 +130,14 @@ class CheckinAppControllerTest
     }
 
     @Test
-    @DisplayName("GET /lookup：透传完整手机号并返回 service 结果")
+    @DisplayName("POST /lookup：透传完整手机号并返回 service 结果")
     void lookupPassesKeyword() throws Exception
     {
         when(checkinService.lookup("13800138000")).thenReturn(Map.of("signed", true));
 
-        mockMvc.perform(get("/app/checkin/lookup").param("keyword", "13800138000"))
+        mockMvc.perform(post("/app/checkin/lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyword\":\"13800138000\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.signed").value(true));
@@ -144,12 +146,14 @@ class CheckinAppControllerTest
     }
 
     @Test
-    @DisplayName("GET /lookup：不带 keyword 时以 null 查询，不报 500")
+    @DisplayName("POST /lookup：不带 keyword 时以 null 查询，不报 500")
     void lookupWithoutKeywordPassesNull() throws Exception
     {
         when(checkinService.lookup(null)).thenReturn(Map.of("signed", false));
 
-        mockMvc.perform(get("/app/checkin/lookup"))
+        mockMvc.perform(post("/app/checkin/lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.signed").value(false));
 

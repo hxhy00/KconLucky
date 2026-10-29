@@ -121,6 +121,9 @@ public class KconDrawServiceImpl implements IKconDrawService
         tierQuery.setSessionCode(sessionCode);
         List<KconPrize> allTiers = prizeMapper.selectPrizeList(tierQuery);
         List<Map<String, Object>> tierViews = new ArrayList<>();
+        // 档位签名（id:名称:份数）：用于版本号。管理端改份数或改名时 drawnCount
+        // 不变，版本号不变的话大屏会一直拿旧进度条，直到下一次抽奖才刷新
+        List<String> tierSigns = new ArrayList<>();
         int totalQuantity = 0;
         int totalDrawn = 0;
         for (KconPrize p : allTiers)
@@ -131,6 +134,7 @@ public class KconDrawServiceImpl implements IKconDrawService
             m.put("quantity", p.getQuantity());
             m.put("drawnCount", p.getDrawnCount());
             tierViews.add(m);
+            tierSigns.add(p.getId() + ":" + p.getTierName() + ":" + p.getQuantity());
             if (p.getQuantity() != null)
             {
                 totalQuantity += p.getQuantity();
@@ -209,9 +213,11 @@ public class KconDrawServiceImpl implements IKconDrawService
                 sessionCode,
                 String.valueOf(data.get("poolCount")),
                 String.valueOf(totalDrawn),
+                String.valueOf(totalQuantity),
                 tier != null ? String.valueOf(tier.getId()) : "-",
                 tier != null ? String.valueOf(tier.getDrawnCount()) : "-",
                 last != null ? String.valueOf(last.getId()) : "-",
+                String.join(",", tierSigns),
                 String.join(",", sponsorList)));
         return data;
     }

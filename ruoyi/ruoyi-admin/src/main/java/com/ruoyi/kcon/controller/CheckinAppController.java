@@ -80,7 +80,7 @@ public class CheckinAppController extends BaseController
 
     /**
      * 2.3 回查签到状态与端口号
-     * GET /app/checkin/lookup?keyword=13800138000
+     * POST /app/checkin/lookup  { "keyword": "13800138000" }
      *
      * 只接受完整 11 位手机号。曾支持后四位（「截图丢了当场找回」），
      * 但尾号空间仅 10^4，在免登录接口上可被低成本枚举，等于把「谁在场、
@@ -88,11 +88,15 @@ public class CheckinAppController extends BaseController
      * 「本人知道完整手机号」，源头可枚举则这层判定形同虚设。
      * 现已砍掉尾号分支：找回与核验统一要求完整 11 位，枚举面从 10^4 收到 10^11。
      * 限流仍保留 30 次/分钟，作为防批量拉取姓名的一道闸。
+     *
+     * 用 POST 而非 GET：nginx access_log 的 $request 会记录完整请求行，
+     * GET 查询串会把观众手机号明文写进访问日志，POST body 则不会。
      */
     @RateLimiter(time = 60, count = 30, limitType = LimitType.IP)
-    @GetMapping("/lookup")
-    public AjaxResult lookup(@RequestParam(required = false) String keyword)
+    @PostMapping("/lookup")
+    public AjaxResult lookup(@RequestBody(required = false) Map<String, String> body)
     {
+        String keyword = body == null ? null : body.get("keyword");
         return success(checkinService.lookup(keyword));
     }
 }

@@ -64,6 +64,11 @@ export function submitCheckin(attendeeId, phone) {
 }
 
 // 回查（找回端口号）
+// 手机号放请求体而非 URL：nginx 的 log_format 会记录完整 $request，
+// GET 查询串会把观众手机号明文写进访问日志（还会留在浏览器历史里），POST body 则不会。
 export function lookup(keyword) {
-  return request('/app/checkin/lookup?keyword=' + encodeURIComponent(keyword))
+  return request('/app/checkin/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ keyword: String(keyword).trim() })
+  })
 }
