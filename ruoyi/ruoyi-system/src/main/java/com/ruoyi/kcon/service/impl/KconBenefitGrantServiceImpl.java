@@ -104,6 +104,23 @@ public class KconBenefitGrantServiceImpl implements IKconBenefitGrantService
             grant.setOperator(operator);
             grantMapper.insertGrant(grant);
         }
+        catch (DuplicateKeyException e)
+        {
+            // uk_attendee_type 对 PRIZE 同样生效：中奖→作废→重抽→再领奖时，
+            // 同一参会人的第二条 PRIZE 日志会撞唯一键。只 log.warn 会让发放追溯
+            // 断档，这里改为更新旧记录（刷新端口号/奖项/场次/操作人）。
+            KconBenefitGrant grant = new KconBenefitGrant();
+            grant.setAttendeeId(winner.getAttendeeId());
+            grant.setPortNo(portNo);
+            grant.setName(winner.getName());
+            grant.setPhone(IKconCheckinService.maskPhone(winner.getPhone()));
+            grant.setItem(winner.getTierName());
+            grant.setSessionCode(winner.getSessionCode());
+            grant.setTierName(winner.getTierName());
+            grant.setOperator(operator);
+            grantMapper.updatePrizeGrant(grant);
+            log.info("奖品发放日志已更新（重抽后再领）attendeeId={} portNo={} operator={}", winner.getAttendeeId(), portNo, operator);
+        }
         catch (Exception e)
         {
             log.warn("写奖品发放日志失败 portNo={} operator={}", portNo, operator, e);

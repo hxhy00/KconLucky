@@ -90,7 +90,7 @@ class DrawSettingControllerTest
                         .content("{\"sponsors\":\"  极客邦, KCon  \"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.msg").value("已保存，大屏将在 3 秒内自动刷新显示"));
+                .andExpect(jsonPath("$.msg").value("已保存，大屏将在 1.5 秒内自动刷新显示"));
 
         ArgumentCaptor<SysConfig> captor = ArgumentCaptor.forClass(SysConfig.class);
         verify(sysConfigService).insertConfig(captor.capture());
@@ -135,7 +135,7 @@ class DrawSettingControllerTest
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sponsors\":\"\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.msg").value("已清空赞助商，大屏将在 3 秒内自动刷新"));
+                .andExpect(jsonPath("$.msg").value("已清空赞助商，大屏将在 1.5 秒内自动刷新"));
 
         verify(sysConfigService).deleteConfigByIds(new Long[] { 77L });
         verify(sysConfigService, never()).insertConfig(any());

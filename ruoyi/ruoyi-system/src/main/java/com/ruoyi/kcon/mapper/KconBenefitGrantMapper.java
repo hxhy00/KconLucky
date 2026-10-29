@@ -20,6 +20,14 @@ public interface KconBenefitGrantMapper
     int insertGrant(KconBenefitGrant grant);
 
     /**
+     * 更新已有的 PRIZE 发放记录（按 attendee_id + grant_type='PRIZE'）。
+     * 中奖→作废→重抽→再领奖时，同一参会人的第二条 PRIZE 日志会撞
+     * uk_attendee_type 唯一键；此时改为更新旧记录（刷新端口号/奖项/场次/操作人），
+     * 保证发放追溯不断档。BENEFIT 不走此方法。
+     */
+    int updatePrizeGrant(KconBenefitGrant grant);
+
+    /**
      * 条件查询发放日志（分页/导出共用）
      *   grantType           BENEFIT/PRIZE
      *   portNo              精确匹配

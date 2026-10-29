@@ -28,6 +28,21 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          #{sessionCode}, #{tierName}, #{operator}, now())
     </insert>
 
+    <!-- PRIZE 重抽后再领：uk_attendee_type 会撞唯一键，改为更新旧记录保证追溯不断档 -->
+    <update id="updatePrizeGrant" parameterType="KconBenefitGrant">
+        update kcon_benefit_grant
+        set port_no      = #{portNo},
+            name         = #{name},
+            phone_mask   = #{phone},
+            item         = #{item},
+            session_code = #{sessionCode},
+            tier_name    = #{tierName},
+            operator     = #{operator},
+            create_time  = now()
+        where attendee_id = #{attendeeId}
+          and grant_type = 'PRIZE'
+    </update>
+
     <select id="selectGrantList" parameterType="KconBenefitGrant" resultMap="KconBenefitGrantResult">
         select id, grant_type, attendee_id, port_no, name, phone_mask, item,
                session_code, tier_name, operator, create_time

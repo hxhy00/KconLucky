@@ -9,6 +9,9 @@
 --       严禁在存量库上重跑。
 -- =============================================================
 
+-- 自保护：手工导入时客户端可能按 latin1 建连（容器内 LANG 未设置），
+-- 导致中文双重编码入库；SET NAMES 强制本连接按 utf8mb4 解读后续字节
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS `kcon_lucky`
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_general_ci;
@@ -212,6 +215,8 @@ CREATE TABLE `kcon_verify_log` (
 --     防重复领取：
 --       权益发放靠 uk_attendee_type 唯一键（一人一条权益记录），
 --       奖品发放靠 kcon_winner.status 0→1 条件更新（本表只做留痕）。
+--       注意 uk_attendee_type 对 PRIZE 同样生效：重抽后再领奖会撞唯一键，
+--       Service 层此时改为更新旧记录（追溯不断档），不依赖本表约束放行。
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `kcon_benefit_grant`;
 CREATE TABLE `kcon_benefit_grant` (

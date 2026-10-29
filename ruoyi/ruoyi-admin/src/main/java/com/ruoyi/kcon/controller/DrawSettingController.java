@@ -86,7 +86,7 @@ public class DrawSettingController extends BaseController
             {
                 sysConfigService.deleteConfigByIds(new Long[] { list.get(0).getConfigId() });
             }
-            return success("已清空赞助商，大屏将在 3 秒内自动刷新");
+            return success("已清空赞助商，大屏将在 1.5 秒内自动刷新");
         }
 
         SysConfig config = list.isEmpty() ? new SysConfig() : list.get(0);
