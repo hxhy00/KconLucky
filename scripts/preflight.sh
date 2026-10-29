@@ -67,19 +67,24 @@ echo "== 4. 测试残留 =="
 n=$(docker exec kcon-redis redis-cli --scan --pattern 'login_tokens:*' 2>/dev/null | wc -l | tr -d ' ')
 [ "${n:-0}" = "0" ] && pass "无残留登录令牌" || warn "Redis 有 ${n} 个 login_tokens 键，建议清理"
 
-db=$(docker compose exec -T -e MYSQL_PWD="$DBPW" mysql mysql -uroot kcon_lucky -N \
+# 统一用 docker exec（compose exec 要求 cwd 有 docker-compose.yml，发行版目录没有）
+db=$(docker exec -e MYSQL_PWD="$DBPW" kcon-mysql mysql -uroot kcon_lucky -N \
   -e "SELECT COUNT(*) FROM sys_user WHERE user_name LIKE '1990000000%';" 2>/dev/null | tr -d ' \r')
-if [ "${db:-x}" = "0" ]; then
+if [ -z "$db" ]; then
+  fail "无法检查渗透测试账号（mysql 容器未运行或查询失败）"
+elif [ "$db" = "0" ]; then
   pass "无渗透测试账号残留"
 else
-  fail "仍有 ${db:-?} 个渗透测试账号（1990000000x），活动前必须删除"
+  fail "仍有 ${db} 个渗透测试账号（1990000000x），活动前必须删除"
 fi
 
 # 初始口令是公开的（写在仓库模板与文档里，raw.githubusercontent.com 可下载），
 # 未修改 = 任何人可登录超管清场/导出数据，必须作为阻断项
 pwd_unset=$(docker exec -e MYSQL_PWD="$DBPW" kcon-mysql mysql -uroot kcon_lucky -N \
   -e "SELECT pwd_update_date IS NULL FROM sys_user WHERE user_name='13000000000';" 2>/dev/null | tr -d ' \r')
-if [ "${pwd_unset:-x}" = "0" ]; then
+if [ -z "$pwd_unset" ]; then
+  fail "无法检查超管口令（mysql 容器未运行或账号 13000000000 不存在）"
+elif [ "$pwd_unset" = "0" ]; then
   pass "超管初始口令已修改"
 else
   fail "超管初始口令未修改（13000000000 的口令是公开的），登录后必须立即修改"
