@@ -1,9 +1,7 @@
 package com.ruoyi.kcon.controller;
 
 import com.ruoyi.common.annotation.Anonymous;
-import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.domain.AjaxResult;
-import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.service.IKconDrawService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,13 +41,11 @@ public class DrawScreenController
      * 带上大屏上次收到的 {@code version} 时走增量：未变化只回一个极小的响应，
      * 大屏据此跳过整份重渲染（投屏中重渲染会打断中奖动画）。
      *
-     * 限流口径必须覆盖大屏自身轮询：大屏 1.5s 一拍 = 40 次/分钟，
-     * 曾经只给 30 次/分钟，大屏跑 45 秒就把自己限流到 500，
-     * 前端连续失败 3 次亮「与后端失去连接」，下个窗口又恢复——
-     * 现场表现就是大屏周期性「未连接」。放宽到 100 次/分钟：
-     * 正常轮询（40/min）留足余量，仍能挡住批量枚举端口号的脚本。
+     * 大屏 1.5s 一拍轮询 = 40 次/分钟，接口原本按 IP 限流 100 次/分钟。
+     * 现场已直接去掉限流：大屏与观众在同一出口 IP 下时会与签到流量共用限流桶，
+     * 一旦触发 429，前端会亮「与后端失去连接」，代价大于收益。
+     * 本端点只读、不写任何状态，去掉限流后最坏情形是被刷状态，不影响业务完整性。
      */
-    @RateLimiter(time = 60, count = 100, limitType = LimitType.IP)
     @GetMapping("/status")
     public AjaxResult status(@RequestParam(required = false) String version)
     {

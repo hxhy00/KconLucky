@@ -2,11 +2,9 @@ package com.ruoyi.kcon.controller;
 
 import com.ruoyi.common.annotation.RepeatSubmit;
 import com.ruoyi.common.annotation.Log;
-import com.ruoyi.common.annotation.RateLimiter;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
-import com.ruoyi.common.enums.LimitType;
 import com.ruoyi.kcon.domain.KconPrize;
 import com.ruoyi.kcon.domain.KconWinner;
 import com.ruoyi.kcon.service.IKconDrawService;
@@ -56,7 +54,6 @@ public class DrawAdminController extends BaseController
     /** 抽一个 { "sessionCode": "AM", "prizeId": 1 }；prizeId 为空时自动取当前应抽档位 */
     @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
     @Log(title = "抽奖控制台-抽奖", businessType = BusinessType.OTHER)
-    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
     @PostMapping("/draw")
     public AjaxResult draw(@RequestBody Map<String, Object> body)
     {
@@ -92,7 +89,6 @@ public class DrawAdminController extends BaseController
      */
     @PreAuthorize("@ss.hasPermi('kcon:winner:void')")
     @Log(title = "抽奖控制台-撤回最近一档", businessType = BusinessType.OTHER)
-    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
     @RepeatSubmit
     @PostMapping("/void-batch")
     public AjaxResult doVoidBatch(@RequestBody Map<String, Object> body)
@@ -114,7 +110,6 @@ public class DrawAdminController extends BaseController
     /** 切换场次 { "sessionCode": "PM" } */
     @PreAuthorize("@ss.hasPermi('kcon:draw:operate')")
     @Log(title = "抽奖控制台-切换场次", businessType = BusinessType.OTHER)
-    @RateLimiter(time = 10, count = 20, limitType = LimitType.IP)
     @PostMapping("/session")
     public AjaxResult session(@RequestBody Map<String, String> body)
     {
