@@ -259,7 +259,7 @@ class KconDrawServiceImplTest
             when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
             when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn(" KCon，云厂商 ");
             KconWinner last = winner(11L, 10, KconWinner.STATUS_WON);
-            when(winnerMapper.selectLatestValidWinner()).thenReturn(last);
+            when(winnerMapper.selectLatestValidWinnerBySession(PM)).thenReturn(last);
             when(winnerMapper.selectBatch(eq(3L), anyString()))
                     .thenReturn(List.of(last, winner(12L, 20, KconWinner.STATUS_WON)));
 
@@ -293,6 +293,30 @@ class KconDrawServiceImplTest
         }
 
         @Test
+        @DisplayName("切场次后不再展示上一场中奖记录（按场次过滤，不取全场最新）")
+        void hidesPreviousSessionWinnerAfterSwitch()
+        {
+            when(sessionMapper.selectSessionList())
+                    .thenReturn(List.of(session(AM, "上午场", 0), session(PM, "下午场", 1)));
+            stubDefaultDrawConfig();
+            when(checkinMapper.selectAllPorts()).thenReturn(new ArrayList<>());
+            when(winnerMapper.selectAllWonPorts()).thenReturn(new ArrayList<>());
+            when(prizeMapper.selectCurrentTier(PM)).thenReturn(null);
+            when(prizeMapper.selectPrizeList(any())).thenReturn(new ArrayList<>());
+            when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
+            // 上午场有人中奖，下午场还没有：按场次查询返回 null
+            when(winnerMapper.selectLatestValidWinnerBySession(PM)).thenReturn(null);
+
+            Map<String, Object> data = service.screenStatus();
+
+            assertThat(data).containsEntry("sessionCode", PM);
+            assertThat(data).doesNotContainKeys("lastWinner", "lastBatch");
+            // 全场最新那条属于 AM，绝不能被当成 PM 的中奖记录下发
+            verify(winnerMapper).selectLatestValidWinnerBySession(PM);
+            verify(winnerMapper, never()).selectLatestValidWinner();
+        }
+
+        @Test
         @DisplayName("档位改份数或改名后 version 变化，大屏进度条才会刷新")
         void versionTracksTierQuantityAndName()
         {
@@ -304,7 +328,7 @@ class KconDrawServiceImplTest
             when(prizeMapper.selectCurrentTier(AM)).thenReturn(p);
             when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
             when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
-            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
+            when(winnerMapper.selectLatestValidWinnerBySession(AM)).thenReturn(null);
 
             String before = (String) service.screenStatus().get("version");
 
@@ -333,7 +357,7 @@ class KconDrawServiceImplTest
             when(prizeMapper.selectCurrentTier(AM)).thenReturn(null);
             when(prizeMapper.selectPrizeList(any())).thenReturn(new ArrayList<>());
             when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn(null);
-            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
+            when(winnerMapper.selectLatestValidWinnerBySession(AM)).thenReturn(null);
 
             Map<String, Object> data = service.screenStatus();
 

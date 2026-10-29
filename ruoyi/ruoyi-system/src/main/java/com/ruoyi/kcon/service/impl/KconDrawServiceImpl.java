@@ -155,7 +155,9 @@ public class KconDrawServiceImpl implements IKconDrawService
         // 最近一条有效中奖记录：大屏据此显示「在管理端抽奖控制台抽出」的中奖者。
         // 以前这个字段不存在，大屏只能靠 poolCount 推断状态，于是管理端抽了奖、
         // 大屏却一直停在上一轮，而两边文案还写着「看到的是同一个抽奖池」。
-        KconWinner last = winnerMapper.selectLatestValidWinner();
+        // 必须按当前场次过滤：全场取最新会把上一场的中奖名单带到下一场大屏上
+        //（现场事故：切场次后大屏仍播报上一场中奖者）。
+        KconWinner last = winnerMapper.selectLatestValidWinnerBySession(sessionCode);
         if (last != null)
         {
             String lastWinTime = format(last.getWinTime());
