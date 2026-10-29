@@ -137,7 +137,8 @@ public class ExportController extends BaseController
      *
      * 对外地址优先取 {@code PUBLIC_BASE_URL}（如 https://kcon.example.com），
      * 用于域名 + HTTPS 部署：二维码必须是 https，否则扫码会被降级或直接打不开。
-     * 未配置时退回 {@code http://$LAN_IP}，兼容内网 IP 部署。
+     * 未配置时退回 {@code http://$LAN_IP:$WEB_PORT}（80 省略端口），兼容内网 IP 部署。
+     * 非 80 端口部署时如果不带端口，二维码指向的是 80 端口，扫码必然打不开。
      */
     private String checkinUrl()
     {
@@ -156,7 +157,28 @@ public class ExportController extends BaseController
             return base + "/kconluck2026/sign/";
         }
         String lanIp = System.getenv().getOrDefault("LAN_IP", "127.0.0.1");
-        return "http://" + lanIp + "/kconluck2026/sign/";
+        return "http://" + lanIp + portSuffix() + "/kconluck2026/sign/";
+    }
+
+    /**
+     * 回退地址里的端口后缀。
+     * WEB_PORT 可能是 "8081"，也可能是 "127.0.0.1:8081"（只绑回环的写法），
+     * 只取端口部分；80 端口省略，避免二维码里出现 ":80"。
+     */
+    private String portSuffix()
+    {
+        String raw = System.getenv("WEB_PORT");
+        if (raw == null || raw.trim().isEmpty())
+        {
+            return "";
+        }
+        String port = raw.trim();
+        int idx = port.lastIndexOf(':');
+        if (idx >= 0)
+        {
+            port = port.substring(idx + 1);
+        }
+        return port.isEmpty() || "80".equals(port) ? "" : ":" + port;
     }
 
     /**
