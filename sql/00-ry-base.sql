@@ -1,6 +1,9 @@
 -- RuoYi-Vue 3.9.2 基础表（源自 RuoYi 上游 ry_20260320.sql，该副本已随仓库清理移除）
 -- 由 docker-entrypoint-initdb.d 首次启动时执行
 -- 注意：库在此创建，后续 01/02 脚本直接 USE 即可
+-- 自保护：手工导入（docker exec -i ... < 本文件）时客户端可能按 latin1 建连，
+-- 导致中文双重编码入库；SET NAMES 强制本连接按 utf8mb4 解读后续字节
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS `kcon_lucky`
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_general_ci;

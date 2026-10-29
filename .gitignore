@@ -28,11 +28,14 @@ target/
 *.log
 
 # ---- 密钥与本地配置 ----
-# .env 里有 MYSQL_ROOT_PASSWORD / TOKEN_SECRET 等真实密钥，不入库。
-# 新机器部署按 docs/04-部署运行.md 说明，从 .env.example 复制并生成密钥。
+# .env* 里有 MYSQL_ROOT_PASSWORD / TOKEN_SECRET 等真实密钥，一律不入库
+# （含 .env.release 这类发行版副本，漏忽略会误提交密钥）。
+# 只放行两个模板：.env.example / .env.release.example（不含真实密钥）。
+# 新机器部署按 docs/04-部署运行.md 说明，从模板复制并生成密钥。
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.release.example
 
 # 证书与私钥（MySQL 自签证书等）
 *.pem

@@ -153,6 +153,8 @@ services:
       - "${WEB_PORT:-80}:80"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
+      # real_ip 信任网段（逗号分隔），默认回环 + Docker 网桥，见 entrypoint.sh
+      NGINX_TRUSTED_CIDRS: ${NGINX_TRUSTED_CIDRS:-}
     healthcheck:
       # busybox wget 探活入口页；nginx 挂了靠 depends_on 发现不了
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]

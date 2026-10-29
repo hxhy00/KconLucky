@@ -13,6 +13,10 @@
 data/
 logs/
 参考文件/
+# spec-kit 与本地调试产物（体积大，不参与构建）
+.specify/
+specs/
+.playwright-cli/
 
 # 已构建产物
 */target/
