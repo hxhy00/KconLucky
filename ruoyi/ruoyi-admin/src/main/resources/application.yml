@@ -17,6 +17,12 @@ ruoyi:
 server:
   # 服务器的HTTP端口，默认为8080
   port: ${BACKEND_PORT:8080}
+  # 信任反向代理传的 X-Forwarded-* 头（nginx 已设置）。
+  # HTTPS 在外层终止时，后端收到的是 http 请求而浏览器 Origin 是 https，
+  # Spring 6 的 CORS 判定按 scheme/host/port 比对会把它误判成跨域请求，
+  # 被 CorsFilter 拒成 403 "Invalid CORS request"（HTTP 部署不会触发）。
+  # 开启后请求 scheme/host 还原为外层的 https/域名，同源判定自然通过。
+  forward-headers-strategy: framework
   servlet:
     # 应用的访问路径
     context-path: /
