@@ -66,13 +66,16 @@ public class ExportController extends BaseController
     @Autowired
     private SensitiveOperationGuard sensitiveOperationGuard;
 
+    /** 导出条数上限：与发放/核验日志导出同一口径（EXPORT_MAX），上限下推到 SQL */
+    private static final int EXPORT_MAX = 10000;
+
     /** 导出签到全量明细 */
     @PreAuthorize("@ss.hasPermi('kcon:attendee:export')")
     @Log(title = "签到明细导出", businessType = BusinessType.EXPORT)
     @PostMapping("/export")
     public void export(HttpServletResponse response)
     {
-        List<Map<String, Object>> rows = checkinMapper.selectExportList();
+        List<Map<String, Object>> rows = checkinMapper.selectExportList(EXPORT_MAX);
         // ExcelUtil 靠 @Excel 注解定义表头，无法直接导出 Map（Map 是接口，取父类字段会 NPE），
         // 故把查询结果的中文键映射到导出 VO
         List<KconCheckinExportVo> list = new ArrayList<>(rows.size());

@@ -73,7 +73,7 @@ public class GlobalExceptionHandler
     }
 
     /**
-     * 缺少必填的请求参数。例：GET /app/checkin/lookup 未带 keyword。
+     * 缺少必填的请求参数。例：GET /app/screen/status 未带 version。
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public AjaxResult handleMissingParameter(MissingServletRequestParameterException e, HttpServletRequest request)

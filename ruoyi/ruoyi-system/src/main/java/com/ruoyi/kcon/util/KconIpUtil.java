@@ -12,6 +12,9 @@ import jakarta.servlet.http.HttpServletRequest;
  *
  * 注意：仅用于限流 key，不改变审计日志的 IP 口径（审计仍走 IpUtils）。
  *
+ * 安全前提：backend 的 8080 端口不得对外暴露（compose 默认不映射宿主端口，
+ * 仅 nginx 可达）。若有人单独暴露 8080，客户端可自带 X-Real-IP 轮换限流 key。
+ *
  * @author kcon
  */
 public final class KconIpUtil

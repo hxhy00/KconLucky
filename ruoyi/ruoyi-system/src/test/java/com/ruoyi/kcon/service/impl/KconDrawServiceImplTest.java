@@ -158,15 +158,7 @@ class KconDrawServiceImplTest
         when(sysConfigService.selectConfigByKey(DrawEligibility.KEY_KEYWORD)).thenReturn(null);
     }
 
-    /** 抽奖成功后 doDraw 会顺带回填大屏状态 */
-    private void stubScreenStatusAfterDraw(KconPrize prize)
-    {
-        when(sessionMapper.selectSessionList()).thenReturn(List.of(session(AM, "上午场", 1)));
-        when(prizeMapper.selectCurrentTier(AM)).thenReturn(null);
-        when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(prize));
-        when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
-        when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
-    }
+    /** 抽奖成功后 doDraw 不再组装 status（唯一调用方 DrawAdminController 会整体覆盖） */
 
     @Nested
     @DisplayName("抽奖池计算")
@@ -394,12 +386,6 @@ class KconDrawServiceImplTest
             when(checkinMapper.selectByPortNo(anyInt())).thenReturn(checkin(10, 1, "S", "午餐"));
             when(attendeeMapper.selectAttendeeById(7L)).thenReturn(attendee());
             when(prizeMapper.incrementDrawnCount(3L)).thenReturn(1);
-            when(sessionMapper.selectSessionList()).thenReturn(List.of(session(AM, "上午场", 1)));
-            // 抽奖用 PM 档位，但 screenStatus 仍按「当前激活场次」AM 组装状态
-            when(prizeMapper.selectCurrentTier(AM)).thenReturn(null);
-            when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
-            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
-            when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
 
             service.draw("  ", 3L, "staff");
 
@@ -462,7 +448,6 @@ class KconDrawServiceImplTest
             when(checkinMapper.selectByPortNo(anyInt())).thenReturn(checkin(10, 1, "S", "午餐"));
             when(attendeeMapper.selectAttendeeById(7L)).thenReturn(attendee());
             when(prizeMapper.incrementDrawnCount(3L)).thenReturn(1);
-            stubScreenStatusAfterDraw(p);
 
             Map<String, Object> data = service.draw(AM, 3L, "staff");
 
@@ -473,7 +458,6 @@ class KconDrawServiceImplTest
                     .containsEntry("shortfall", 0)
                     .containsEntry("poolCountAfter", 0);
             assertThat((String) data.get("batchKey")).startsWith("3@").endsWith("@2");
-            assertThat(data).containsKey("status");
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> winners = (List<Map<String, Object>>) data.get("winners");
             assertThat(winners).hasSize(2);
@@ -496,7 +480,6 @@ class KconDrawServiceImplTest
             when(checkinMapper.selectByPortNo(anyInt())).thenReturn(checkin(10, 1, "S", "午餐"));
             when(attendeeMapper.selectAttendeeById(7L)).thenReturn(attendee());
             when(prizeMapper.incrementDrawnCount(3L)).thenReturn(1);
-            stubScreenStatusAfterDraw(p);
 
             Map<String, Object> data = service.draw(AM, 3L, "staff");
 
@@ -571,9 +554,6 @@ class KconDrawServiceImplTest
             when(checkinMapper.selectByPortNo(anyInt())).thenReturn(checkin(10, 1, "S", "午餐"));
             when(attendeeMapper.selectAttendeeById(7L)).thenReturn(attendee());
             when(prizeMapper.incrementDrawnCount(3L)).thenReturn(1);
-            when(prizeMapper.selectPrizeList(any())).thenReturn(List.of(p));
-            when(sysConfigService.selectConfigByKey(SPONSORS_KEY)).thenReturn("");
-            when(winnerMapper.selectLatestValidWinner()).thenReturn(null);
 
             service.draw(null, null, "staff");
 

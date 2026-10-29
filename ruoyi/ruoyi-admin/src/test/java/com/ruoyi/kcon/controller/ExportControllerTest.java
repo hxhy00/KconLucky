@@ -150,7 +150,7 @@ class ExportControllerTest
         row.put("渠道标识", "官网");
         row.put("票种", "全通票");
         row.put("端口号", 10086);
-        when(checkinMapper.selectExportList()).thenReturn(List.of(row));
+        when(checkinMapper.selectExportList(10000)).thenReturn(List.of(row));
 
         MvcResult result = mockMvc.perform(post("/admin/data/export"))
                 .andExpect(status().isOk())

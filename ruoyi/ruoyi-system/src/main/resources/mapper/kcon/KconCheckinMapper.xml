@@ -127,6 +127,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join kcon_benefit_grant g on g.attendee_id = a.id and g.grant_type = 'BENEFIT'
         left join kcon_winner  w on w.port_no = c.port_no and w.status != 2
         order by a.id
+        <!-- 条数上限下推到 SQL：与发放/核验日志导出同一口径，避免无谓的全量读入 -->
+        limit #{limit}
     </select>
 
     <update id="truncateCheckin">

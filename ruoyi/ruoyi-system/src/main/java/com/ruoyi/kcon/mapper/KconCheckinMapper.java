@@ -66,9 +66,10 @@ public interface KconCheckinMapper
     List<KconCheckin> selectAllPorts();
 
     /**
-     * 导出用：签到全量明细（联表名单 + 中奖信息）
+     * 导出用：签到全量明细（联表名单 + 中奖信息）。
+     * 条数上限下推到 SQL（limit），与发放/核验日志导出同一口径。
      */
-    List<java.util.Map<String, Object>> selectExportList();
+    List<java.util.Map<String, Object>> selectExportList(@org.apache.ibatis.annotations.Param("limit") int limit);
 
     /**
      * 清空签到记录

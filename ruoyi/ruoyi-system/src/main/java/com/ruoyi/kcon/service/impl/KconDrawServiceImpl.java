@@ -508,10 +508,8 @@ public class KconDrawServiceImpl implements IKconDrawService
         data.put("shortfall", Math.max(0, remain - winnerViews.size()));
         data.put("batchKey", prize.getId() + "@" + format(batchTime) + "@" + winnerViews.size());
         data.put("poolCountAfter", pool.size());
-        // 带上最新状态：管理端抽奖控制台可以直接用它乐观更新，不必等下一轮 5 秒轮询。
-        // （旧版这里没有 status，管理端 applyStatus 拿到 undefined 等于什么都没做，
-        //   表现就是「点了抽奖要等几秒数字才动」。）
-        data.put("status", screenStatus());
+        // status 不在这里组装：唯一调用方 DrawAdminController 会用 buildStatus()
+        // 整体覆盖，这里组装等于在持有全局 drawLock 期间白跑一轮统计查询
         return data;
     }
 

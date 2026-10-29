@@ -282,6 +282,13 @@ public class MigrateController extends BaseController
      * 2. **不拦 DROP ... IF EXISTS**。mysqldump 的正常输出就包含
      *    DROP TABLE IF EXISTS / DROP DATABASE IF EXISTS，这是幂等的。
      *
+     * 3. **已知残留缺口（刻意保留）**：mysql 按语句执行而非按行，
+     *    "SELECT 1; DROP TABLE x" 这类单行多语句、以及 USE 切库可绕过行首锚定。
+     *    不做行中扫描是因为数据行（引号内）本身可能含这些词 —— 行中扫描会把
+     *    「自己导出的备份」误判成危险文件，恢复不了（见 MigrateControllerTest
+     *    ignoresDangerousKeywordsInsideData）。本检查只是纵深防御的一层，
+     *    前面已有 admin 角色 + 本人密码双重校验。
+     *
      * @return 命中的危险语句描述；安全则返回 null
      */
     private String findDangerousStatement(Path sqlFile) throws Exception
