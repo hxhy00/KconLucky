@@ -42,12 +42,13 @@ describe('签到端请求封装', () => {
     expect(JSON.parse(options.body)).toEqual({ attendeeId: 7, phone: '13800000001' })
   })
 
-  it('找回端口号：GET，keyword 做 URL 编码', async () => {
-    await lookup('张 三&1')
+  it('找回端口号：POST JSON，手机号放请求体不做 URL 编码', async () => {
+    await lookup(' 张 三&1 ')
     const [url, options] = lastFetch()
-    expect(url).toBe('/dev-api/app/checkin/lookup?keyword=' + encodeURIComponent('张 三&1'))
-    expect(options.method).toBeUndefined()
-    expect(options.body).toBeUndefined()
+    expect(url).toBe('/dev-api/app/checkin/lookup')
+    expect(options.method).toBe('POST')
+    expect(options.headers).toEqual({ 'Content-Type': 'application/json' })
+    expect(JSON.parse(options.body)).toEqual({ keyword: '张 三&1' })
   })
 
   it('网络异常统一转成可提示的错误', async () => {
@@ -67,6 +68,21 @@ describe('签到端请求封装', () => {
     }))
     await expect(queryAttendee('13800000001')).rejects.toMatchObject({
       message: '服务异常（HTTP 502）',
+      networkError: true
+    })
+  })
+
+  it('429 限流给出可操作提示，且不归为网络异常', async () => {
+    global.fetch = vi.fn(() => Promise.resolve({
+      ok: false,
+      status: 429,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve({})
+    }))
+    await expect(queryAttendee('13800000001')).rejects.toMatchObject({
+      message: '操作过于频繁，请稍后再试'
+    })
+    await expect(queryAttendee('13800000001')).rejects.not.toMatchObject({
       networkError: true
     })
   })

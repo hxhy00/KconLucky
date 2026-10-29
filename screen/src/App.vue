@@ -180,6 +180,8 @@ let revealEpoch = 0
 // ReferenceError，rollTo 一旦抛错整批揭晓动画就会被 revealAll 的 finally 跳过，
 // 现场表现为「看不到滚动和纸屑，直接出结果名单」
 let ticker = null
+// 当前滚动轮次的 resolve：stopRolling 需要一并放行，见 stopRolling 注释
+let tickerResolve = null
 
 // 增量轮询：把上次收到的版本号带回去，未变化则协议上直接跳过
 let currentVersion = null
@@ -389,7 +391,9 @@ function syncFromServer(d) {
   // 上午场 lastBatch 的时间早于下午场留下的水位，会被下面的退化判断吞掉，
   // 大屏就停在下午场的名单上、标题却是上午场
   if (d.sessionCode && knownSessionCode && d.sessionCode !== knownSessionCode) {
-    resetForSessionSwitch()
+    // 把新场次的 lastBatch 一并发过去：它已经有结果时直接落到汇总页，
+    // 不要再当成新批次重播一遍揭晓动画
+    resetForSessionSwitch(batch)
   }
   if (d.sessionCode) knownSessionCode = d.sessionCode
 
@@ -425,6 +429,9 @@ function syncFromServer(d) {
       const bt = batchTimeOf(batch.batchKey)
       if (knownBatchTime && bt && bt < knownBatchTime) {
         knownBatchKey = batch.batchKey
+        // 退化批次说明更新的批次已被整批撤回：队列里压着的快照源头没了，
+        // 不清理的话补播会把作废的中奖者演上大屏
+        prunePending(batch.batchKey)
         return
       }
       if (bt) knownBatchTime = bt
@@ -465,6 +472,11 @@ function syncFromServer(d) {
         return
       }
     }
+  } else if (batch && batch.batchKey) {
+    // 服务端最新批次就是已见批次：可能是同一批没人变动，也可能是「压着的下一批被整批
+    // 撤回后 lastBatch 回退到这一批」。后者队列里还留着那批的快照，不清理的话
+    // 揭晓播完会继续补播已作废的中奖者
+    prunePending(batch.batchKey)
   } else if (!batch && knownBatchKey != null) {
     // 整批都被作废了。knownBatchTime 保留：它是「已见最新中奖时间」水位，
     // 清空的话继续撤回更早批次时，lastBatch 的退化批次会被误当成新抽奖
@@ -472,10 +484,7 @@ function syncFromServer(d) {
     // 队列里可能还压着这一批（或更早批次）的待播快照，源头已作废：
     // 不清掉的话 finally 补播仍会把它们播出来，等于播了已被撤回的奖
     if (pendingBatches.length) pendingBatches.length = 0
-    if (phase.value === 'result') {
-      resultList.value = []
-      phase.value = 'idle'
-    }
+    clearResultState()
   }
 
   if (phase.value === 'idle' && poolEmpty.value) phase.value = 'empty'
@@ -486,14 +495,20 @@ function syncFromServer(d) {
  * 切场次后清空一切与上一场次绑定的本地状态：水位、待播队列、汇总页与进行中的揭晓。
  * 水位必须清——否则新场次的旧批次会被退化判断吞掉；列表必须清——否则
  * 新场次的表头下会继续挂着上一场的名单。
+ * batch：新场次的 lastBatch。它已经有结果时直接采纳并落到汇总页，
+ * 不走「新批次」路径，避免把上一轮的揭晓动画整段重播。
  */
-function resetForSessionSwitch() {
+function resetForSessionSwitch(batch) {
+  // 先停掉端口号滚动定时器：切场次可能正好落在 rollTo 的 1.1–1.6s 窗口内，
+  // 不停的话老 interval 会每 45ms 把上一场的号码写回 displayNo，
+  // 待机页就永远冻在上一场的中奖号上，定时器也泄漏
+  stopRolling()
   // 代次自增：正在播的揭晓循环据此提前退出，不会把上一场的人演完
   revealEpoch++
-  knownBatchKey = null
-  knownBatchTime = null
   if (pendingBatches.length) pendingBatches.length = 0
   revealList.value = []
+  revealIndex.value = 0
+  revealSettled.value = false
   resultList.value = []
   resultTier.value = ''
   shortfall.value = 0
@@ -501,6 +516,48 @@ function resetForSessionSwitch() {
   phase.value = 'idle'
   // 待机页仍展示占位号码：复位掉上一场揭晓中途定格的号码
   displayNo.value = '00000'
+
+  if (batch && batch.batchKey) {
+    // 直接记成「已见」：新场次的 lastBatch 不再是新批次
+    knownBatchKey = batch.batchKey
+    knownBatchTime = batchTimeOf(batch.batchKey)
+    const winners = batch.winners || []
+    if (winners.length) {
+      // 直接落到汇总页展示它的中奖号码，不重播逐个揭晓动画
+      resultList.value = winners.map(w => ({ ...w }))
+      resultTier.value = batch.tierName || ''
+      shortfall.value = batch.shortfall ?? 0
+      phase.value = 'result'
+    }
+  } else {
+    knownBatchKey = null
+    knownBatchTime = null
+  }
+}
+
+/**
+ * 清理中奖结果态：名单 / 档位 / 缺口 / 纸屑 / 占位号码，并从汇总页落回待机页。
+ * 作废整批与「无批次可展示」两条路径共用，避免一边清了档位一边没清。
+ */
+function clearResultState() {
+  resultList.value = []
+  resultTier.value = ''
+  shortfall.value = 0
+  confetti.value = []
+  displayNo.value = '00000'
+  if (phase.value === 'result') phase.value = 'idle'
+}
+
+/**
+ * 按服务端当前 lastBatch 裁剪待播队列：只留下与 lastBatch 属于同一次抽奖
+ * （档位@中奖时间相同）的快照。其余条目的来源批次已被取代或已被整批撤回，
+ * 继续补播就会把已作废的中奖者演到大屏上。
+ */
+function prunePending(lastBatchKey) {
+  if (!pendingBatches.length) return
+  for (let i = pendingBatches.length - 1; i >= 0; i--) {
+    if (!sameDraw(pendingBatches[i].batchKey, lastBatchKey)) pendingBatches.splice(i, 1)
+  }
 }
 
 function sleep(ms) {
@@ -512,12 +569,12 @@ function rollTo(target, ms) {
   const settledNo = String(target).padStart(5, '0')
   return new Promise(resolve => {
     stopRolling()
+    tickerResolve = resolve
     const t0 = Date.now()
     ticker = setInterval(() => {
       if (Date.now() - t0 >= ms) {
         stopRolling()
         displayNo.value = settledNo
-        resolve()
       } else {
         displayNo.value = randomNo()
       }
@@ -537,10 +594,7 @@ function syncResultIfBatchChanged() {
   if (!batch || !batch.batchKey) {
     // 无批次可展示：只清理确实残留了名单的情况，避免误伤待机页
     if (resultList.value.length || phase.value === 'result') {
-      resultList.value = []
-      resultTier.value = ''
-      shortfall.value = 0
-      if (phase.value === 'result') phase.value = 'idle'
+      clearResultState()
     }
     return
   }
@@ -635,6 +689,8 @@ async function revealAll(winners, tierName, gap) {
     if (pendingBatches.length) {
       const p = pendingBatches.shift()
       knownBatchKey = p.batchKey
+      // 水位一并推进：否则后续同步会把这一批当成退化批次，或按旧水位误判
+      knownBatchTime = batchTimeOf(p.batchKey)
       next = { winners: p.winners, tierName: p.tierName, gap: p.gap }
     }
   }
@@ -650,6 +706,11 @@ function randomNo() {
 function stopRolling() {
   clearInterval(ticker)
   ticker = null
+  // 外部中断（切场次 / 卸载）也必须放行 await rollTo：
+  // 只 clearInterval 会让揭晓循环永久挂在 await 上，revealing 永远不复位
+  const done = tickerResolve
+  tickerResolve = null
+  if (done) done()
 }
 
 // 注意：大屏不再主动抽奖 / 作废。

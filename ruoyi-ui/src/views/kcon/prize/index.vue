@@ -128,6 +128,8 @@ export default {
       submitting: false,
       // 正在删除的行 id：请求在途期间禁用删除，避免连点造成重复请求
       deletingId: null,
+      // 请求序号：快速翻页/筛选时，慢返回的旧响应不能盖掉新结果
+      listSeq: 0,
       title: "",
       queryParams: { pageNum: 1, pageSize: 10, sessionCode: null },
       sessions: [],
@@ -168,13 +170,19 @@ export default {
     },
     getList() {
       this.loading = true
+      const seq = ++this.listSeq
       listPrize(this.queryParams).then(res => {
+        // 已有更新的请求发出（搜索 / 分页）：丢弃本轮过期响应
+        if (seq !== this.listSeq) return
         // rows 兜底：响应缺字段时 prizeList 会变成 undefined，
         // 后续 submitForm 的去重判断 some() 会直接抛错
         this.prizeList = res.rows || []
         this.total = res.total || 0
-        this.loading = false
-      }).catch(() => { this.loading = false })
+      }).catch(() => {
+        // request.js 已统一提示，这里只兜底
+      }).finally(() => {
+        if (seq === this.listSeq) this.loading = false
+      })
     },
     handleQuery() {
       this.queryParams.pageNum = 1

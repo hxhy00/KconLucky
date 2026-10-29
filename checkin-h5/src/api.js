@@ -24,8 +24,13 @@ async function request(path, options = {}) {
     // 不查状态码就会把 HTML 错误页交给 res.json()，最终被归成「网络异常」，
     // 掩盖真实原因，也无法给出可操作的提示。
     if (!res.ok) {
-      const err = new Error(`服务异常（HTTP ${res.status}）`)
-      err.networkError = true
+      // 429 是后端限流（连续点击 / 公网刷接口），不是网络故障：
+      // 归为 networkError 只会让观众看到笼统的「服务异常」。这里给出可操作文案，
+      // 且不打 networkError 标记（下方 catch 据此保留原文案）
+      const limited = res.status === 429
+      const err = new Error(limited ? '操作过于频繁，请稍后再试' : `服务异常（HTTP ${res.status}）`)
+      if (limited) err.rateLimited = true
+      else err.networkError = true
       throw err
     }
     const contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || ''
@@ -36,8 +41,8 @@ async function request(path, options = {}) {
     }
     return await res.json()
   } catch (e) {
-    // 上面主动抛出的错误保留原文案，其余统一归为网络/超时异常
-    if (e && e.networkError) throw e
+    // 上面主动抛出的错误保留原文案（限流同样不是网络异常），其余统一归为网络/超时异常
+    if (e && (e.networkError || e.rateLimited)) throw e
     const err = new Error(e.name === 'AbortError' ? '请求超时' : '网络异常')
     err.networkError = true
     throw err

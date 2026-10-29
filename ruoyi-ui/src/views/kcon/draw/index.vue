@@ -173,14 +173,14 @@
                      :loading="savingSetting" :disabled="!settingLoaded"
                      @click="saveSetting">保存</el-button>
           <span class="text-muted" style="margin-left: 10px; font-size: 12px;">
-            大屏每 3 秒自动刷新，保存后约 3 秒生效
+            大屏每 1.5 秒自动刷新，保存后约 1.5 秒生效
           </span>
         </el-form-item>
       </el-form>
       <el-alert type="info" :closable="false" show-icon>
         <div slot="title" style="line-height: 1.7;">
           大屏地址：<b>{{ screenUrl }}</b><br />
-          在这台笔记本上按 F11 全屏打开即可投屏；快捷键（空格抽奖 / 退格作废 / 1、2 切场次）见部署文档。
+          在这台笔记本上按 F11 全屏打开即可投屏；抽奖、作废、切场次都在本控制台操作，大屏只负责展示。
         </div>
       </el-alert>
     </el-card>
@@ -382,7 +382,7 @@ export default {
       this.savingSetting = true
       saveDrawSetting({ sponsors: this.settingForm.sponsors })
         .then(() => {
-          this.$modal.msgSuccess("已保存，大屏约 3 秒后自动生效")
+          this.$modal.msgSuccess("已保存，大屏约 1.5 秒后自动生效")
           this.fetchStatus()
         })
         .catch(() => {})
