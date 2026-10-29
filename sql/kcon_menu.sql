@@ -13,15 +13,26 @@ DELETE FROM `sys_role_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 DELETE FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
 
 -- -------------------------------------------------------------
--- 隐藏 RuoYi 原生菜单（现场无需展示：首页/系统管理/系统监控/系统工具/官网/源码/文档）
+-- 隐藏 RuoYi 原生菜单（现场无需展示：首页/系统监控/系统工具/官网/源码/文档）
 -- visible='1' 表示隐藏，仅隐藏不删除，便于排障时临时放开
 -- 注意：隐藏只是 UI 层面，真正收回权限靠下面的 sys_role_menu 清理
+--
+-- 例外：保留「系统管理 → 参数设置」(menu_id=106) 可见。
+-- 签到验证码开关等系统参数存在 sys_config（sys.account.captchaEnabled），
+-- 只有 106 这个页面能改；此前把整棵原生菜单隐藏，导致现场无任何 UI 入口，
+-- 只能进数据库改。这里保留路径「系统管理 > 参数设置」给超管（role_id=1 免授权）。
+-- 已有环境升级需手工执行两条 UPDATE，见 docs/05-新服务器部署教程.md §9。
+-- 本文件只在 MySQL 首次初始化（数据目录为空）时由镜像自动执行。
 -- -------------------------------------------------------------
 UPDATE `sys_menu` SET `visible` = '1'
- WHERE `menu_id` IN ('1', '2', '3', '4', '5');
+ WHERE `menu_id` IN ('2', '3', '4', '5');
+
+-- 系统管理(1) 的子菜单一律隐藏，只留参数设置(106)
+UPDATE `sys_menu` SET `visible` = '1'
+ WHERE `parent_id` = '1' AND `menu_id` <> '106';
 
 UPDATE `sys_menu` SET `visible` = '1'
- WHERE `parent_id` IN ('1', '2', '3', '4', '5', '108');
+ WHERE `parent_id` IN ('2', '3', '4', '5', '108');
 
 -- -------------------------------------------------------------
 -- 收回普通角色（RuoYi 默认 role_id=2）对原生菜单的授权
@@ -282,20 +293,22 @@ DELETE FROM `sys_role_menu` WHERE `role_id` IN (3, 4, 5) AND `menu_id` = 3200;
 -- -------------------------------------------------------------
 -- staff 占位账号（默认停用，绑定「签到台」；需超管在「设置 → 用户管理」重置密码后启用）
 -- 全员手机号登录：user_name 仅作内部标识（自动生成），登录身份是 phonenumber。
+-- phonenumber 必须是合法 11 位手机号（1[3-9] 开头）：登录校验会直接拒绝
+-- 10000000000 这类占位串，等于这个账号永远登不进来。启用前请改成现场实际手机号。
 -- 按 phonenumber 幂等：不存在才插入，存在则沿用原账号（不改密码/状态/角色）。
 -- 必须放在上面岗位授权完成之后，否则角色绑定会被前面的 DELETE 清掉。
 -- -------------------------------------------------------------
 INSERT INTO `sys_user`
   (`dept_id`, `user_name`, `nick_name`, `user_type`, `email`, `phonenumber`, `sex`, `avatar`, `password`, `status`, `del_flag`, `login_ip`, `login_date`, `create_by`, `create_time`, `remark`)
-SELECT NULL, 'staff_auto', '现场工作人员', '00', '', '10000000000', '2', '',
+SELECT NULL, 'staff_auto', '现场工作人员', '00', '', '13800000000', '2', '',
   '$2a$10$h30sQpojfdnRzS82ER//2eFEzdBj2SudcZv/Aj0lDVvWsd1ME2GiC',
   '1', '0', '', NULL, 'admin', NOW(),
-  '现场操作占位账号，默认停用；启用前必须由超管重置密码'
-WHERE NOT EXISTS (SELECT 1 FROM `sys_user` WHERE `phonenumber` = '10000000000' AND `del_flag` = '0');
+  '现场操作占位账号，默认停用；启用前必须改为真实手机号并重置密码'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_user` WHERE `phonenumber` = '13800000000' AND `del_flag` = '0');
 
 INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`)
 SELECT u.`user_id`, 3 FROM `sys_user` u
- WHERE u.`phonenumber` = '10000000000' AND u.`del_flag` = '0';
+ WHERE u.`phonenumber` = '13800000000' AND u.`del_flag` = '0';
 
 SELECT CONCAT('菜单初始化完成，共 ', COUNT(*), ' 条') AS `结果`
 FROM `sys_menu` WHERE `menu_id` BETWEEN 3000 AND 3999;
