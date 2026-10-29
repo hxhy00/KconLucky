@@ -24,17 +24,26 @@ if [ "$READY" != "1" ]; then
   exit 1
 fi
 
-LAN_IP=$(grep -E '^LAN_IP=' .env | cut -d= -f2)
-PORT=$(grep -E '^WEB_PORT=' .env | cut -d= -f2)
-PREFIX=$(grep -E '^KCON_BASE_PATH=' .env | cut -d= -f2)
+# 取值必须去掉行内注释与首尾空白（同 preflight.sh 的 env_get）
+env_get() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/[[:space:]]*#.*$//' -e 's/[[:space:]]*$//'; }
+LAN_IP=$(env_get LAN_IP)
+PORT=$(env_get WEB_PORT)
+PORT=${PORT:-80}
+# WEB_PORT 支持 "8081" 或 "127.0.0.1:8081"（只绑本机）两种写法，取端口部分
+case "$PORT" in *:*) PORT=${PORT##*:} ;; esac
+PREFIX=$(env_get KCON_BASE_PATH)
 PREFIX=${PREFIX%/}
+# 未配置时实际前缀是镜像内置的 /kconluck2026
+PREFIX=${PREFIX:-/kconluck2026}
+# 80 端口不显示 :80
+[ "$PORT" = "80" ] && PORT_PART="" || PORT_PART=":${PORT}"
 echo ""
 echo "============================================"
 echo " 启动完成"
-echo " 入口页：   http://${LAN_IP}:${PORT}${PREFIX}/"
-echo " 管理端：   http://${LAN_IP}:${PORT}${PREFIX}/admin/"
-echo " 签到 H5：  http://${LAN_IP}:${PORT}${PREFIX}/sign/"
-echo " 抽奖大屏： http://${LAN_IP}:${PORT}${PREFIX}/screen/"
+echo " 入口页：   http://${LAN_IP}${PORT_PART}${PREFIX}/"
+echo " 管理端：   http://${LAN_IP}${PORT_PART}${PREFIX}/admin/"
+echo " 签到 H5：  http://${LAN_IP}${PORT_PART}${PREFIX}/sign/"
+echo " 抽奖大屏： http://${LAN_IP}${PORT_PART}${PREFIX}/screen/"
 echo " 账号：     见 docs/04-部署运行.md（首次登录后请立即修改初始口令）"
 echo "============================================"
 docker compose ps

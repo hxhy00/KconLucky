@@ -10,7 +10,9 @@ cd "$(dirname "$0")/.."
 read -r -p "确认清空全部业务数据（名单/签到/中奖/发放记录/核验日志）？[y/N] " ans
 [ "$ans" = "y" ] || [ "$ans" = "Y" ] || { echo "已取消"; exit 0; }
 
-docker exec -i kcon-mysql mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" kcon_lucky <<'SQL'
+# 口令走 MYSQL_PWD 环境变量：命令行 -p 会出现在宿主机 ps 里
+docker exec -i -e MYSQL_PWD="${MYSQL_ROOT_PASSWORD}" kcon-mysql \
+  mysql -uroot --default-character-set=utf8mb4 kcon_lucky <<'SQL'
 SET FOREIGN_KEY_CHECKS=0;
 TRUNCATE TABLE kcon_attendee;
 TRUNCATE TABLE kcon_checkin;
