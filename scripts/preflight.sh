@@ -4,7 +4,16 @@
 # 退出码：0 = 无阻断项；1 = 存在 FAIL，必须先处理
 
 set -uo pipefail
-cd "$(dirname "$0")/.."
+
+# 定位 .env：脚本可能在 scripts/ 下（发行版 /opt/kcon/scripts/preflight.sh，
+# .env 在上层），也可能和 .env 同目录。两处都找，先同目录后上级，
+# 避免按固定层级 cd 到 /opt 后找不到 .env 直接退出
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  cd "$SCRIPT_DIR"
+elif [ -f "$SCRIPT_DIR/../.env" ]; then
+  cd "$SCRIPT_DIR/.."
+fi
 
 FAIL=0
 WARN=0
@@ -53,14 +62,18 @@ esac
 
 echo "== 2. 容器状态 =="
 for c in kcon-web kcon-backend kcon-mysql kcon-redis; do
-  st=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)
-  [ "$st" = "running" ] && pass "$c running" || fail "$c=$st"
+  # docker inspect 找不到容器时 stdout 可能只是一个换行，直接判空不可靠，统一去空白
+  st=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null | tr -d '[:space:]')
+  [ "$st" = "running" ] && pass "$c running" || fail "$c=${st:-missing}"
 done
 
 echo "== 3. 入口连通性（本机回环） =="
 for p in "${PREFIX}/" "${PREFIX}/admin/" "${PREFIX}/sign/" "${PREFIX}/screen/"; do
-  code=$(curl -sL -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:${PORT}${p}" 2>/dev/null || echo 000)
-  [ "$code" = "200" ] && pass "${p} → 200" || fail "${p} → ${code}"
+  # 连接失败时 curl 仍会经 -w 输出 000 且退出码非 0，这里只取输出，
+  # 不要用 "|| echo 000" 兜底——那会把结果拼成 000000
+  code=$(curl -sL -o /dev/null -w '%{http_code}' -m 5 "http://127.0.0.1:${PORT}${p}" 2>/dev/null)
+  code=$(printf '%s' "$code" | tr -dc '0-9')
+  [ "$code" = "200" ] && pass "${p} → 200" || fail "${p} → ${code:-000}"
 done
 
 echo "== 4. 测试残留 =="
