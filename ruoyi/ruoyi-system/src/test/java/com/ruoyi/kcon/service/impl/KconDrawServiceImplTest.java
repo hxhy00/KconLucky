@@ -262,6 +262,7 @@ class KconDrawServiceImplTest
             when(winnerMapper.selectLatestValidWinnerBySession(PM)).thenReturn(last);
             when(winnerMapper.selectBatch(eq(3L), anyString()))
                     .thenReturn(List.of(last, winner(12L, 20, KconWinner.STATUS_WON)));
+            when(prizeMapper.selectPrizeById(3L)).thenReturn(p);
 
             Map<String, Object> data = service.screenStatus();
 
@@ -282,7 +283,7 @@ class KconDrawServiceImplTest
             assertThat(lastWinner).doesNotContainKeys("name", "company", "position", "operator");
             @SuppressWarnings("unchecked")
             Map<String, Object> lastBatch = (Map<String, Object>) data.get("lastBatch");
-            assertThat(lastBatch).containsEntry("count", 2);
+            assertThat(lastBatch).containsEntry("count", 2).containsEntry("shortfall", 1);
             assertThat((String) lastBatch.get("batchKey")).startsWith("3@").endsWith("@2");
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> batchWinners = (List<Map<String, Object>>) lastBatch.get("winners");

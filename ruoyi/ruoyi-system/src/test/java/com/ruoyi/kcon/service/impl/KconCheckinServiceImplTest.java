@@ -194,6 +194,21 @@ class KconCheckinServiceImplTest
         }
 
         @Test
+        @DisplayName("名单里手机号为空时拒绝，避免用空值绕过等值校验")
+        void rejectsAttendeeWithoutRegisteredPhone()
+        {
+            KconAttendee a = attendee();
+            a.setPhone(null);
+            when(attendeeMapper.selectAttendeeById(7L)).thenReturn(a);
+
+            assertThatThrownBy(() -> service.submitCheckin(7L, PHONE))
+                    .isInstanceOf(ServiceException.class)
+                    .hasMessage("手机号与参会人信息不匹配，请重新查询");
+            verify(portPoolMapper, never()).occupyPort(any());
+            verify(checkinMapper, never()).insertCheckin(any());
+        }
+
+        @Test
         @DisplayName("已签到返回原端口号且不重新分配")
         void repeatCheckinKeepsPort()
         {

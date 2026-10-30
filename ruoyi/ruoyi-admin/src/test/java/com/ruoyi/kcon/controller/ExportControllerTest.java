@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -158,6 +159,8 @@ class ExportControllerTest
                 .andReturn();
 
         assertThat(result.getResponse().getContentAsByteArray()).isNotEmpty();
+        // 导出上限下推到 SQL：与核验/发放日志同一口径，避免全量查回后 OOM
+        verify(checkinMapper).selectExportList(10000);
     }
 
     @Test
