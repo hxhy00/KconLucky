@@ -16,7 +16,6 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.exception.user.BlackListException;
 import com.ruoyi.common.exception.user.CaptchaException;
 import com.ruoyi.common.exception.user.CaptchaExpireException;
-import com.ruoyi.common.exception.user.UserNotExistsException;
 import com.ruoyi.common.exception.user.UserPasswordNotMatchException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.MessageUtils;
@@ -139,21 +138,24 @@ public class SysLoginService
         if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password))
         {
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("not.null")));
-            throw new UserNotExistsException();
+            // 统一走业务异常：UserNotExistsException/UserPasswordNotMatchException 属于
+            // BaseException，全局异常处理器没有对应分支，会被兜底成「系统繁忙」，
+            // 与密码错误时的「用户不存在/密码错误」不一致。
+            throw new ServiceException(MessageUtils.message("user.password.not.match"));
         }
         // 密码如果不在指定范围内 错误
         if (password.length() < UserConstants.PASSWORD_MIN_LENGTH
                 || password.length() > UserConstants.PASSWORD_MAX_LENGTH)
         {
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("user.password.not.match")));
-            throw new UserPasswordNotMatchException();
+            throw new ServiceException(MessageUtils.message("user.password.not.match"));
         }
         // 手机号格式校验（全员统一手机号登录；不匹配直接拒绝，不区分「不存在」与「格式错」，
         // 避免给枚举探测泄露账号存在性）
         if (!username.matches("1[3-9]\\d{9}"))
         {
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("user.password.not.match")));
-            throw new UserPasswordNotMatchException();
+            throw new ServiceException(MessageUtils.message("user.password.not.match"));
         }
         // IP黑名单校验。
         // 用 KconIpUtil 而非 IpUtils：后者取 X-Forwarded-For 首段，而 nginx 配置是

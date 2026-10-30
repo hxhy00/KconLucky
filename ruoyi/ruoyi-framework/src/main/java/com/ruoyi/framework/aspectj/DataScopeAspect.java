@@ -56,6 +56,16 @@ public class DataScopeAspect
      */
     public static final String DATA_SCOPE = "dataScope";
 
+    /**
+     * KCon「管理员身份」角色标识。
+     *
+     * 内置超管（userId = 1）由 SysUser.isAdmin() 识别；管理端还允许给其他账号授予 admin 身份，
+     * 这类账号与内置超管权限等价。若只按 userId 判断，它们会进入数据权限过滤，
+     * 而过滤用的角色权限集合为空，最终拼出「不查询任何数据」的条件，
+     * 表现为管理员身份账号查角色/账号列表时报「身份角色不存在」。
+     */
+    private static final String ADMIN_ROLE_KEY = "admin";
+
     @Before("@annotation(controllerDataScope)")
     public void doBefore(JoinPoint point, DataScope controllerDataScope) throws Throwable
     {
@@ -70,13 +80,33 @@ public class DataScopeAspect
         if (StringUtils.isNotNull(loginUser))
         {
             SysUser currentUser = loginUser.getUser();
-            // 如果是超级管理员，则不过滤数据
-            if (StringUtils.isNotNull(currentUser) && !currentUser.isAdmin())
+            // 内置超管与「管理员身份」账号都不过滤数据
+            if (StringUtils.isNotNull(currentUser) && !currentUser.isAdmin() && !hasAdminRole(currentUser))
             {
                 String permission = StringUtils.defaultIfEmpty(controllerDataScope.permission(), PermissionContextHolder.getContext());
                 dataScopeFilter(joinPoint, currentUser, controllerDataScope.deptAlias(), controllerDataScope.userAlias(), permission);
             }
         }
+    }
+
+    /**
+     * 当前登录人是否持有 KCon「管理员身份」（role_key = admin）。
+     * 角色集合由登录时加载，为空时按普通账号处理。
+     */
+    private boolean hasAdminRole(SysUser user)
+    {
+        if (user.getRoles() == null)
+        {
+            return false;
+        }
+        for (SysRole role : user.getRoles())
+        {
+            if (ADMIN_ROLE_KEY.equals(role.getRoleKey()))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
