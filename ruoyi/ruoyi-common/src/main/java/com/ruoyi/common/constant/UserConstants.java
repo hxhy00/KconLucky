@@ -27,6 +27,9 @@ public class UserConstants
     /** 角色封禁状态 */
     public static final String ROLE_DISABLE = "1";
 
+    /** 内置超级管理员角色ID（RuoYi 语义：仅 user_id=1 才享受全量权限，本系统允许把该角色授予其他账号） */
+    public static final Long SUPER_ADMIN_ROLE_ID = 1L;
+
     /** 部门正常状态 */
     public static final String DEPT_NORMAL = "0";
 

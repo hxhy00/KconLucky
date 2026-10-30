@@ -68,6 +68,19 @@ public class SysPermissionService
             List<SysRole> roles = user.getRoles();
             if (!CollectionUtils.isEmpty(roles))
             {
+                // 内置超管角色（role_id=1）绑到非内置账号上时，RuoYi 原逻辑会在下面
+                // 的 !role.isAdmin() 里把这个角色整体跳过，导致「身份=管理员」的新账号
+                // 登录后权限集为空：每个页面都提示「当前操作没有权限」。
+                // 现场账号管理允许给其他账号授予管理员身份，因此这里显式识别该角色，
+                // 按内置超管的全量权限处理（角色串 'admin' 已由 getRolePermission 提供）。
+                for (SysRole role : roles)
+                {
+                    if (role.getRoleId() != null && role.getRoleId() == UserConstants.SUPER_ADMIN_ROLE_ID)
+                    {
+                        perms.add(Constants.ALL_PERMISSION);
+                        return perms;
+                    }
+                }
                 // 多角色设置permissions属性，以便数据权限匹配权限
                 for (SysRole role : roles)
                 {
